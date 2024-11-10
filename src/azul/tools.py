@@ -17,7 +17,7 @@ def lerp(a: I, b: I, i: float) -> float:
     """Linear enterpolate from A to B."""
     return a+(b-a)*i
 
-def lerpColor(a: tuple[int, int, int],
+def lerp_color(a: tuple[int, int, int],
               b: tuple[int, int, int],
               i: float) -> tuple[float, float, float]:
     """Linear enterpolate from color a to color b."""

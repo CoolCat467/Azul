@@ -30,9 +30,6 @@ import lang
 __title__ = 'Azul Client'
 __author__ = 'CoolCat467'
 __version__ = '2.0.0'
-__ver_major__ = 2
-__ver_minor__ = 0
-__ver_patch__ = 0
 
 SCREEN_SIZE = Vector2(800, 600)
 FPS = 30

@@ -16,13 +16,12 @@ from numpy import array
 from pygame.locals import *
 import pygame
 
+from azul.tools import lerp_color, saturate, randomize, gen_random_proper_seq, sortTiles, floorLineSubGen
+from azul.Vector2 import Vector2
 
 __title__ = 'Azul'
 __author__ = 'CoolCat467'
-__version__ = '0.0.0'
-__ver_major__ = 0
-__ver_minor__ = 0
-__ver_patch__ = 0
+__version__ = '2.0.0'
 
 SCREENSIZE = (650, 600)
 FPS = 30
@@ -64,9 +63,6 @@ GREYSHIFT = 0.75#0.65
 FONT = 'fonts/RuneScape-UF-Regular.ttf'
 SCOREFONTSIZE = 30
 BUTTONFONTSIZE = 60
-
-from tools import *
-from Vector2 import *
 
 @lru_cache()
 def make_square_surf(color, size):
@@ -111,7 +107,7 @@ def get_tile_color(tileColor, greyshift=GREYSHIFT):
     if tileColor < 0:
         if tileColor == -6:
             return GREY
-        return lerpColor(TILECOLORS[abs(tileColor+1)], GREY, greyshift)
+        return lerp_color(TILECOLORS[abs(tileColor+1)], GREY, greyshift)
     elif tileColor < 5:
         return TILECOLORS[tileColor]
     elif tileColor >= 5:
@@ -124,7 +120,7 @@ def get_tile_symbol_and_color(tileColor, greyshift=GREYSHIFT):
         if tileColor == -6:
             return ' ', GREY
         symbol, scolor = TILESYMBOLS[abs(tileColor+1)]
-        return symbol, lerpColor(scolor, GREY, greyshift)
+        return symbol, lerp_color(scolor, GREY, greyshift)
     elif tileColor <= 5:
         return TILESYMBOLS[tileColor]
     elif tileColor >= 6:
@@ -3160,13 +3156,14 @@ def save_crash_img():
 
     print(f'Saved screenshot as "{filename}" in "{savepath}".')
 
-if __name__ == '__main__':
+def cli_run() -> None:
+    """Run from command line interface."""
     # Linebreak before, as pygame prints a message on import.
     print(f'\n{__title__} v{__version__}\nProgrammed by {__author__}.')
     try:
         # Initialize Pygame
-        _, fails = pygame.init()
-        if fails > 0:
+        _success, fail = pygame.init()
+        if fail > 0:
             print('Warning! Some modules of Pygame have not initialized properly!')
             print('This can occur when not all required modules of SDL, which pygame utilizes, are installed.')
         run()
@@ -3193,3 +3190,6 @@ if __name__ == '__main__':
     finally:
         pygame.quit()
         network_shutdown()
+
+if __name__ == '__main__':
+    cli_run()
