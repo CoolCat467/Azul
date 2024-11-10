@@ -1,20 +1,20 @@
-#!/usr/bin/env python3
-# TITLE DESCRIPTION
-# -*- coding: utf-8 -*-
+"""Tools."""
+
+from __future__ import annotations
 
 # Programmed by CoolCat467
-
 import math
 import random
-from collections import deque
-from collections.abc import Generator
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
+
+if TYPE_CHECKING:
+    from collections.abc import Generator, Iterable
 
 T = TypeVar("T")
-I = TypeVar("I", int, float)
+Numeric = TypeVar("Numeric", int, float)
 
 
-def lerp(a: I, b: I, i: float) -> float:
+def lerp(a: Numeric, b: Numeric, i: float) -> float:
     """Linear enterpolate from A to B."""
     return a + (b - a) * i
 
@@ -30,19 +30,20 @@ def lerp_color(
     return lerp(r1, r2, i), lerp(b1, b2, i), lerp(g1, g2, i)
 
 
-def saturate(value: I, low: I, high: I) -> I:
+def saturate(value: Numeric, low: Numeric, high: Numeric) -> Numeric:
     """Keep value within min and max."""
     return min(max(value, low), high)
 
 
-def randomize(iterable: list[T]) -> list[T]:
+def randomize(iterable: Iterable[T]) -> list[T]:
     """Randomize all values of an iterable."""
     lst = list(iterable)
-    return [lst.pop(random.randint(0, len(lst) - 1)) for i in range(len(lst))]
+    random.shuffle(lst)
+    return lst
 
 
-def gen_random_proper_seq(length: int, **kwargs: float) -> deque[str]:
-    """Generates a random sequence of letters given keyword arguments of <letter>=<percentage in decimal>."""
+def gen_random_proper_seq(length: int, **kwargs: float) -> list[str]:
+    """Generate a random sequence of letters given keyword arguments of <letter>=<percentage in decimal>."""
     letters = []
     if sum(list(kwargs.values())) != 1:
         raise ArithmeticError(
@@ -52,12 +53,12 @@ def gen_random_proper_seq(length: int, **kwargs: float) -> deque[str]:
         )
     for letter in kwargs:
         letters += [letter] * math.ceil(length * kwargs[letter])
-    return deque(randomize(letters))
+    return randomize(letters)
 
 
-def sortTiles(tileObj: Any) -> int:
-    """Function to be used when sorting tiles."""
-    return tileObj.color
+def sort_tiles(tile_object: Any) -> int:
+    """Key function for sorting tiles."""
+    return tile_object.color
 
 
 ##def getCacheSignatureTile(tile, tilesize, greyshift, outlineSize):
@@ -69,7 +70,7 @@ def sortTiles(tileObj: Any) -> int:
 ##    return ''.join((str(i) for i in data))
 
 
-def floorLineSubGen(seed: int = 1) -> Generator[int, None, None]:
+def floor_line_subtract_generator(seed: int = 1) -> Generator[int, None, None]:
     """Floor Line subtraction number generator. Can continue indefinitely."""
     num = seed
     while True:

@@ -21,12 +21,12 @@ from numpy import array
 from pygame.locals import *
 
 from azul.tools import (
-    floorLineSubGen,
+    floor_line_subtract_generator,
     gen_random_proper_seq,
     lerp_color,
     randomize,
     saturate,
-    sortTiles,
+    sort_tiles,
 )
 from azul.Vector2 import Vector2
 
@@ -1751,7 +1751,7 @@ class FloorLine(Row):
         self.text = Text(round(self.tileSize * 1.2), BLACK, cx=False, cy=False)
         self.hasNumberOne = False
 
-        gen = floorLineSubGen(1)
+        gen = floor_line_subtract_generator(1)
         self.numbers = [next(gen) for i in range(self.size)]
 
     def __repr__(self):
@@ -2114,7 +2114,7 @@ class TableCenter(Grid):
 
                 if at is not None:
                     full.append(at)
-        sortedTiles = sorted(full, key=sortTiles)
+        sortedTiles = sorted(full, key=sort_tiles)
         self.nextPosition = (0, 0)
         self.add_tiles(sortedTiles, False)
 
@@ -2179,9 +2179,11 @@ class Bag:
 
     def full_reset(self):
         """Reset the bag to a full, re-randomized bag."""
-        self.tiles = gen_random_proper_seq(
-            self.numTiles,
-            **{tileName: self.percentEach for tileName in self.tileNames},
+        self.tiles = deque(
+            gen_random_proper_seq(
+                self.numTiles,
+                **{tileName: self.percentEach for tileName in self.tileNames},
+            ),
         )
 
     def __repr__(self):
