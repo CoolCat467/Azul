@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Client Networking
 
-"""Client Networking"""
+"""Client Networking."""
 
 # Programmed by CoolCat467
 
@@ -23,7 +23,7 @@ PROTO_VER: Final[int] = 0
 
 
 class ClientNetwork(AsyncStateMachine, StatorEventExtend):
-    """Client network"""
+    """Client network."""
 
     __slots__ = ("client", "srv_host", "srv_port")
 
@@ -36,11 +36,11 @@ class ClientNetwork(AsyncStateMachine, StatorEventExtend):
         self.add_state(LoginState())
 
     async def initialize_state(self) -> None:
-        """Set state to handshake"""
+        """Set state to handshake."""
         await self.set_state("connect")
 
     async def think(self) -> None:
-        """Think, but set state to hault on exception and log exception"""
+        """Think, but set state to hault on exception and log exception."""
         try:
             await super().think()
         except Exception:  # pylint: disable=broad-except
@@ -52,12 +52,12 @@ class ClientNetwork(AsyncStateMachine, StatorEventExtend):
         await self.set_state("Hault")
 
     def submit_event(self, event):
-        """Submit an event to runner"""
+        """Submit an event to runner."""
         return self.client.submit_event(event)
 
 
 class NetworkState(EventAsyncState):
-    """Network State"""
+    """Network State."""
 
     __slots__ = ("client",)
 
@@ -68,11 +68,11 @@ class NetworkState(EventAsyncState):
         self.client: TCPAsyncSocketConnection
 
     async def entry_actions(self) -> None:
-        """Set self.client"""
+        """Set self.client."""
         self.client = self.machine.client
 
     async def exit_actions(self) -> None:
-        """Clear self.client"""
+        """Clear self.client."""
         del self.client
 
     def do_handshake(self, next_state: int) -> None:
@@ -107,7 +107,7 @@ class ConnectState(NetworkState):
         self.data = {}
 
     def send_error(self, text: str) -> None:
-        """Send connect server state error"""
+        """Send connect server state error."""
         self.machine.submit_event(
             Event("connect_server_state", message_type="error", text=text),
         )
@@ -171,9 +171,9 @@ class ConnectState(NetworkState):
 
 
 class LoginState(NetworkState):
-    """Login state"""
+    """Login state."""
 
-    __slots__: tuple = tuple()
+    __slots__: tuple = ()
 
     def __init__(self):
         super().__init__("login")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Config module
 
-"""Config module"""
+"""Config module."""
 
 # Programmed by CoolCat467
 

@@ -16,6 +16,7 @@ __ver_minor__ = 0
 __ver_patch__ = 0
 
 
+import contextlib
 import socket
 import time
 from threading import Thread
@@ -32,7 +33,7 @@ ENCODING = "utf-8"
 
 def stackRead(iterable):
     """Generator that yields objects like a stack."""
-    for i in range(len(iterable)):
+    for _i in range(len(iterable)):
         yield iterable.pop()
 
 
@@ -81,14 +82,14 @@ class serverClient(Thread):
         finally:
             self.socket.close()
             self.stopped = True
-            self.server.log("Client %s: Connection Terminated" % self.name)
+            self.server.log(f"Client {self.name}: Connection Terminated")
 
     def chat(self, message):
         """Adds message to self.server.chat."""
         self.server.clientSentMsg(self.name, str(message))
 
     def send_all(self, message):
-        """Encode message in utf-8 format and sendall to self.socket"""
+        """Encode message in utf-8 format and sendall to self.socket."""
         if self.active:
             self.socket.sendall(message.encode(ENCODING))
 
@@ -109,7 +110,7 @@ class AcceptClients(Thread):
                 clientSocket, addr = self.server.socket.accept()
             except OSError as e:
                 if str(e) != "[Errno 22] Invalid argument":
-                    self.server.log("AcceptClients: Error: %s" % str(e))
+                    self.server.log(f"AcceptClients: Error: {e!s}")
                 break
             if not self.server.active:
                 break
@@ -122,13 +123,15 @@ class AcceptClients(Thread):
             self.server.nextCid += 1
 
             self.server.log(
-                "%s (%s) Joined Server."
-                % (newCid, addr[0] + ":" + str(addr[1])),
+                "{} ({}) Joined Server.".format(
+                    newCid,
+                    addr[0] + ":" + str(addr[1]),
+                ),
             )
             # Tell clients about new client
             for cid in self.server.clients:
                 self.server.clients[cid].send_all(
-                    "S %s Joined%s" % (newCid, SEPCHAR),
+                    f"S {newCid} Joined{SEPCHAR}",
                 )
 
             # Add client's address to cidToAddr dictionary
@@ -144,8 +147,7 @@ class AcceptClients(Thread):
 
             # Tell new client about other clients
             self.server.clients[newCid].send_all(
-                "S You: %s Others: [%s]%s"
-                % (
+                "S You: {} Others: [{}]{}".format(
                     newCid,
                     "/".join(
                         [cid for cid in self.server.clients if cid != newCid],
@@ -195,7 +197,7 @@ class Server(Thread):
         try:
             self.socket.bind((self.host, self.port))
         except OSError as e:
-            self.log("Error: %s" % str(e))
+            self.log(f"Error: {e!s}")
         else:
             self.active = True
             # Allow no backlog to exist. All connections should be accepted by AcceptClients thread.
@@ -208,15 +210,13 @@ class Server(Thread):
         if not self.stopped:
             self.log("Shutting down server...")
             self.active = False
-            try:
+            with contextlib.suppress(BaseException):
                 self.socket.shutdown(socket.SHUT_RDWR)
-            except BaseException:
-                pass
             self.socket.close()
             for client in [
                 client for client in self.clients.values() if client.is_alive()
             ]:
-                client.send_all("S Server shutting down%s" % SEPCHAR)
+                client.send_all(f"S Server shutting down{SEPCHAR}")
                 client.stop()
             time.sleep(0.5)
             if True in [
@@ -226,7 +226,7 @@ class Server(Thread):
                 try:
                     os.wait()
                 except ChildProcessError as e:
-                    self.log("Error: %s" % e)
+                    self.log(f"Error: {e}")
             self.stopped = True
             self.log("Server shut down.")
         else:
@@ -248,15 +248,13 @@ class Server(Thread):
             self.clients[toCid].send_all(messageWithFromAddr)
             if log:
                 self.log(
-                    'Send message "%s" to client %s.'
-                    % (messageWithFromAddr, toCid),
+                    f'Send message "{messageWithFromAddr}" to client {toCid}.',
                 )
         else:
             self.log(
-                'Cannot send message "%s" to client %s, client does not exist!'
-                % (messageWithFromAddr, toCid),
+                f'Cannot send message "{messageWithFromAddr}" to client {toCid}, client does not exist!',
             )
-            raise KeyError("Client %s does not exist!" % toCid)
+            raise KeyError(f"Client {toCid} does not exist!")
 
     def forwardMessageToClient(self, fromCid, message, toCid, log=True):
         """Forward a given message from given from client id to given to client id."""
@@ -264,15 +262,13 @@ class Server(Thread):
             self.sendMessageToClient(fromCid + " " + message, toCid, False)
             if log:
                 self.log(
-                    'Forwarded client %s\'s message "%s" to client %s.'
-                    % (fromCid, message, toCid),
+                    f'Forwarded client {fromCid}\'s message "{message}" to client {toCid}.',
                 )
         else:
             self.log(
-                'Cannot forward message "%s" to client %s, client does not exist!'
-                % (message, toCid),
+                f'Cannot forward message "{message}" to client {toCid}, client does not exist!',
             )
-            raise KeyError("Client %s does not exist!" % toCid)
+            raise KeyError(f"Client {toCid} does not exist!")
 
     def forwardMessageToAllClients(self, fromCid, message, log=True):
         """Forward message <message> from client <fromCid> to all active clients."""
@@ -281,8 +277,7 @@ class Server(Thread):
                 self.forwardMessageToClient(fromCid, message, client, False)
         if log:
             self.log(
-                'Forwarded client %s\'s message "%s" to all clients.'
-                % (fromCid, message),
+                f'Forwarded client {fromCid}\'s message "{message}" to all clients.',
             )
 
     def processCommand(self, fromCid, command):
@@ -302,7 +297,7 @@ class Server(Thread):
         cmd = cdata[0]
         args = cdata[1:]
         self.log(
-            'Processing command "%s" from client %s.' % (command, fromCid),
+            f'Processing command "{command}" from client {fromCid}.',
         )
 
         if cmd == "kick":
@@ -317,13 +312,12 @@ class Server(Thread):
                     validClients = [cid for cid in validClients if cid != "0"]
                 for cid in validClients:
                     self.sendMessageToClient(
-                        "S Client %s kicked you from the server%s"
-                        % (fromCid, SEPCHAR),
+                        f"S Client {fromCid} kicked you from the server{SEPCHAR}",
                         cid,
                         False,
                     )
                     self.clients[cid].close()
-                    self.log("Kicked client %s." % cid)
+                    self.log(f"Kicked client {cid}.")
                 self.sendMessageToClient(
                     "S Successfully kicked %i client(s)%s"
                     % (len(validClients), SEPCHAR),
@@ -332,16 +326,15 @@ class Server(Thread):
                 )
             elif fromCid != "0":
                 self.sendMessageToClient(
-                    "S Kicking you from the server%s" % SEPCHAR,
+                    f"S Kicking you from the server{SEPCHAR}",
                     fromCid,
                     False,
                 )
                 self.clients[fromCid].close()
-                self.log("Kicked client %s at their request." % fromCid)
+                self.log(f"Kicked client {fromCid} at their request.")
             else:
                 self.sendMessageToClient(
-                    "S You, being the host of the server, are not allowed to kick yourself. Press CTRL+C to shut down.%s"
-                    % SEPCHAR,
+                    f"S You, being the host of the server, are not allowed to kick yourself. Press CTRL+C to shut down.{SEPCHAR}",
                     "0",
                     False,
                 )
@@ -350,12 +343,14 @@ class Server(Thread):
                 )
         elif cmd == "list":
             self.sendMessageToClient(
-                "S You: %s Others: [%s]"
-                % (fromCid, "/".join(iter(validClients))),
+                "S You: {} Others: [{}]".format(
+                    fromCid,
+                    "/".join(iter(validClients)),
+                ),
                 fromCid,
                 False,
             )
-            self.log("Told client %s about connected users." % fromCid)
+            self.log(f"Told client {fromCid} about connected users.")
         elif cmd == "help":
             self.sendMessageToClient(
                 "".join(
@@ -367,11 +362,11 @@ class Server(Thread):
                 fromCid,
                 False,
             )
-            self.log("Client %s requested help message." % fromCid)
+            self.log(f"Client {fromCid} requested help message.")
         else:
             # If nothing has already processed a command,
             # then the command is invalid
-            self.log("Client %s sent an invalid command." % fromCid)
+            self.log(f"Client {fromCid} sent an invalid command.")
             self.sendMessageToClient(
                 'S Invalid command. Use "help" to list valid commands.',
                 fromCid,
@@ -400,8 +395,7 @@ class Server(Thread):
                     # Otherwise, see if the client is sending a message to another client
                     elif " " in clientMsg:
                         self.log(
-                            'Recieved message "%s" from client id %s.'
-                            % (clientMsg, fromCid),
+                            f'Recieved message "{clientMsg}" from client id {fromCid}.',
                         )
                         splitMsg = clientMsg.split(" ")
                         toCid = str(splitMsg[0])
@@ -439,12 +433,13 @@ class Server(Thread):
             for cid in clientsToDelete:
                 self.forwardMessageToAllClients(
                     "S",
-                    "%s Left%s" % (cid, SEPCHAR),
+                    f"{cid} Left{SEPCHAR}",
                     False,
                 )
             self.log(
-                "All users informed of the leaving of user(s) %s."
-                % " ,".join(clientsToDelete),
+                "All users informed of the leaving of user(s) {}.".format(
+                    " ,".join(clientsToDelete),
+                ),
             )
 
     def run(self):
@@ -452,12 +447,12 @@ class Server(Thread):
         self.startSocket()
         try:
             if self.active:
-                self.log("Server up and running on %s!" % self.ipAddr)
+                self.log(f"Server up and running on {self.ipAddr}!")
                 AcceptClients(self)
                 while self.active:
                     self.processChat()
         except BaseException as e:
-            self.log("Error: %s" % str(e))
+            self.log(f"Error: {e!s}")
         finally:
             self.stop()
 
@@ -484,7 +479,7 @@ class Client(Thread):
         """Logs a message if self.doPrint is True."""
         self.chat.append(message)
         if self.doPrint:
-            print("Client: %s" % str(message))
+            print(f"Client: {message!s}")
 
     def startSocket(self):
         """Initialize the socket and connect to server with given info."""
@@ -667,7 +662,6 @@ def pytalkRun():
         time.sleep(0.1)
     if client.stopped:
         print("\nError: Client stopped!")
-    seen = []
 
     print(
         "\nPress CTRL+C to quit.\nPress Return without typing anything in to show new messages.\n",
@@ -726,5 +720,5 @@ def run():
 
 
 if __name__ == "__main__":
-    print("%s v%s\nProgrammed by %s." % (__title__, __version__, __author__))
+    print(f"{__title__} v{__version__}\nProgrammed by {__author__}.")
     run()

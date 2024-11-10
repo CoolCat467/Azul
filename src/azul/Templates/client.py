@@ -2,6 +2,9 @@
 # Socket Client Test
 # -*- coding: utf-8 -*-
 
+import contextlib
+import functools
+import operator
 import os
 import socket
 
@@ -39,7 +42,8 @@ def run():
             # Print the received transmission
             print("Receive: " + "\n".join(rcvdData.split(";"))[:-1])
             # If the transmission is the word 'bye', exit loop
-            if rcvdData.lower() == "bye" or "bye" in sum(
+            if rcvdData.lower() == "bye" or "bye" in functools.reduce(
+                operator.iadd,
                 [i.split(" ") for i in rcvdData.split(";")],
                 [],
             ):
@@ -56,10 +60,8 @@ def run():
                 break
 
         # Try to inform the server you are leaving, but don't ensure it happened.
-        try:
+        with contextlib.suppress(BaseException):
             s.send(b"bye")
-        except BaseException:
-            pass
     # Close the socket.
     s.close()
 

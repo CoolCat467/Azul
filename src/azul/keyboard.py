@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Keyboard
 
-"""Keyboard Module"""
+"""Keyboard Module."""
 
 # Programmed by CoolCat467
 
@@ -17,7 +17,7 @@ from component import ComponentManager
 
 
 class Keyboard(ComponentManager):
-    """Keyboard Component"""
+    """Keyboard Component."""
 
     def __init__(self):
         super().__init__("keyboard")
@@ -103,12 +103,11 @@ class Keyboard:
                 self.time[name] = 0
 
     def set_key(self, key: int, value: bool, _nochar=False):
-        """Set active value for key <key> to <value>"""
+        """Set active value for key <key> to <value>."""
         if key in self.keys:
             self.set_active(self.keys[key], value)
-        elif not _nochar:
-            if key < 0x110000:
-                self.set_key(chr(key), value, True)
+        elif not _nochar and key < 0x110000:
+            self.set_key(chr(key), value, True)
 
     def read_event(self, event):
         """Handles an event."""
@@ -138,7 +137,7 @@ class Keyboard:
 
 
 def run():
-    """Run"""
+    """Run."""
 
 
 if __name__ == "__main__":

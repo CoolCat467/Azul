@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Client Tile
 
-"""Client Tile"""
+"""Client Tile."""
 
 # Programmed by CoolCat467
 

@@ -17,7 +17,7 @@ from gears import AsyncState, AsyncStateMachine, StateTimerExitState
 
 class Runner(AsyncStateMachine, EventLoop):
     """Asynchronous State Machine + Gear Runner.
-    Important: In process, event proc AFTER think, THEN active state none check
+    Important: In process, event proc AFTER think, THEN active state none check.
     """
 
     __slots__ = ("running",)
@@ -39,7 +39,7 @@ class Runner(AsyncStateMachine, EventLoop):
         return not self.running
 
     def submit_coro(self, coro):
-        """Submit a coro as task for event loop to complete"""
+        """Submit a coro as task for event loop to complete."""
         return self.loop.create_task(coro)
 
     async def proc_additional_handlers(self, event) -> None:
@@ -50,7 +50,7 @@ class Runner(AsyncStateMachine, EventLoop):
 
     async def process(self) -> None:
         """Process gear events and state machine.
-        Important: Think, THEN Event proc, THEN active state none check
+        Important: Think, THEN Event proc, THEN active state none check.
         """
         await self.think()
         await super().process()

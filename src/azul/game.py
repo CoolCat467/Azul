@@ -2,14 +2,19 @@
 # Azul board game clone, now on the computer!
 # -*- coding: utf-8 -*-
 
-# Programmed by CoolCat467
+from __future__ import annotations
 
+import importlib
+
+# Programmed by CoolCat467
 import math
 import os
 import random
 import time
 from collections import Counter, deque
 from functools import lru_cache, wraps
+from pathlib import Path
+from typing import Final
 
 import pygame
 from numpy import array
@@ -47,6 +52,18 @@ ORANGE = (255, 128, 0)
 DARKGREEN = (0, 128, 0)
 DARKCYAN = (0, 128, 128)
 
+if globals().get("__file__") is None:
+    import importlib
+
+    __file__ = str(
+        Path(importlib.import_module("checkers.data").__path__[0]).parent
+        / "game.py",
+    )
+
+ROOT_FOLDER: Final = Path(__file__).absolute().parent
+DATA_FOLDER: Final = ROOT_FOLDER / "data"
+FONT_FOLDER: Final = ROOT_FOLDER / "fonts"
+
 # Game stuff
 # Tiles
 TILECOUNT = 100
@@ -73,7 +90,7 @@ BUTTONBACKCOLOR = WHITE
 GREYSHIFT = 0.75  # 0.65
 
 # Font
-FONT = "fonts/RuneScape-UF-Regular.ttf"
+FONT: Final = FONT_FOLDER / "RuneScape-UF-Regular.ttf"
 SCOREFONTSIZE = 30
 BUTTONFONTSIZE = 60
 
@@ -115,8 +132,12 @@ def auto_crop_clear(surface, clear=(0, 0, 0, 0)):
                 return x
         return x
 
-    column = lambda x: (surface.get_at((x, y)) for y in range(h))
-    row = lambda y: (surface.get_at((x, y)) for x in range(w))
+    def column(x):
+        return (surface.get_at((x, y)) for y in range(h))
+
+    def row(y):
+        return (surface.get_at((x, y)) for x in range(w))
+
     leftc = find_end(column, range(w))
     rightc = find_end(column, range(w - 1, -1, -1))
     topc = find_end(row, range(h))
@@ -139,6 +160,7 @@ def get_tile_color(tileColor, greyshift=GREYSHIFT):
         raise ValueError(
             "Cannot properly return tile colors greater than five!",
         )
+    return None
 
 
 @lru_cache
@@ -155,6 +177,7 @@ def get_tile_symbol_and_color(tileColor, greyshift=GREYSHIFT):
         raise ValueError(
             "Cannot properly return tile colors greater than five!",
         )
+    return None
 
 
 def add_symbol_to_tile_surf(
@@ -214,11 +237,9 @@ def get_tile_image(
         add_symbol_to_tile_surf(surf, cid, tilesize, greyshift, font)
 
         return surf
-    surf = make_square_surf(color, tilesize)
+    return make_square_surf(color, tilesize)
     # Add tile symbol
     ##    add_symbol_to_tile_surf(surf, cid, tilesize, greyshift, font)
-
-    return surf
 
 
 def set_alpha(surface, alpha):
@@ -287,7 +308,7 @@ class Font:
         self.pyfont = pygame.font.Font(self.font, self.size)
 
     def _cache(self, surface):
-        """Set self.cache to surface"""
+        """Set self.cache to surface."""
         self.cache = surface
 
     def get_height(self):
@@ -596,7 +617,7 @@ class Object:
     ##        pygame.draw.rect(surface, MAGENTA, self.getRect(), 1)
 
     def __del__(self):
-        """Delete self.image"""
+        """Delete self.image."""
         del self.image
 
     def screen_size_update(self):
@@ -730,7 +751,7 @@ class Tile:
         return "Tile(%i)" % self.color
 
     def get_data(self):
-        """Return self.color"""
+        """Return self.color."""
         return f"T[{self.color}]"
 
     @classmethod
@@ -916,7 +937,7 @@ class Cursor(TileRenderer):
         self.imageUpdate = True
 
     def drop(self, number="All", allowOneTile=False):
-        """Return all of the tiles the Cursor is carrying"""
+        """Return all of the tiles the Cursor is carrying."""
         if self.is_holding(allowOneTile):
             if number == "All":
                 number = self.get_held_count(allowOneTile)
@@ -1114,7 +1135,7 @@ class Board(Grid):
         self.wall_tileing = False
 
     def __repr__(self):
-        return "Board(%r, %s)" % (self.player, self.variant_play)
+        return f"Board({self.player!r}, {self.variant_play})"
 
     def setColors(self, keepReal=True):
         """Reset tile colors."""
@@ -1213,16 +1234,15 @@ class Board(Grid):
         success = False
         column, row = position
         atPoint = self.get_info(position)
-        if atPoint.color <= 0:
-            if row in self.additions:
-                tile = self.additions[row]
-                if tile is not None:
-                    if self.canPlaceTileColorAtPoint(position, tile):
-                        self.place_tile(position, tile)
-                        self.additions[row] = column
-                        # Update invalid placements after new placement
-                        self.removeInvalidAdditions()
-                        success = True
+        if atPoint.color <= 0 and row in self.additions:
+            tile = self.additions[row]
+            if tile is not None:
+                if self.canPlaceTileColorAtPoint(position, tile):
+                    self.place_tile(position, tile)
+                    self.additions[row] = column
+                    # Update invalid placements after new placement
+                    self.removeInvalidAdditions()
+                    success = True
         if not self.get_rowsToTile():
             self.wall_tileing = False
         return success
@@ -1230,11 +1250,11 @@ class Board(Grid):
     def wall_tileingMode(self, movedDict):
         """Set self into Wall Tiling Mode. Finishes automatically if not in variant play mode."""
         self.wall_tileing = True
-        for key, value in ((key, movedDict[key]) for key in movedDict.keys()):
+        for key, value in ((key, movedDict[key]) for key in movedDict):
             key = int(key) - 1
             if key in self.additions:
                 raise RuntimeError(
-                    "Key %r Already in additions dictionary!" % key,
+                    f"Key {key!r} Already in additions dictionary!",
                 )
             self.additions[key] = value
         if not self.variant_play:
@@ -1288,9 +1308,13 @@ class Board(Grid):
             return nt + pt
 
         # Combine two lists by zipping together and returning list object.
-        comb = lambda one, two: list(zip(one, two, strict=True))
+        def comb(one, two):
+            return list(zip(one, two, strict=True))
+
         # Return all of the self.get_info points for each value in lst.
-        getAll = lambda lst: [self.get_info(pos) for pos in lst]
+        def getAll(lst):
+            return [self.get_info(pos) for pos in lst]
+
         # Get row touches
         rowTouches = comb(gt(x, rs, row), [y] * rs)
         # Get column touches
@@ -1501,9 +1525,7 @@ class Row(TileRenderer):
         for tile in tiles:
             if tile.color not in tileColors:
                 tileColors.append(tile.color)
-        if len(tileColors) > 1:
-            return False
-        return True
+        return not len(tileColors) > 1
 
     def place_tiles(self, tiles):
         """Place multiple tile objects on self if permitted."""
@@ -1520,7 +1542,7 @@ class Row(TileRenderer):
             return
         self.color = blankColor
         addToDict[str(self.size)] = self.getTile()
-        for i in range(self.size - 1):
+        for _i in range(self.size - 1):
             addToDict["toBox"].append(self.getTile())
 
     def set_background(self, color):
@@ -1557,7 +1579,7 @@ class PatternLine(MultipartObject):
         self.player = player
         self.rowSep = rowSeperation
 
-        for x, y in zip(
+        for x, _y in zip(
             range(self.size[0]),
             range(self.size[1]),
             strict=True,
@@ -1602,13 +1624,11 @@ class PatternLine(MultipartObject):
             x = self.get_row(y).get_tile_point(screenLocation)
             if x is not None:
                 return x, y
+        return None
 
     def isFull(self):
         """Return True if self is full."""
-        for rid in range(self.size[1]):
-            if not self.get_row(rid).isFull():
-                return False
-        return True
+        return all(self.get_row(rid).isFull() for rid in range(self.size[1]))
 
     def wall_tileing(self):
         """Return a dictionary to be used with wall tiling. Removes tiles from rows."""
@@ -1685,7 +1705,10 @@ class Text(Object):
         """Return the data that makes this Text Object special."""
         data = super().get_data()
         data["faa"] = int(self.font.antialias)
-        gethex = lambda itera: "".join(f"{i:02x}" for i in itera)
+
+        def gethex(itera):
+            return "".join(f"{i:02x}" for i in itera)
+
         if self.font.background is None:
             data["bg"] = "N"
         else:
@@ -1699,9 +1722,12 @@ class Text(Object):
         """Update this Text Object from data."""
         super().from_data(data)
         self.font.antialias = bool(data["faa"])
-        getcolor = lambda itera: tuple(
-            [int(f"0x{itera[i:i+1]}", 16) for i in range(0, 6, 2)],
-        )
+
+        def getcolor(itera):
+            return tuple(
+                [int(f"0x{itera[i:i + 1]}", 16) for i in range(0, 6, 2)],
+            )
+
         if data["bac"] == "N":
             self.font.background = None
         else:
@@ -1729,7 +1755,7 @@ class FloorLine(Row):
         self.numbers = [next(gen) for i in range(self.size)]
 
     def __repr__(self):
-        return "FloorLine(%r)" % self.player
+        return f"FloorLine({self.player!r})"
 
     def render(self, surface):
         """Update self.image."""
@@ -1795,7 +1821,7 @@ class FloorLine(Row):
             elif tile.color >= 0:
                 tiles.append(tile)
 
-        for i in range(self.size):
+        for _i in range(self.size):
             self.tiles.append(Tile(emtpyColor))
         self.imageUpdate = True
         return tiles, number_oneTile
@@ -1988,7 +2014,7 @@ class Factories(MultipartObject):
         for fid in range(self.count):
             # Draw tiles for the factory
             drawn = []
-            for i in range(self.teach):
+            for _i in range(self.teach):
                 # If the bag is not empty,
                 if not self.game.bag.isEmpty():
                     # Draw a tile from the bag.
@@ -2014,10 +2040,7 @@ class Factories(MultipartObject):
 
     def is_all_empty(self):
         """Return True if all factories are empty."""
-        for fid in range(self.count):
-            if not self.objects[fid].isEmpty():
-                return False
-        return True
+        return all(self.objects[fid].isEmpty() for fid in range(self.count))
 
     def get_data(self):
         """Return what makes this Factories ObjectHandler special."""
@@ -2052,7 +2075,7 @@ class TableCenter(Grid):
         self.nextPosition = (0, 0)
 
     def __repr__(self):
-        return "TableCenter(%r)" % self.game
+        return f"TableCenter({self.game!r})"
 
     def add_number_one_tile(self):
         """Add the number one tile to the internal grid."""
@@ -2074,7 +2097,6 @@ class TableCenter(Grid):
 
     def add_tiles(self, tiles, sort=True):
         """Add multiple Tile Objects to the Table Center Grid."""
-        yes = []
         for tile in tiles:
             self.add_tile(tile)
         if sort and tiles:
@@ -2172,7 +2194,7 @@ class Bag:
     def get_color(self, tileName):
         """Return the color of a named tile."""
         if tileName not in self.tileNames:
-            raise ValueError("Tile Name %s Not Found!" % tileName)
+            raise ValueError(f"Tile Name {tileName} Not Found!")
         return self.tileNames.index(tileName)
 
     def get_tile(self, tileName):
@@ -2227,7 +2249,7 @@ class BoxLid(Object):
         self.tiles = deque()
 
     def __repr__(self):
-        return "BoxLid(%r)" % self.game
+        return f"BoxLid({self.game!r})"
 
     def add_tile(self, tile):
         """Add a tile to self."""
@@ -2348,7 +2370,7 @@ class Player(MultipartObject):
         self.get_object_by_name("Board").location = x + bw / 2, y
         lw = self.get_object_by_name("PatternLine").wh[0] / 2
         self.get_object_by_name("PatternLine").location = x - lw, y
-        fw = self.get_object_by_name("FloorLine").wh[0]
+        self.get_object_by_name("FloorLine").wh[0]
         self.get_object_by_name("FloorLine").location = x - lw * (
             2 / 3
         ) + TILESIZE / 3.75, y + bh * (2 / 3)
@@ -2360,7 +2382,7 @@ class Player(MultipartObject):
         """Do the wall tiling phase of the game for this player."""
         self.is_wall_tileing = True
         pattern_line = self.get_object_by_name("PatternLine")
-        floorLine = self.get_object_by_name("FloorLine")
+        self.get_object_by_name("FloorLine")
         board = self.get_object_by_name("Board")
         boxLid = self.game.get_object_by_name("BoxLid")
 
@@ -2926,7 +2948,9 @@ class SettingsScreen(MenuState):
         cx = sw / 2
         cy = sh / 2
 
-        host_text = lambda x: f"Host Mode: {x}"
+        def host_text(x):
+            return f"Host Mode: {x}"
+
         self.add_text(
             "Host",
             host_text(self.host_mode),
@@ -2943,7 +2967,9 @@ class SettingsScreen(MenuState):
         # TEMPORARY: Hide everything to do with "Host Mode", networked games aren't done yet.
         self.game.set_attr_all("hidden", True)
 
-        varient_text = lambda x: f"Variant Play: {x}"
+        def varient_text(x):
+            return f"Variant Play: {x}"
+
         self.add_text(
             "Variant",
             varient_text(self.variant_play),
@@ -3207,7 +3233,7 @@ class EndScreen(MenuState):
         y = 10
         idx = 0
         for line in self.wininf.split("\n"):
-            lid = self.add_text(f"Line{idx}", line, (x, y), cx=True, cy=False)
+            self.add_text(f"Line{idx}", line, (x, y), cx=True, cy=False)
             ##            self.game.get_object(bid).Render_Priority = f'last{-(2+idx)}'
             self.game.get_object(bid).Render_Priority = "last-2"
             idx += 1
@@ -3483,7 +3509,7 @@ class Keyboard:
                 self.bind_action(name, functionName)
 
     def __repr__(self):
-        return "Keyboard(%s)" % repr(self.target)
+        return f"Keyboard({self.target!r})"
 
     def is_pressed(self, key):
         """Return True if <key> is pressed."""
@@ -3500,7 +3526,7 @@ class Keyboard:
         self.active[name] = False  # name to boolian of pressed
 
     def get_function_from_target(self, functionName: str):
-        """Return function with name functionName from self.target"""
+        """Return function with name functionName from self.target."""
         if hasattr(self.target, functionName):
             return getattr(self.target, functionName)
         return lambda: None
@@ -3518,12 +3544,11 @@ class Keyboard:
                 self.time[name] = 0
 
     def set_key(self, key: int, value: bool, _nochar=False):
-        """Set active value for key <key> to <value>"""
+        """Set active value for key <key> to <value>."""
         if key in self.keys:
             self.set_active(self.keys[key], value)
-        elif not _nochar:
-            if key < 0x110000:
-                self.set_key(chr(key), value, True)
+        elif not _nochar and key < 0x110000:
+            self.set_key(chr(key), value, True)
 
     def read_event(self, event):
         """Handles an event."""

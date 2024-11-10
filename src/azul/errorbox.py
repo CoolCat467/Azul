@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""errorbox, by Pete Shinners
+"""errorbox, by Pete Shinners.
 
 Tries multiple python GUI libraries to display an error box
 on the screen. No matter what is successful, the error will also
@@ -29,7 +29,7 @@ __title__ = "errorbox"
 
 
 def errorbox(title: str, message: str) -> None:
-    """Attempt to error with a gui"""
+    """Attempt to error with a gui."""
     global HANDLERS
     __stdout(title, message)
     for e in HANDLERS:
@@ -42,38 +42,37 @@ def errorbox(title: str, message: str) -> None:
 
 
 def __pyqt4(title: str, message: str) -> None:
-    """Error with PyQt4"""
+    """Error with PyQt4."""
     from PyQt4 import QtGui
 
-    app = QtGui.QApplication(["Error"])
+    QtGui.QApplication(["Error"])
     QtGui.QMessageBox.critical(None, title, message)
 
 
 def __wxpython(title: str, message: str) -> None:
-    """Error with wxPython"""
+    """Error with wxPython."""
     from wxPython.wx import wxApp, wxICON_EXCLAMATION, wxMessageDialog, wxOK
 
     class LameApp(wxApp):
         def OnInit(self):
             return 1
 
-    app = LameApp()
+    LameApp()
     dlg = wxMessageDialog(None, message, title, wxOK | wxICON_EXCLAMATION)
     dlg.ShowModal()
     dlg.Destroy()
 
 
 def __tkinter(title: str, message: str) -> None:
-    """Error with tkinter"""
-    import tkinter
-    import tkinter.messagebox
+    """Error with tkinter."""
+    import tkinter as tk
 
-    tkinter.Tk().wm_withdraw()
-    tkinter.messagebox.showerror(title, message)
+    tk.Tk().wm_withdraw()
+    tk.messagebox.showerror(title, message)
 
 
 def __pygame(title: str, message: str) -> None:
-    """Error with pygame"""
+    """Error with pygame."""
     try:
         import pygame
         import pygame.font
@@ -117,7 +116,7 @@ def __pygame(title: str, message: str) -> None:
 
 
 def __stdout(title: str, message: str) -> None:
-    """Error with stdout"""
+    """Error with stdout."""
     text = "ERROR: " + title + "\n" + message
     print(text)
 

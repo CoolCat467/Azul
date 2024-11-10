@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Events module
 
-"""Events module"""
+"""Events module."""
 
 # Programmed by CoolCat467
 
@@ -21,7 +21,7 @@ from gears import BaseBot, Timer
 
 
 def log_active_exception() -> str:
-    """Log active exception"""
+    """Log active exception."""
     # Get values from exc_info
     values = __sys.exc_info()
     # Get error message.
@@ -44,7 +44,7 @@ def log_active_exception() -> str:
 
 
 class Event:
-    """Event"""
+    """Event."""
 
     __slots__: tuple = ("type", "args", "kwargs")
 
@@ -62,7 +62,7 @@ class Event:
         raise ValueError("Index is not valid.")
 
     def __repr__(self) -> str:
-        """Return event representation"""
+        """Return event representation."""
         args = ", ".join(map(repr, self.args))
         kwargs = ", ".join(
             key + "=" + repr(value) for key, value in self.kwargs.items()
@@ -76,7 +76,7 @@ class Event:
 
 
 class ProcEvent(Event):
-    """Processable Event"""
+    """Processable Event."""
 
     __slots__: tuple = ("__processed",)
 
@@ -86,18 +86,18 @@ class ProcEvent(Event):
 
     @property
     def processed(self):
-        """Bool of is this event has been Processed"""
+        """Bool of is this event has been Processed."""
         return self.__processed
 
     def process(self):
-        """Mark this event as processed"""
+        """Mark this event as processed."""
         if self.__processed:
             raise RuntimeError("Event has already been processed!")
         self.__processed = True
 
 
 class EventLoop(BaseBot):
-    """Gear runner extension to have events"""
+    """Gear runner extension to have events."""
 
     __slots__ = ("events",)
 
@@ -149,7 +149,7 @@ class EventLoop(BaseBot):
 
 
 class EventLoopProcessor(Timer):
-    """EventLoopProcessor timer for in the case that runner is buisy elsewhere,"""
+    """EventLoopProcessor timer for in the case that runner is buisy elsewhere,."""
 
     min_delay: int = 1
 
@@ -163,7 +163,7 @@ class EventLoopProcessor(Timer):
         return f"<{self.__class__.__name__}: {self.running=}, {self.stopped=}>"
 
     async def tick(self) -> bool:
-        """Process event loop. Return True on exception"""
+        """Process event loop. Return True on exception."""
         try:
             await self.bot.process()
         except Exception:
@@ -172,7 +172,7 @@ class EventLoopProcessor(Timer):
         return False
 
     def on_stop(self) -> None:
-        """Remove this gear"""
+        """Remove this gear."""
         ##        print(f'{self.__class__.__name__} stopped.')
         self.bot.remove_gear(self.name)
 
@@ -185,7 +185,7 @@ class EventHandler:
 
 
 def run() -> None:
-    """Run example"""
+    """Run example."""
     turtle = EventLoop(None)
     turtle.submit_event(Event("bob say hi", "hi", cat="best"))
     print(turtle.events)

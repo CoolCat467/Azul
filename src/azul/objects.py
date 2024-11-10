@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # TITLE - DESCRIPTION
 
-"""Docstring"""
+"""Docstring."""
 
 # Programmed by CoolCat467
 
@@ -15,7 +15,7 @@ from pygame.font import Font
 
 
 class Text(sprite.Sprite):
-    """Text element"""
+    """Text element."""
 
     __slots__ = ("__text", "font")
 
@@ -29,15 +29,15 @@ class Text(sprite.Sprite):
         self.visible = True
 
     def update_image(self) -> None:
-        """Update image"""
+        """Update image."""
         self.image = self.font.render(self.__text, True, self.color)
 
     def __get_text(self) -> None:
-        """Get text"""
+        """Get text."""
         return self.__text
 
     def __set_text(self, value: str) -> None:
-        """Set text"""
+        """Set text."""
         if value == self.__text:
             return
         self.__text = value

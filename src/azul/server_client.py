@@ -22,7 +22,7 @@ class GameServerClient(
     Timer,
     EventHandler,
 ):  # pylint: disable=R0901
-    """Game server client"""
+    """Game server client."""
 
     __slots__ = ("net",)
     gear_type = "client"
@@ -53,19 +53,19 @@ class GameServerClient(
         super().gear_shutdown()
 
     def on_stop(self) -> None:
-        """Remove this gear"""
+        """Remove this gear."""
         self.bot.remove_client(self.name)
 
     def stop_server(self) -> asyncio.Task:
-        """Stop server by canceling coroutine"""
+        """Stop server by canceling coroutine."""
         return self.submit_coro(self.bot.stop())
 
     def submit_event(self, event) -> int:
-        """Submit an event to runner"""
+        """Submit an event to runner."""
         return self.bot.submit_event(event)
 
     async def read_event(self, event) -> None:
-        """Give event to network statemachine"""
+        """Give event to network statemachine."""
         if hasattr(self.net, "on_event"):
             await self.net.on_event(event)
 

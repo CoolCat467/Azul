@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Server Networking
 
-"""Server Networking"""
+"""Server Networking."""
 
 # Programmed by CoolCat467
 
@@ -60,7 +60,7 @@ PROTOCOL: Final[int] = 0
 
 
 class NetworkState(EventAsyncState):
-    """Network State"""
+    """Network State."""
 
     __slots__ = ("client",)
 
@@ -70,7 +70,7 @@ class NetworkState(EventAsyncState):
 
     # pylint: disable=unused-private-member
     def __get_proto_ver(self) -> int:
-        """Return machine's protocol version"""
+        """Return machine's protocol version."""
         # typecheck: Another file has errors: Desktop/Python/Projects/Azul/connection.py
         # typecheck: error: "AsyncStateMachine" has no attribute "proto_ver"
         return self.machine.proto_ver
@@ -87,17 +87,17 @@ class NetworkState(EventAsyncState):
     )
 
     async def entry_actions(self) -> None:
-        """Set self.client"""
+        """Set self.client."""
         # typecheck: error: "AsyncStateMachine" has no attribute "client"
         self.client = self.machine.client
 
     async def exit_actions(self) -> None:
-        """Clear self.client"""
+        """Clear self.client."""
         self.client = None
 
 
 class Handshake(NetworkState):
-    """Handshake state"""
+    """Handshake state."""
 
     __slots__ = ("request_next",)
     state_id = 0x00
@@ -108,7 +108,7 @@ class Handshake(NetworkState):
         self.request_next = self.state_id
 
     async def do_actions(self) -> None:
-        """Handle handshake buffer"""
+        """Handle handshake buffer."""
         try:
             buffer = await self.client.read_buffer()
         except OSError:
@@ -125,14 +125,14 @@ class Handshake(NetworkState):
             self.request_next = buffer.read_varint()
 
     async def check_conditions(self) -> str | None:
-        """Return next state"""
+        """Return next state."""
         if self.request_next in {0x00, 0x01, 0x02}:
             return (None, "status", "login")[self.request_next]
         return "Hault"
 
 
 class Status(NetworkState):
-    """Status state"""
+    """Status state."""
 
     __slots__ = ("types_used", "disconnect")
     state_id = 0x01
@@ -144,7 +144,7 @@ class Status(NetworkState):
         self.disconnect = False
 
     async def do_actions(self) -> None:
-        """Handle status requests"""
+        """Handle status requests."""
         try:
             buffer = await self.client.read_buffer()
         except OSError:
@@ -176,25 +176,25 @@ class Status(NetworkState):
 
     # typecheck: error: Missing return statement
     async def check_conditions(self) -> str | None:
-        """Hault if disconnect"""
+        """Hault if disconnect."""
         if self.disconnect:
             return "Hault"
         return None
 
 
 class Login(NetworkState):
-    """Login state"""
+    """Login state."""
 
     def __init__(self):
         super().__init__("login")
 
     async def check_conditions(self) -> str | None:
-        """Hault if disconnect"""
+        """Hault if disconnect."""
         return "Hault"
 
 
 class ServerClientNetwork(AsyncStateMachine, StatorEventExtend):
-    """Server client network"""
+    """Server client network."""
 
     __slots__ = ("client", "proto_ver", "srv_host", "srv_port")
 
@@ -213,11 +213,11 @@ class ServerClientNetwork(AsyncStateMachine, StatorEventExtend):
         self.add_state(Login())
 
     async def initialize_state(self) -> None:
-        """Set state to handshake"""
+        """Set state to handshake."""
         await self.set_state("handshake")
 
     async def think(self) -> None:
-        """Think, but set state to hault on exception and log exception"""
+        """Think, but set state to hault on exception and log exception."""
         try:
             await super().think()
         except Exception:  # pylint: disable=broad-except
@@ -225,12 +225,12 @@ class ServerClientNetwork(AsyncStateMachine, StatorEventExtend):
             await self.set_state("Hault")
 
     def submit_event(self, event):
-        """Submit an event to runner"""
+        """Submit an event to runner."""
         return self.client.submit_event(event)
 
 
 def run():
-    """Run"""
+    """Run."""
 
 
 if __name__ == "__main__":

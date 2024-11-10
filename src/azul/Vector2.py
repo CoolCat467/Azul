@@ -30,7 +30,7 @@ class Vector2:
         y: Num = 0,
     ) -> None:
         x_val: Num
-        if isinstance(x, (list, tuple)):
+        if isinstance(x, list | tuple):
             x_val, y = x
         else:
             x_val = x
@@ -56,7 +56,7 @@ class Vector2:
         return Vector2.from_points(point, self).get_magnitude()
 
     def normalize(self) -> None:
-        """Normalize self (make into a unit vector) **IN PLACE**"""
+        """Normalize self (make into a unit vector) **IN PLACE**."""
         magnitude = self.get_magnitude()
         if magnitude != 0:
             self.x /= magnitude

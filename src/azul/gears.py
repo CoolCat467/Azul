@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Gears for bots.
 
-"""Gears for Bots"""
+"""Gears for Bots."""
 
 # Programmed by CoolCat467
 
@@ -113,7 +113,7 @@ class StateMachine:
         self.active_state: State | None = None  # The currently active state
 
     def __repr__(self) -> str:
-        """Return <{class-name} {self.states}>"""
+        """Return <{class-name} {self.states}>."""
         text = f"<{self.__class__.__name__}"
         if hasattr(self, "states"):
             text += f" {self.states}"
@@ -180,7 +180,7 @@ class AsyncStateMachine:
         )
 
     def __repr__(self) -> str:
-        """Return <{class-name} {self.states}>"""
+        """Return <{class-name} {self.states}>."""
         text = f"<{self.__class__.__name__}"
         if hasattr(self, "states"):
             text += f" {self.states}"
@@ -250,7 +250,7 @@ class Gear:
         return
 
     def submit_coro(self, coro: Coroutine) -> asyncio.Task:
-        """Submit a coroutine as task for bot event loop to complete"""
+        """Submit a coroutine as task for bot event loop to complete."""
         return self.bot.loop.create_task(coro)
 
     async def hault(self) -> None:
@@ -263,7 +263,7 @@ class Gear:
         return
 
     def __repr__(self) -> str:
-        """Return <{class-name}>"""
+        """Return <{class-name}>."""
         return f"<{self.__class__.__name__}>"
 
 
@@ -277,7 +277,7 @@ class BaseBot:
         self.gears: dict[str, Gear] = {}
 
     def __repr__(self) -> str:
-        """Return <{class-name}>"""
+        """Return <{class-name}>."""
         return f"<{self.__class__.__name__}>"
 
     def add_gear(self, new_gear: Gear) -> None:
@@ -304,7 +304,7 @@ class BaseBot:
             raise KeyError(f"Gear {gear_name} not found!")
 
     def get_gear(self, gear_name: str) -> Gear | None:
-        """Return a gear object if a gear with given name exists or None"""
+        """Return a gear object if a gear with given name exists or None."""
         if gear_name in self.gears:
             return self.gears[gear_name]
         return None
@@ -326,7 +326,7 @@ class BaseBot:
             self.remove_gear(gkey)
 
     async def wait_ready(self) -> None:
-        """Blocking until ready"""
+        """Blocking until ready."""
 
 
 class Timer(Gear):
@@ -429,7 +429,7 @@ class Timer(Gear):
 class StateTimerExitState(AsyncState):
     """State Timer Exit State. Cause StateTimer to finally finish."""
 
-    __slots__: tuple = tuple()
+    __slots__: tuple = ()
 
     def __init__(self) -> None:
         super().__init__("Hault")
@@ -501,7 +501,7 @@ def run() -> None:
 
     # hack bot to close loop when closed
     class _Bot(BaseBot):
-        __slots__: tuple = tuple()
+        __slots__: tuple = ()
 
         async def close(self) -> None:
             await super().close()
@@ -512,7 +512,7 @@ def run() -> None:
 
     # hack state timer to create bot close task on completion
     class _StateTimerWithClose(StateTimer):
-        __slots__: tuple = tuple()
+        __slots__: tuple = ()
 
         async def wait_for_ready_start(self) -> None:
             await super().wait_for_ready_start()
@@ -523,7 +523,7 @@ def run() -> None:
 
     # Define asynchronous state to just wait and then change state.
     class WaitState(AsyncState):
-        """Wait state example class"""
+        """Wait state example class."""
 
         __slots__ = ("delay", "next")
 

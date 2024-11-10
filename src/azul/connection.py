@@ -52,9 +52,9 @@ def ip_type(address: int | str) -> int | None:
 
 
 class BaseWriteSync(ABC):
-    """Base synchronous write class"""
+    """Base synchronous write class."""
 
-    __slots__: tuple = tuple()
+    __slots__: tuple = ()
 
     @abstractmethod
     def write(self, data: bytes) -> None:
@@ -115,7 +115,7 @@ class BaseWriteSync(ABC):
         self.write(bytearray.fromhex("00"))
 
     def write_short(self, value: int) -> None:
-        """Write 2 bytes for value -32768 - 32767"""
+        """Write 2 bytes for value -32768 - 32767."""
         self.write(self._pack("h", value))
 
     def write_ushort(self, value: int) -> None:
@@ -148,9 +148,9 @@ class BaseWriteSync(ABC):
 
 
 class BaseWriteAsync(ABC):
-    """Base synchronous write class"""
+    """Base synchronous write class."""
 
-    __slots__: tuple = tuple()
+    __slots__: tuple = ()
 
     @abstractmethod
     async def write(self, data: bytes) -> None:
@@ -211,7 +211,7 @@ class BaseWriteAsync(ABC):
         await self.write(bytearray.fromhex("00"))
 
     async def write_short(self, value: int) -> None:
-        """Write 2 bytes for value -32768 - 32767"""
+        """Write 2 bytes for value -32768 - 32767."""
         await self.write(self._pack("h", value))
 
     async def write_ushort(self, value: int) -> None:
@@ -244,9 +244,9 @@ class BaseWriteAsync(ABC):
 
 
 class BaseReadSync(ABC):
-    """Base synchronous read class"""
+    """Base synchronous read class."""
 
-    __slots__: tuple = tuple()
+    __slots__: tuple = ()
 
     @abstractmethod
     def read(self, length: int) -> bytearray:
@@ -294,7 +294,7 @@ class BaseReadSync(ABC):
         return self.read(length).decode("utf8")
 
     def read_ascii(self) -> str:
-        """Read self until last value is not zero, then return that decoded with ISO-8859-1"""
+        """Read self until last value is not zero, then return that decoded with ISO-8859-1."""
         result = bytearray()
         while len(result) == 0 or result[-1] != 0:
             result.extend(self.read(1))
@@ -335,7 +335,7 @@ class BaseReadSync(ABC):
 class BaseReadAsync(ABC):
     """Asynchronous Read connection base class."""
 
-    __slots__: tuple = tuple()
+    __slots__: tuple = ()
 
     @abstractmethod
     async def read(self, length: int) -> bytearray:
@@ -383,7 +383,7 @@ class BaseReadAsync(ABC):
         return (await self.read(length)).decode("utf8")
 
     async def read_ascii(self) -> str:
-        """Read self until last value is not zero, then return that decoded with ISO-8859-1"""
+        """Read self until last value is not zero, then return that decoded with ISO-8859-1."""
         result = bytearray()
         while len(result) == 0 or result[-1] != 0:
             result.extend(await self.read(1))
@@ -424,7 +424,7 @@ class BaseReadAsync(ABC):
 class BaseConnection:
     """Base connection class, implements flush, receive, and remaining."""
 
-    __slots__: tuple = tuple()
+    __slots__: tuple = ()
 
     def __repr__(self) -> str:
         """Return representation of self."""
@@ -448,9 +448,9 @@ class BaseConnection:
 
 
 class BaseSyncConnection(BaseConnection, BaseReadSync, BaseWriteSync):
-    """Base synchronous read and write class"""
+    """Base synchronous read and write class."""
 
-    __slots__: tuple = tuple()
+    __slots__: tuple = ()
 
 
 class BaseAsyncReadSyncWriteConnection(
@@ -458,15 +458,15 @@ class BaseAsyncReadSyncWriteConnection(
     BaseReadAsync,
     BaseWriteSync,
 ):
-    """Base asynchronous read and synchronous write class"""
+    """Base asynchronous read and synchronous write class."""
 
-    __slots__: tuple = tuple()
+    __slots__: tuple = ()
 
 
 class BaseAsyncConnection(BaseConnection, BaseReadAsync, BaseWriteAsync):
-    """Base asynchronous read and write class"""
+    """Base asynchronous read and write class."""
 
-    __slots__: tuple = tuple()
+    __slots__: tuple = ()
 
 
 class Connection(BaseSyncConnection):
@@ -509,7 +509,7 @@ class Connection(BaseSyncConnection):
         return result
 
     def copy(self) -> Connection:
-        """Return a copy of self"""
+        """Return a copy of self."""
         new = self.__class__()
         new.receive(self.received)
         new.write(self.sent)
@@ -522,7 +522,7 @@ class SocketConnection(BaseSyncConnection):
     __slots__ = ("socket",)
 
     def __init__(self):
-        """Set socket to none"""
+        """Set socket to none."""
         self.socket: socket.socket = None
 
     def close(self) -> None:
@@ -644,7 +644,7 @@ class UDPAsyncSocketConnection(BaseAsyncConnection):
         self.timeout: int = None
 
     async def connect(self, addr: tuple, timeout: int = 3) -> None:
-        """Connect to addr (host, port)"""
+        """Connect to addr (host, port)."""
         self.timeout = timeout
         conn = asyncio_dgram.connect((addr[0], addr[1]))
         self.stream = await asyncio.wait_for(conn, timeout=self.timeout)
@@ -667,7 +667,7 @@ class UDPAsyncSocketConnection(BaseAsyncConnection):
         await self.stream.send(data)
 
     def close(self) -> None:
-        """Close self.stream"""
+        """Close self.stream."""
         if self.stream is not None:  # If initialized
             ##            self.stream.socket.shutdown(socket.SHUT_RDWR)
             ##            self.stream.socket.close()

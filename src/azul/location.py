@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Location - Vector2 bound to a rect
 
-"""Location"""
+"""Location."""
 
 # Programmed by CoolCat467
 
@@ -22,7 +22,7 @@ T = TypeVar("T")
 
 
 class Location(Vector2[int]):
-    """Location bound to the center of a given rectangle"""
+    """Location bound to the center of a given rectangle."""
 
     __slots__ = ("_rect",)
 
@@ -77,7 +77,7 @@ class Location(Vector2[int]):
 
 
 def run() -> None:
-    """Run program"""
+    """Run program."""
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # TITLE DESCRIPTION
 
-"""Room"""
+"""Room."""
 
 # Programmed by CoolCat467
 
@@ -15,7 +15,7 @@ from gears import AsyncState, StateTimer
 class Unloaded(AsyncState):
     """Unloaded state."""
 
-    __slots__ = tuple()
+    __slots__ = ()
 
     def __init__(self):
         super().__init__("unloaded")
@@ -27,7 +27,7 @@ class Unloaded(AsyncState):
 class Lobby(AsyncState):
     """Lobby state. Has host."""
 
-    __slots__ = tuple()
+    __slots__ = ()
 
     def __init__(self):
         super().__init__("lobby")
@@ -38,7 +38,7 @@ class Lobby(AsyncState):
 
 
 class BaseRoom(StateTimer):
-    """Base room"""
+    """Base room."""
 
     __slots__ = ("size", "clients", "host")
     gear_type = "room"
@@ -58,14 +58,14 @@ class BaseRoom(StateTimer):
         await self.set_state("lobby")
 
     def add_client(self, client) -> None:
-        """Add client"""
+        """Add client."""
         self.clients[client.id] = client
 
 
 class Room(BaseRoom):
-    """Room"""
+    """Room."""
 
-    __slots__ = tuple()
+    __slots__ = ()
 
     def __init__(self, server):
         super().__init__(server, "room")
@@ -74,7 +74,7 @@ class Room(BaseRoom):
 class Liminal(BaseRoom):
     """Liminal space. A room between rooms."""
 
-    __slots__ = tuple()
+    __slots__ = ()
     gear_type = "liminal_room"
 
     def __init__(self, server):
@@ -82,7 +82,7 @@ class Liminal(BaseRoom):
 
 
 def run():
-    """Run"""
+    """Run."""
 
 
 if __name__ == "__main__":

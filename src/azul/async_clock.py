@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Async Clock - Asynchronous version of pygame.time.Clock
 
-"""Asynchronous FPS clock"""
+"""Asynchronous FPS clock."""
 
 # Programmed by CoolCat467
 
@@ -17,7 +17,7 @@ import trio
 
 
 class Clock:
-    """pygame.time.Clock but with asynchronous tick"""
+    """pygame.time.Clock but with asynchronous tick."""
 
     __slots__ = (
         "fps_tick",
@@ -40,19 +40,19 @@ class Clock:
         return f"<Clock({self.fps:2f})>"
 
     def get_fps(self) -> float:
-        """Compute the clock framerate"""
+        """Compute the clock framerate."""
         return self.fps
 
     def get_rawtime(self) -> int:
-        """Actual time used in the previous tick"""
+        """Actual time used in the previous tick."""
         return self.rawpassed
 
     def get_time(self) -> int:
-        """Time used in the previous tick"""
+        """Time used in the previous tick."""
         return self.timepassed
 
     async def tick(self, framerate: int = 0) -> int:
-        """Update the clock"""
+        """Update the clock."""
         endtime = 1000 // framerate
         self.rawpassed = pygame.time.get_ticks() - self.last_tick
         delay = endtime - self.rawpassed
@@ -75,7 +75,7 @@ class Clock:
 
 
 def run() -> None:
-    """Run program"""
+    """Run program."""
 
 
 if __name__ == "__main__":

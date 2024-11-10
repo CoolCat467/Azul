@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Button
 
-"""Button"""
+"""Button."""
 
 # Programmed by CoolCat467
 
@@ -25,7 +25,7 @@ from vector import Vector
 
 
 class OutlinedBox(ClientSprite):
-    """Rounded rectangle box with outline"""
+    """Rounded rectangle box with outline."""
 
     __slots__ = ("outline", "color", "border_radius", "border_width")
 
@@ -49,14 +49,18 @@ class OutlinedBox(ClientSprite):
         width, height = dims
         self.reset_image(width, height)
 
-    def reset_image(self, width: int = None, height: int = None) -> None:
-        """Update image"""
+    def reset_image(
+        self,
+        width: int | None = None,
+        height: int | None = None,
+    ) -> None:
+        """Update image."""
         if width is None:
             width = self.rect.width
         if height is None:
             height = self.rect.height
         self.image = Surface((width, height), flags=SRCALPHA)
-        blit_rect = (0, 0) + self.image_dims
+        blit_rect = (0, 0, *self.image_dims)
 
         draw.rect(
             self.image,
@@ -76,7 +80,7 @@ class OutlinedBox(ClientSprite):
 
 
 class Button(OutlinedBox):
-    """Button client sprite"""
+    """Button client sprite."""
 
     __slots__ = ("action",)
 
@@ -85,7 +89,7 @@ class Button(OutlinedBox):
         self,
         dims: tuple,
         *groups,
-        action: Callable = None,
+        action: Callable | None = None,
         outline: tuple = (0, 0, 0),
         color: tuple = (0xFF, 0xFF, 0xFF),
         border_radius: int = 15,
@@ -114,7 +118,7 @@ class Button(OutlinedBox):
 
 
 class Label(OutlinedBox):
-    """Label - Outlined box of text"""
+    """Label - Outlined box of text."""
 
     __slots__ = ("__text", "text_color", "font")
 
@@ -146,18 +150,18 @@ class Label(OutlinedBox):
 
     # pylint: disable=unused-private-member
     def __set_text(self, value: str) -> None:
-        """Set text to value"""
+        """Set text to value."""
         self.__text = value
         self.reset_image()
 
     def __get_text(self) -> str:
-        """Return text"""
+        """Return text."""
         return self.__text
 
     text = property(__get_text, __set_text, doc="Text")
 
     def reset_image(self, width=None, height=None) -> tuple:
-        """Update image. Return rect of where text is and movement"""
+        """Update image. Return rect of where text is and movement."""
         surf = self.font.render(self.text, True, self.text_color)
         width, height = surf.get_size()
         height_add = self.border_width
@@ -178,7 +182,7 @@ class TextButton(Button):
         text_size: int,
         text: str,
         *groups,
-        action: Callable = None,
+        action: Callable | None = None,
         text_color: tuple = (0, 0, 0),
         outline: tuple = (0, 0, 0),
         button_color: tuple = (0xFF, 0xFF, 0xFF),
@@ -202,18 +206,18 @@ class TextButton(Button):
 
     # pylint: disable=unused-private-member
     def __set_text(self, value: str) -> None:
-        """Set text to value"""
+        """Set text to value."""
         self.__text = value
         self.reset_image()
 
     def __get_text(self) -> str:
-        """Return text"""
+        """Return text."""
         return self.__text
 
     text = property(__get_text, __set_text, doc="Text")
 
     def reset_image(self, width=None, height=None) -> None:
-        """Update image"""
+        """Update image."""
         surf = self.font.render(self.text, True, self.text_color)
         width, height = surf.get_size()
         height_add = self.border_width
@@ -231,7 +235,7 @@ class TextButton(Button):
 
 # pylint: disable=too-many-instance-attributes
 class TextBox(Label):
-    """Editable text box"""
+    """Editable text box."""
 
     __slots__ = (
         "initial_text",
@@ -249,7 +253,7 @@ class TextBox(Label):
         text_size: int,
         initial_text,
         *groups,
-        submit_response: Callable = None,
+        submit_response: Callable | None = None,
         text_color: tuple = (0, 0, 0),
         outline: tuple = (0, 0, 0),
         button_color: tuple = (0xFF, 0xFF, 0xFF),
@@ -296,7 +300,7 @@ class TextBox(Label):
     )
 
     def update(self, time_passed: float) -> None:
-        """Update flashing cursor"""
+        """Update flashing cursor."""
         if self.focused:
             if self.flash_time_left > 0:
                 self.flash_time_left -= time_passed
@@ -305,20 +309,21 @@ class TextBox(Label):
                 self.flash_time_left = self.flash_time
 
     def reset_image(self, width=None, height=None) -> None:
-        """Update image"""
+        """Update image."""
         rect, pos_mod = super().reset_image(width, height)
         if self.flash:
             return
         height = rect.height
         width = 2
-        pos = tuple(Vector.from_iter(rect.topright) + pos_mod) + (
+        pos = (
+            *tuple(Vector.from_iter(rect.topright) + pos_mod),
             width,
             height,
         )
         draw.rect(self.image, self.text_color, pos)
 
     async def change_focus(self, new_focus: bool) -> None:
-        """Change focus state"""
+        """Change focus state."""
         if new_focus == self.focused:
             return
         self.focused = new_focus
@@ -346,7 +351,7 @@ class TextBox(Label):
         await self.change_focus(True)
 
     async def on_event(self, event) -> None:
-        """Handle events"""
+        """Handle events."""
         if not mouse.get_focused():
             return await self.change_focus(False)
         if event.type == "MouseButtonDown":
@@ -375,10 +380,14 @@ class TextBox(Label):
 
                 if event["unicode"] == "\r":
                     return await self.change_focus(False)
+                return None
+            return None
         ##            if event.type == 'MouseMotion':
         ##                self.change_focus(self.rect.collidepoint(event['pos']))
-        elif self.text == "":
+        if self.text == "":
             self.text = self.initial_text
+            return None
+        return None
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Color shift
 
-"""Color shift"""
+"""Color shift."""
 
 # Programmed by CoolCat467
 

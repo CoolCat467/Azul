@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # EventStateTimer
 
-"""EventStateTimer"""
+"""EventStateTimer."""
 
 # Programmed by CoolCat467
 
@@ -16,20 +16,20 @@ from gears import AsyncState, StateTimer
 
 
 class EventAsyncState(AsyncState):
-    """Async State that handles events"""
+    """Async State that handles events."""
 
-    __slots__: tuple = tuple()
+    __slots__: tuple = ()
 
     async def on_event(self, event):
-        """Process an event"""
+        """Process an event."""
 
 
 class StatorEventExtend(EventHandler, ABC):
-    """Add submit_event and async read_event to a statemachine subclass"""
+    """Add submit_event and async read_event to a statemachine subclass."""
 
     @abstractmethod
     def submit_event(self, event: Event) -> None:
-        """Submit an event to runner"""
+        """Submit an event to runner."""
         ...
 
     async def read_event(self, event):
@@ -49,7 +49,7 @@ class EventStateTimer(StateTimer, StatorEventExtend):
         StatorEventExtend.__init__(self)
 
     def submit_event(self, event):
-        """Submit an event to runner"""
+        """Submit an event to runner."""
         return self.bot.submit_event(event)
 
 

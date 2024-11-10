@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Extended client sprites
 
-"""Extended client sprites"""
+"""Extended client sprites."""
 
 # Programmed by CoolCat467
 
@@ -16,7 +16,7 @@ from vector import Vector
 
 
 class MovingSprite(ClientSprite):
-    """Moving sprite class"""
+    """Moving sprite class."""
 
     def __init__(self, *groups, **kwargs):
         super().__init__(*groups, **kwargs)
@@ -24,12 +24,12 @@ class MovingSprite(ClientSprite):
         self.destination = self.location
 
     async def on_event(self, event) -> None:
-        """Process an event"""
+        """Process an event."""
         if event.type == "MouseButtonDown" and event["button"] == 1:
             self.destination = event["pos"]
 
     def update(self, time_passed: float) -> None:
-        """Update with time_passed"""
+        """Update with time_passed."""
         if self.location == self.destination:
             return
         heading = Vector.from_points(self.location, self.destination)
@@ -48,7 +48,7 @@ class MovingSprite(ClientSprite):
 
 
 class MoveListSprite(MovingSprite):
-    """Moving in list sprite"""
+    """Moving in list sprite."""
 
     def __init__(self, *groups, **kwargs):
         super().__init__(*groups, **kwargs)
@@ -61,9 +61,8 @@ class MoveListSprite(MovingSprite):
             self.destinations.append(event["pos"])
 
     def update(self, time_passed: float) -> None:
-        if self.destinations:
-            if self.location == self.destination:
-                self.destination = self.destinations.popleft()
+        if self.destinations and self.location == self.destination:
+            self.destination = self.destinations.popleft()
         super().update(time_passed)
 
 

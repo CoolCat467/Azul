@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Azul Client
 
-"""Azul Client"""
+"""Azul Client."""
 
 # Programmed by CoolCat467
 
@@ -12,6 +12,8 @@ from os import path
 
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "True"
 del os
+
+import contextlib
 
 import conf
 import lang
@@ -36,7 +38,7 @@ VSYNC = True
 
 
 class AzulState(AsyncState):
-    """Azul Client Asynchronous base class"""
+    """Azul Client Asynchronous base class."""
 
     machine: "AzulClient"
     __slots__ = ("id", "manager")
@@ -49,7 +51,7 @@ class AzulState(AsyncState):
 
 
 class HaltState(AzulState):
-    """Halt state to set state to None so running becomes False"""
+    """Halt state to set state to None so running becomes False."""
 
     def __init__(self) -> None:
         super().__init__("Halt")
@@ -60,7 +62,7 @@ class HaltState(AzulState):
 
 
 class ClickDestinationComponent(Component):
-    """Component that will use targeting to go to wherever you click on the screen"""
+    """Component that will use targeting to go to wherever you click on the screen."""
 
     __slots__ = ("selected",)
     outline = pygame.color.Color(255, 220, 0)
@@ -71,7 +73,7 @@ class ClickDestinationComponent(Component):
         self.selected = False
 
     def bind_handlers(self) -> None:
-        """Register PygameMouseButtonDown and tick handlers"""
+        """Register PygameMouseButtonDown and tick handlers."""
         self.register_handlers(
             {
                 "click": self.click,
@@ -87,13 +89,13 @@ class ClickDestinationComponent(Component):
         print(f"{event = }")
 
     async def cache_outline(self, _: Event) -> None:
-        """Precalculate outlined images"""
+        """Precalculate outlined images."""
         image: sprite.ImageComponent = self.get_component("image")
         outline: sprite.OutlineComponent = image.get_component("outline")
         outline.precalculate_all_outlined(self.outline)
 
     async def update_selected(self) -> None:
-        """Update selected"""
+        """Update selected."""
         image: sprite.ImageComponent = self.get_component("image")
         outline: sprite.OutlineComponent = image.get_component("outline")
 
@@ -105,14 +107,14 @@ class ClickDestinationComponent(Component):
             movement.speed = 0
 
     async def click(self, event: Event) -> None:
-        """Toggle selected"""
+        """Toggle selected."""
         if event.data["button"] == 1:
             self.selected = not self.selected
 
             await self.update_selected()
 
     async def drag(self, event: Event) -> None:
-        """Drag sprite"""
+        """Drag sprite."""
         if not self.selected:
             self.selected = True
             await self.update_selected()
@@ -120,7 +122,7 @@ class ClickDestinationComponent(Component):
         movement.speed = 0
 
     async def mouse_down(self, event: Event) -> None:
-        """Target click pos if selected"""
+        """Target click pos if selected."""
         if not self.selected:
             return
         if event.data["button"] == 1:
@@ -130,13 +132,13 @@ class ClickDestinationComponent(Component):
             target.destination = Vector2.from_iter(event.data["pos"])
 
     async def move_towards_dest(self, event: Event) -> None:
-        """Move closer to destination"""
+        """Move closer to destination."""
         target: sprite.TargetingComponent = self.get_component("targeting")
         target.move_destination_time(event.data["time_passed"])
 
 
 class MrFloppy(sprite.Sprite):
-    """Mr. Floppy test sprite"""
+    """Mr. Floppy test sprite."""
 
     __slots__ = ()
 
@@ -189,7 +191,7 @@ class MrFloppy(sprite.Sprite):
         self,
         image_identifiers: list[str | int],
     ) -> Iterator[str | None]:
-        """Animation controller"""
+        """Animation controller."""
         cidx = 0
         while True:
             count = len(image_identifiers)
@@ -200,7 +202,7 @@ class MrFloppy(sprite.Sprite):
             yield image_identifiers[cidx]
 
     async def drag(self, event: Event) -> None:
-        """Move by relative from drag"""
+        """Move by relative from drag."""
         if event.data["button"] != 1:
             return
         sprite_component: sprite.Sprite = self.get_component("sprite")
@@ -209,7 +211,7 @@ class MrFloppy(sprite.Sprite):
 
 
 class FPSCounter(objects.Text):
-    """FPS counter"""
+    """FPS counter."""
 
     __slots__ = ()
 
@@ -218,12 +220,12 @@ class FPSCounter(objects.Text):
         super().__init__("fps", font)
 
     async def on_tick(self, event: Event) -> None:
-        """Update text"""
+        """Update text."""
         ##        self.text = f'FPS: {event.data["fps"]:.2f}'
         self.text = f'FPS: {event.data["fps"]:.0f}'
 
     async def update_loc(self, event: Event) -> None:
-        """Move to top left corner"""
+        """Move to top left corner."""
         self.location = Vector2.from_iter(event.data["size"]) / 2 + (5, 5)
 
     def bind_handlers(self) -> None:
@@ -237,7 +239,7 @@ class FPSCounter(objects.Text):
 
 
 class AzulInitialize(AzulState):
-    """Initialize Azul"""
+    """Initialize Azul."""
 
     __slots__ = ()
 
@@ -265,7 +267,7 @@ class AzulInitialize(AzulState):
 
 
 class AzulClient(sprite.GroupProcessor, AsyncStateMachine):
-    """Gear Runner and Layered Dirty Sprite group handler"""
+    """Gear Runner and Layered Dirty Sprite group handler."""
 
     def __init__(self) -> None:
         sprite.GroupProcessor.__init__(self)
@@ -284,7 +286,7 @@ class AzulClient(sprite.GroupProcessor, AsyncStateMachine):
         return self.active_state is not None
 
     async def raise_event(self, event: Event) -> None:
-        """Raise component event in all groups"""
+        """Raise component event in all groups."""
         if self.active_state is None:
             return
         if self.active_state.manager is None:
@@ -304,11 +306,11 @@ def save_crash_img() -> None:
 
 
 async def async_run() -> None:
-    """Run client"""
+    """Run client."""
     global SCREEN_SIZE
     ##    global client
     CONFIG = conf.load_config(path.join("conf", "main.conf"))
-    LANGUAGE = lang.load_lang(CONFIG["Language"]["lang_name"])
+    lang.load_lang(CONFIG["Language"]["lang_name"])
 
     screen = pygame.display.set_mode(
         tuple(SCREEN_SIZE),
@@ -410,7 +412,7 @@ class Tracer(trio.abc.Instrument):
 
 
 def run() -> None:
-    """Run asynchronous side of everything"""
+    """Run asynchronous side of everything."""
     trio.run(async_run)  # , instruments=[Tracer()])
 
 
@@ -425,10 +427,8 @@ if __name__ == "__main__":
     if platform.system() == "Windows":
         from ctypes import windll  # type: ignore
 
-        try:
+        with contextlib.suppress(AttributeError):
             windll.user32.SetProcessDPIAware()
-        except AttributeError:
-            pass
         del windll
     del platform
 

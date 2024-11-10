@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Button
 
-"""Button"""
+"""Button."""
 
 # Programmed by CoolCat467
 
@@ -19,7 +19,7 @@ from vector import Vector
 
 
 class BoxOutlineComponent(Component):
-    """Rounded rectangle box with outline component"""
+    """Rounded rectangle box with outline component."""
 
     __slots__ = ("outline", "color", "border_radius", "border_width")
 
@@ -31,15 +31,19 @@ class BoxOutlineComponent(Component):
         self.border_radius = 15
         self.border_width = 3
 
-    def draw_outline(self, width: int = None, height: int = None) -> None:
-        """Clear image"""
+    def draw_outline(
+        self,
+        width: int | None = None,
+        height: int | None = None,
+    ) -> None:
+        """Clear image."""
         sprite = self.get_component("sprite")
         if width is None:
             width = sprite.rect.width
         if height is None:
             height = sprite.rect.height
         sprite.image = Surface((width, height), flags=SRCALPHA)
-        blit_rect = (0, 0) + sprite.image_dims
+        blit_rect = (0, 0, *sprite.image_dims)
 
         draw.rect(
             sprite.image,
@@ -59,7 +63,7 @@ class BoxOutlineComponent(Component):
 
 
 class LabelComponent(Component):
-    """Label - Outlined box of text"""
+    """Label - Outlined box of text."""
 
     __slots__ = ("__text", "text_color", "font")
 
@@ -72,18 +76,18 @@ class LabelComponent(Component):
 
     # pylint: disable=unused-private-member
     def __set_text(self, value: str) -> None:
-        """Set text to value"""
+        """Set text to value."""
         self.__text = value
         self.reset_image()
 
     def __get_text(self) -> str:
-        """Return text"""
+        """Return text."""
         return self.__text
 
     text = property(__get_text, __set_text, doc="Text")
 
     def reset_image(self, width=None, height=None) -> tuple:
-        """Update image. Return rect of where text is and movement"""
+        """Update image. Return rect of where text is and movement."""
         box_outline = self.get_component("box_outline")
 
         surf = self.font.render(self.text, True, self.text_color)
@@ -102,7 +106,7 @@ class LabelComponent(Component):
 
 # pylint: disable=too-many-instance-attributes
 class TextBox(Component):
-    """Editable text box"""
+    """Editable text box."""
 
     __slots__ = (
         "initial_text",
@@ -120,7 +124,7 @@ class TextBox(Component):
         text_size: int,
         initial_text,
         *groups,
-        submit_response: Callable = None,
+        submit_response: Callable | None = None,
         text_color: tuple = (0, 0, 0),
         outline: tuple = (0, 0, 0),
         button_color: tuple = (0xFF, 0xFF, 0xFF),
@@ -163,7 +167,7 @@ class TextBox(Component):
     )
 
     def update(self, time_passed: float) -> None:
-        """Update flashing cursor"""
+        """Update flashing cursor."""
         if self.focused:
             if self.flash_time_left > 0:
                 self.flash_time_left -= time_passed
@@ -172,20 +176,21 @@ class TextBox(Component):
                 self.flash_time_left = self.flash_time
 
     def reset_image(self, width=None, height=None) -> None:
-        """Update image"""
+        """Update image."""
         rect, pos_mod = super().reset_image(width, height)
         if self.flash:
             return
         height = rect.height
         width = 2
-        pos = tuple(Vector.from_iter(rect.topright) + pos_mod) + (
+        pos = (
+            *tuple(Vector.from_iter(rect.topright) + pos_mod),
             width,
             height,
         )
         draw.rect(self.image, self.text_color, pos)
 
     async def change_focus(self, new_focus: bool) -> None:
-        """Change focus state"""
+        """Change focus state."""
         if new_focus == self.focused:
             return
         self.focused = new_focus
@@ -213,7 +218,7 @@ class TextBox(Component):
         await self.change_focus(True)
 
     async def on_event(self, event) -> None:
-        """Handle events"""
+        """Handle events."""
         if not mouse.get_focused():
             return await self.change_focus(False)
         if event.type == "MouseButtonDown":
@@ -242,10 +247,14 @@ class TextBox(Component):
 
                 if event["unicode"] == "\r":
                     return await self.change_focus(False)
+                return None
+            return None
         ##            if event.type == 'MouseMotion':
         ##                self.change_focus(self.rect.collidepoint(event['pos']))
-        elif self.text == "":
+        if self.text == "":
             self.text = self.initial_text
+            return None
+        return None
 
 
 if __name__ == "__main__":

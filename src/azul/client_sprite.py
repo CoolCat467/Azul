@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Client Sprite and Renderer
 
-"""Client Sprite and Renderer"""
+"""Client Sprite and Renderer."""
 
 # Programmed by CoolCat467
 
@@ -22,9 +22,9 @@ __version__ = "0.0.0"
 
 
 class SubRenderer(LayeredDirty):
-    """Gear Runner and Layered Dirty Sprite group"""
+    """Gear Runner and Layered Dirty Sprite group."""
 
-    __slots__: tuple = tuple()
+    __slots__: tuple = ()
 
     async def handle_event(self, event):
         """Process on_click handlers for sprites on mouse down events."""
@@ -48,7 +48,7 @@ class SubRenderer(LayeredDirty):
 
 
 class GroupGearProcessor(GroupProcessor, Runner):
-    """Gear Runner and Layered Dirty Sprite group handler"""
+    """Gear Runner and Layered Dirty Sprite group handler."""
 
     ##    __slots__ = ('config', 'groups')
     sub_renderer_class = SubRenderer
@@ -75,13 +75,13 @@ class GroupGearProcessor(GroupProcessor, Runner):
         await asyncio.gather(*coros)
 
     async def update(self, time_passed: float) -> None:
-        """Process gears and update sprites"""
+        """Process gears and update sprites."""
         super().update(time_passed)
         await self.process()
 
 
 class RenderClientState(EventAsyncState):
-    """Client state with a renderer"""
+    """Client state with a renderer."""
 
     __slots__ = ("group", "hault", "is_new_group")
     keep_newgroup = False
@@ -96,7 +96,7 @@ class RenderClientState(EventAsyncState):
 
     @property
     def renderer(self):
-        """Group render"""
+        """Group render."""
         if self.group is None:
             self.is_new_group = True
             self.group = self.machine.new_group(self.name)
@@ -113,14 +113,14 @@ class RenderClientState(EventAsyncState):
         return self.machine.lang
 
     async def on_event(self, event) -> None:
-        if event.type == "UserEvent":
-            if event["event"] == "escape":
-                self.hault = True
+        if event.type == "UserEvent" and event["event"] == "escape":
+            self.hault = True
 
     # typecheck: error: Missing return statement
     async def check_conditions(self) -> str | None:
         if self.hault:
             return "Hault"
+        return None
 
     async def exit_actions(self) -> None:
         """Remove new group if not keep new groups."""
@@ -135,7 +135,7 @@ class RenderClientState(EventAsyncState):
 
 
 class MenuClientState(RenderClientState):
-    """Menu state"""
+    """Menu state."""
 
     __slots__ = ("next_state",)
 
@@ -145,17 +145,17 @@ class MenuClientState(RenderClientState):
         self.next_state = None
 
     def set_state(self, name: str) -> Callable:
-        """Set state"""
+        """Set state."""
 
         def set_state_wrapper() -> None:
-            """Set next state"""
+            """Set next state."""
             # typecheck: error: Incompatible types in assignment (expression has type "str", variable has type "None")
             self.next_state = name
 
         return set_state_wrapper
 
     async def check_conditions(self) -> str | None:
-        """Hault if self.hault, otherwise self.next_state"""
+        """Hault if self.hault, otherwise self.next_state."""
         if self.hault:
             return "Hault"
         if self.next_state:
@@ -168,7 +168,7 @@ class MenuClientState(RenderClientState):
 
 
 def run():
-    """Run test"""
+    """Run test."""
 
 
 if __name__ == "__main__":

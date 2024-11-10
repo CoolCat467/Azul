@@ -9,6 +9,9 @@
 # to make a networked game. I did have to make some changes,
 # though, that were absolutely necessary for proper function.
 
+import contextlib
+import functools
+import operator
 import os
 import socket
 from random import choice
@@ -580,14 +583,14 @@ emptyBoardData = {
 
 
 def board_data_to_str(board, flip=False):
-    """Make the board data into a compressed string"""
+    """Make the board data into a compressed string."""
     global TIDSHIFT
     # If the game has not been won, say 'N' instead of 'None'
     w = "N" if board["won"] == "None" else board["won"]
     # The compressed string should start being 'w=' and then who's won, then '-'
     data = ["w=" + str(w + "-")]
     # For each tile id in the game board's tile,
-    for tid in board["tiles"].keys():
+    for tid in board["tiles"]:
         # If the tile indicated by the tile id's color is black (playable tile)
         if not board["tiles"][tid]["color"]:  # If it's a playable tile
             # If data should be flipped,
@@ -626,7 +629,7 @@ def board_data_to_str(board, flip=False):
 
 
 def str_to_board_info(string):  # , flip=False):
-    """Convert a board data string into a board info list"""
+    """Convert a board data string into a board info list."""
     global TIDSHIFT
     # Split the data into each individual tile (dashes), and then spit the individual data declarations.
     data = [i.split("=") for i in string.split("-")]
@@ -654,19 +657,23 @@ def str_to_board_info(string):  # , flip=False):
 
 
 def findChange(old, new):
-    """Find changes in and old board data string vs a new copy of the board and return moves"""
+    """Find changes in and old board data string vs a new copy of the board and return moves."""
     global TIDSHIFT
     # Get the board info lists from each board string, ignoring won information
     one = str_to_board_info(old)[1:]  # Ignore won information
     two = str_to_board_info(new)[1:]
     # Reverse the new piece of data so it can be used properly
-    two = [i for i in reversed(two)]
+    two = list(reversed(two))
     ## Get valid moves the old board can make
     # Get the start tile id and valid moves that tile can make if there are valid moves
     moves = [[i[0], i[2]] for i in one if i[2] != "N"]
     # Convert the move information so that each start tile corresponds to each end tile, instead of
     # referencing all end tiles.
-    moves = sum([[[i[0], f] for f in i[1].split("/")] for i in moves], [])
+    moves = functools.reduce(
+        operator.iadd,
+        [[[i[0], f] for f in i[1].split("/")] for i in moves],
+        [],
+    )
     # Get all start and end points separated
     startends = {i[0]: i[1] for i in moves}
     ##    starters = [i[0] for i in moves]
@@ -703,17 +710,15 @@ def findChange(old, new):
 
 
 def disconnectFromServer():
-    """Disconnect from the server socket"""
+    """Disconnect from the server socket."""
     global S
-    try:
+    with contextlib.suppress(BaseException):
         S.send(b"[S] bye")
-    except BaseException:
-        pass
     S.close()
 
 
 def update(boardData):
-    """This function is called by the game to inform the ai of any changes that have occored on the game board"""
+    """This function is called by the game to inform the ai of any changes that have occored on the game board."""
     global BOARD
     global S
     global OPPONENT
@@ -776,7 +781,11 @@ def turn():
     # If the data was None (somehow), replace it with ''. Otherwise, leave it how it is.
     rcvdData = "" if rcvdData is None else rcvdData
     # If the word 'bye' is in the list of words in any message,
-    if "bye" in sum([i.lower().split(" ") for i in rcvdData.split(";")], []):
+    if "bye" in functools.reduce(
+        operator.iadd,
+        [i.lower().split(" ") for i in rcvdData.split(";")],
+        [],
+    ):
         # Disconnect from the server and quit
         print("AI: Server shutting down. Quitting...", file=os.sys.stderr)
         disconnectFromServer()
@@ -850,18 +859,18 @@ def turn():
 
 
 def turnSuccess(tf):
-    """This function is called immediately after the ai's play is made, telling it if it was successful or not"""
+    """This function is called immediately after the ai's play is made, telling it if it was successful or not."""
     if not tf:
         print("AI: Something went wrong playing move...")
 
 
 def stop():
-    """This function is called immediately after the game's window is closed"""
+    """This function is called immediately after the game's window is closed."""
     disconnectFromServer()
 
 
 def init():
-    """This function is called immediately after the game imports the AI"""
+    """This function is called immediately after the game imports the AI."""
     # We dunno what the board looks like, so set it to blank.
     global PLAYERS
     global BOARD
@@ -950,7 +959,7 @@ def init():
     OPPONENT = CLIENTS[(CLIENTS.index(CID) + 1) % len(CLIENTS)]
     # Send the server a message that we wish to be woken up every <WAKEUP> seconds
     S.sendall(
-        ("[S] Wakeup %s %s" % (str(round(WAKEUP)), WAKEUPMSG)).encode("utf-8"),
+        (f"[S] Wakeup {round(WAKEUP)!s} {WAKEUPMSG}").encode(),
     )
     # If we are going to be the first client active,
     if int(CID) != 0:
@@ -959,7 +968,7 @@ def init():
             "AI: Waiting for opponent to make a move. (A black screen/freezing is normal)",
         )
         # Send the resync message to ourselves so at least the screen isn't black
-        S.sendall(("[%s] %s" % (CID, WAKEUPMSG)).encode("utf-8"))
+        S.sendall((f"[{CID}] {WAKEUPMSG}").encode())
     else:
         # Otherwise, tell them the screen might freeze during the opponent's turn
         print(

@@ -31,7 +31,7 @@ def lerp_color(
 
 
 def saturate(value: I, low: I, high: I) -> I:
-    """Keep value within min and max"""
+    """Keep value within min and max."""
     return min(max(value, low), high)
 
 
@@ -42,7 +42,7 @@ def randomize(iterable: list[T]) -> list[T]:
 
 
 def gen_random_proper_seq(length: int, **kwargs: float) -> deque[str]:
-    """Generates a random sequence of letters given keyword arguments of <letter>=<percentage in decimal>"""
+    """Generates a random sequence of letters given keyword arguments of <letter>=<percentage in decimal>."""
     letters = []
     if sum(list(kwargs.values())) != 1:
         raise ArithmeticError(
@@ -74,6 +74,5 @@ def floorLineSubGen(seed: int = 1) -> Generator[int, None, None]:
     num = seed
     while True:
         nxt = [-num] * (num + 1)
-        for i in nxt:
-            yield i
+        yield from nxt
         num += 1

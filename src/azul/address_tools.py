@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Stolen and modified from https://github.com/Dinnerbone/mcstatus
 
-"""Address tools"""
+"""Address tools."""
 
 __all__ = ["ip_type", "parse_address", "lookup", "find_ip"]
 

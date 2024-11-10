@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Client Sprite and Renderer
 
-"""Client Sprite and Renderer"""
+"""Client Sprite and Renderer."""
 
 # Programmed by CoolCat467
 
@@ -25,14 +25,14 @@ __version__ = "0.0.0"
 
 
 class Location(Vector2):
-    """Location bound to the center of a given rectangle"""
+    """Location bound to the center of a given rectangle."""
 
     __slots__ = ("_rect",)
 
     def __new__(
         cls,
         *args: int | float | complex,
-        dtype: type = None,
+        dtype: type | None = None,
     ) -> Union["Location", Vector2]:  # type: ignore
         """Super hack to return Vector2 if data type is not None, otherwise new Location."""
         if dtype is not None:
@@ -74,7 +74,7 @@ class Location(Vector2):
 
 
 class Sprite(ComponentManager, DirtySprite):
-    """Client sprite component"""
+    """Client sprite component."""
 
     __slots__ = ("rect", "__location", "__image", "sync_events", "mask")
 
@@ -105,7 +105,7 @@ class Sprite(ComponentManager, DirtySprite):
     location = property(__get_location, __set_location, doc="Location")
 
     def __get_image_dims(self) -> tuple[int, int]:
-        """Return size of internal rectangle"""
+        """Return size of internal rectangle."""
         return self.rect.size
 
     def __set_image_dims(self, value: tuple[int, int]) -> None:
@@ -141,11 +141,11 @@ class Sprite(ComponentManager, DirtySprite):
     )
 
     def __get_image(self) -> Surface | None:
-        """Return surface of this sprite"""
+        """Return surface of this sprite."""
         return self.__image
 
     def __set_image(self, image: Surface | None) -> None:
-        """Set surface and update image_dims"""
+        """Set surface and update image_dims."""
         self.__image = image
         if image is not None:
             self.image_dims = image.get_size()
@@ -159,7 +159,7 @@ class Sprite(ComponentManager, DirtySprite):
 
     ##### Extra
     def is_selected(self, position: tuple[int, int]) -> bool:
-        """Return True if visible, collision with point, and topmost at point"""
+        """Return True if visible, collision with point, and topmost at point."""
         if not self.visible:
             return False
         if not self.rect.collidepoint(position):
@@ -179,7 +179,7 @@ class Sprite(ComponentManager, DirtySprite):
         return True
 
     async def raise_queued_sync_events(self, _: Event) -> None:
-        """Raise queued sync events"""
+        """Raise queued sync events."""
         async with trio.open_nursery() as nursery:
             for event in (
                 self.sync_events.popleft()
@@ -188,12 +188,12 @@ class Sprite(ComponentManager, DirtySprite):
                 nursery.start_soon(self.raise_event, event)
 
     def bind_handlers(self) -> None:
-        """Have tick raise queued sync events"""
+        """Have tick raise queued sync events."""
         self.register_handler("tick", self.raise_queued_sync_events)
 
 
 class ImageComponent(ComponentManager):
-    """Allow sprite to use multiple images easily"""
+    """Allow sprite to use multiple images easily."""
 
     __slots__ = ("__surfaces", "__masks", "set_surface", "mask_threshold")
 
@@ -214,38 +214,38 @@ class ImageComponent(ComponentManager):
         )
 
     def _compute_mask(self, identifier: int | str) -> None:
-        """Save mask for identifier"""
+        """Save mask for identifier."""
         self.__masks[identifier] = mask_from_surface(
             self.get_image(identifier),
             self.mask_threshold,
         )
 
     def add_image(self, identifier: int | str, surface: Surface) -> None:
-        """Add image to internal database"""
+        """Add image to internal database."""
         self.__surfaces[identifier] = surface
         self._compute_mask(identifier)
 
     def add_images(self, images: dict[int | str, Surface]) -> None:
-        """Add images to internal database"""
+        """Add images to internal database."""
         for ident, surf in images.items():
             self.add_image(ident, surf)
 
     def list_images(self) -> list[int | str]:
-        """Return a list of saved image identifiers"""
+        """Return a list of saved image identifiers."""
         return list(self.__surfaces)
 
     def image_exists(self, identifier: int | str) -> bool:
-        """Return if identifier exists in saved images"""
+        """Return if identifier exists in saved images."""
         return identifier in self.__surfaces
 
     def get_image(self, identifier: int | str) -> Surface:
-        """Get saved image from identifier"""
+        """Get saved image from identifier."""
         if not self.image_exists(identifier):
             raise ValueError(f'No image saved for identifier "{identifier}"')
         return self.__surfaces[identifier]
 
     def get_mask(self, identifier: int | str) -> Mask:
-        """Get saved mask for saved image if exists, otherwise save and return"""
+        """Get saved mask for saved image if exists, otherwise save and return."""
         if not self.image_exists(identifier):
             raise ValueError(f'No image saved for identifier "{identifier}"')
         if identifier not in self.__masks:
@@ -269,7 +269,7 @@ class ImageComponent(ComponentManager):
 
 
 class OutlineComponent(Component):
-    """Add outline to sprite"""
+    """Add outline to sprite."""
 
     __slots__ = ("__active", "__color", "size")
     mod = "_outlined_"
@@ -304,11 +304,11 @@ class OutlineComponent(Component):
         self.manager.set_image(self.manager.set_surface)
 
     def get_outline_discriptor(self, identifier: str | int) -> str:
-        """Return outlined identifier for given original identifier"""
+        """Return outlined identifier for given original identifier."""
         return f"{identifier}{self.mod}{int(self.__color)}_{self.size}"
 
     def save_outline(self, identifier: str | int) -> None:
-        """Save outlined version of given identifier image"""
+        """Save outlined version of given identifier image."""
         outlined = self.get_outline_discriptor(identifier)
         if self.manager.image_exists(outlined):
             return
@@ -332,12 +332,12 @@ class OutlineComponent(Component):
         self.manager.add_image(outlined, surf)
 
     def get_outline(self, identifier: str | int) -> str:
-        """Get saved outline effect identifier"""
+        """Get saved outline effect identifier."""
         self.save_outline(identifier)
         return self.get_outline_discriptor(identifier)
 
     def precalculate_all_outlined(self, color: Color) -> None:
-        """Precalculate all images outlined"""
+        """Precalculate all images outlined."""
         prev, self.__color = self.__color, color
         for image in self.manager.list_images():
             self.save_outline(image)
@@ -345,7 +345,7 @@ class OutlineComponent(Component):
 
 
 class AnimationComponent(Component):
-    """Allows sprite texture to be animated
+    """Allows sprite texture to be animated.
 
     self.controller is an Iterator that yields
     either None or the name of a state in self.states
@@ -369,11 +369,11 @@ class AnimationComponent(Component):
         self.update_mod: float = 0.0
 
     def fetch_controller_new_state(self) -> None:
-        """Ask controller for new state"""
+        """Ask controller for new state."""
         return next(self.controller)
 
     async def tick(self, tick_event: Event) -> None:
-        """Update controller if it's time to and update sprite image"""
+        """Update controller if it's time to and update sprite image."""
         passed = tick_event.data["time_passed"]
         new, update = None, False
         if self.update_every == 0:
@@ -391,7 +391,7 @@ class AnimationComponent(Component):
             self.manager.set_image(new)
 
     def bind_handlers(self) -> None:
-        """Bind tick handler"""
+        """Bind tick handler."""
         self.register_handler("tick", self.tick)
 
 
@@ -423,7 +423,7 @@ class MovementComponent(Component):
             sprite.dirty = 1
 
     def move_heading_time(self, time_passed: float) -> None:
-        """Move at speed in heading direction"""
+        """Move at speed in heading direction."""
         self.move_heading_distance(self.speed * time_passed)
 
 
@@ -446,12 +446,12 @@ class TargetingComponent(Component):
         movement.heading = self.to_destination.normalized()
 
     def __set_destination(self, value: Iterable[int]) -> None:
-        """Set destination as well as movement heading"""
+        """Set destination as well as movement heading."""
         self.__destination = Vector2.from_iter(value)
         self.update_heading()
 
     def __get_destination(self) -> Vector2:
-        """Get destination"""
+        """Get destination."""
         return self.__destination
 
     destination = property(
@@ -462,12 +462,12 @@ class TargetingComponent(Component):
 
     @property
     def to_destination(self) -> Vector:
-        """Return vector of self.location to self.destination"""
+        """Return vector of self.location to self.destination."""
         sprite: Sprite = self.get_component("sprite")  # type: ignore
         return Vector2.from_points(sprite.location, self.destination)
 
     def move_destination_time(self, time_passed: float) -> None:
-        """Move with time_passed"""
+        """Move with time_passed."""
         sprite: Sprite
         movement: MovementComponent
         sprite, movement = self.get_components(("sprite", "movement"))  # type: ignore
@@ -496,7 +496,7 @@ class DragClickEventComponent(Component):
         self.pressed: dict[int, bool] = {}
 
     async def press_start(self, event: Event) -> None:
-        """Set pressed for event button if selected. Also raise Click events"""
+        """Set pressed for event button if selected. Also raise Click events."""
         sprite: Sprite = self.get_component("sprite")
 
         if not sprite.is_selected(event.data["pos"]):
@@ -508,11 +508,11 @@ class DragClickEventComponent(Component):
         await self.raise_event(Event("click", event.data))
 
     async def press_end(self, event: Event) -> None:
-        """Unset pressed for event button"""
+        """Unset pressed for event button."""
         self.pressed[event.data["button"]] = False
 
     async def motion(self, event: Event) -> None:
-        """PygameMouseMotion event -> drag"""
+        """PygameMouseMotion event -> drag."""
         ##        sprite: Sprite = self.get_component('sprite')
         ##
         ##        if not sprite.is_selected(event.data['pos']):
@@ -535,7 +535,7 @@ class DragClickEventComponent(Component):
                 )
 
     def bind_handlers(self) -> None:
-        """Bind PygameMouseMotion"""
+        """Bind PygameMouseMotion."""
         ##        self.register_handler('PygameMouseMotion', self.motion)
         self.register_handlers(
             {
@@ -553,7 +553,7 @@ class DragClickEventComponent(Component):
 
 
 class GroupProcessor:
-    """Gear Runner and Layered Dirty Sprite group handler"""
+    """Gear Runner and Layered Dirty Sprite group handler."""
 
     ##    __slots__ = ('groups', 'group_names', 'new_gid', '_timing', '_clear')
     sub_renderer_class: ClassVar = LayeredDirty
@@ -567,19 +567,19 @@ class GroupProcessor:
         self._clear: tuple[Surface | None, Surface | None] = None, None
 
     def clear(self, screen: Surface, background: Surface) -> None:
-        """Clear for all groups"""
+        """Clear for all groups."""
         self._clear = screen, background
         for group in self.groups.values():
             group.clear(*self._clear)
 
     def set_timing_treshold(self, value: float) -> None:
-        """set_timing_treshold for all groups"""
+        """set_timing_treshold for all groups."""
         self._timing = value
         for renderer in self.groups.values():
             renderer.set_timing_treshold(self._timing)
 
-    def new_group(self, name: str = None) -> int:
-        """Make a new group and return id"""
+    def new_group(self, name: str | None = None) -> int:
+        """Make a new group and return id."""
         if name is not None:
             self.group_names[name] = self.new_gid
         self.groups[self.new_gid] = self.sub_renderer_class()
@@ -590,7 +590,7 @@ class GroupProcessor:
         return self.new_gid - 1
 
     def remove_group(self, gid: int) -> None:
-        """Remove group"""
+        """Remove group."""
         if gid in self.groups:
             for sprite in self.groups[gid].sprites():
                 if isinstance(sprite, ComponentManager):
@@ -606,7 +606,7 @@ class GroupProcessor:
         self,
         gid_name: str | int,
     ) -> sub_renderer_class | None:
-        """Return group from group ID or name"""
+        """Return group from group ID or name."""
         named = None
         if isinstance(gid_name, str):
             named = gid_name
@@ -626,19 +626,19 @@ class GroupProcessor:
     ##            group.update(time_passed)
 
     def draw(self, screen: Surface) -> list[Rect]:
-        """Draw all groups"""
+        """Draw all groups."""
         rects = []
         for group in self.groups.values():
             rects.extend(group.draw(screen))
         return rects
 
     def repaint_rect(self, screen_rect: Rect) -> None:
-        """Repaint rect for all groups"""
+        """Repaint rect for all groups."""
         for group in self.groups.values():
             group.repaint_rect(screen_rect)
 
     def clear_groups(self) -> None:
-        """Clear all groups"""
+        """Clear all groups."""
         for group_id in tuple(self.groups):
             self.remove_group(group_id)
 
@@ -647,7 +647,7 @@ class GroupProcessor:
 
 
 def convert_pygame_event(event: PygameEvent) -> Event:
-    """Convert Pygame Event to Component Event"""
+    """Convert Pygame Event to Component Event."""
     ##    data = event.dict
     ##    data['type_int'] = event.type
     ##    data['type'] = event_name(event.type)
@@ -656,7 +656,7 @@ def convert_pygame_event(event: PygameEvent) -> Event:
 
 
 def run() -> None:
-    """Run test"""
+    """Run test."""
 
 
 if __name__ == "__main__":

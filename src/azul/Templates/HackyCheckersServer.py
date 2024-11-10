@@ -6,6 +6,9 @@ NAME = "Checkers Socket Server"
 AUTHOR = "CoolCat467"
 __version__ = "0.0.1"
 
+import contextlib
+import functools
+import operator
 import os
 import socket
 import time
@@ -15,7 +18,7 @@ from threading import Event, Thread
 # Taken from WOOF (Web Offer One File) by Simon Budig
 # http://www.home.unix-ag.org/simon/woof
 def find_ip():
-    """Utility function to guess the IP where the server can be found from the network"""
+    """Utility function to guess the IP where the server can be found from the network."""
     # we get a UDP-socket for the TEST-networks reserved by IANA.
     # It is highly unlikely, that there is special routing used
     # for these networks, hence the socket later should give us
@@ -97,7 +100,7 @@ class Client(Thread):
         print("Client Connection Terminated", file=os.sys.stderr)
 
     def send_all(self, data):
-        """Send data to client using supplied socket"""
+        """Send data to client using supplied socket."""
         # If we are active,
         if self.active:
             # Use our socket to send all of the data
@@ -113,14 +116,12 @@ class ClientTimer(Thread):
         self.cid = clientId
         self.timer = float(waitTime)
         self.wakeup = bool(wakeupMsg)
-        self.msg = ("[%s] %s;" % (str(self.cid), str(wakeupMsg))).encode(
-            "utf-8",
-        )
+        self.msg = (f"[{self.cid!s}] {wakeupMsg!s};").encode()
         self.start()
 
     def run(self):
         # If our given client id is in the clients dictionary,
-        if self.cid in self.clients.keys():
+        if self.cid in self.clients:
             # Get our client we're working for.
             client = self.clients[self.cid]
         else:
@@ -222,11 +223,11 @@ def run():
     print("Server: Sending confermation message to clients...")
     # Tell all connected clients all connected users
     # Get the client names and separate them by slashes
-    clientNames = "/".join([str(i) for i in clients.keys()])
+    clientNames = "/".join([str(i) for i in clients])
     # For each connected client,
     for client in clients.values():
         # Get the text ready to send
-        send = 'You: "%s" Clients: "%s";' % (str(client.name), clientNames)
+        send = f'You: "{client.name!s}" Clients: "{clientNames}";'
         # Send the text to the client with the utf-8 encoding
         client.send_all(send.encode("utf-8"))
     print("Server: Message sent.")
@@ -246,10 +247,12 @@ def run():
                 # Get the "To" address lines from each message
                 to_ids = [m.split(" ")[0][1:-1] for m in messages]
                 # Get all the different words used for each message
-                words = sum(
+                words = functools.reduce(
+                    operator.iadd,
                     [
                         i.split(" ")
-                        for i in sum(
+                        for i in functools.reduce(
+                            operator.iadd,
                             [i.lower().split(";") for i in messages],
                             [],
                         )
@@ -267,13 +270,13 @@ def run():
                             # Get the server message
                             srvrmsg = messages[idx]
                             # Get the message list
-                            msglst = [
-                                i
-                                for i in sum(
+                            msglst = list(
+                                functools.reduce(
+                                    operator.iadd,
                                     [i.split(" ") for i in srvrmsg.split(";")],
                                     [],
-                                )
-                            ]
+                                ),
+                            )
                             # If the message is a valid wake up command,
                             if (
                                 len(msglst) >= 3
@@ -281,8 +284,7 @@ def run():
                                 and msglst[2].isnumeric()
                             ):
                                 print(
-                                    'Server: Starting Wakeup Thread for Client "%s"'
-                                    % chatData[idx][0],
+                                    f'Server: Starting Wakeup Thread for Client "{chatData[idx][0]}"',
                                 )
                                 # Start a wake up thread for that client
                                 cid = int(chatData[idx][0])
@@ -313,7 +315,7 @@ def run():
                             # Modify the message to say who sent it instead of who it's for,
                             # since a client won't get a message if it's not addressed to
                             # them (duh)
-                            data[0] = "[%s]" % frm
+                            data[0] = f"[{frm}]"
                             send = " ".join(data) + ";"
                             # Send that client the message
                             print("Server: Sending", cid, "Message", send)
@@ -368,7 +370,5 @@ if __name__ == "__main__":
         except BaseException as e:
             print("Server:", e, file=os.sys.stderr)
     # Ensure the server socket closes no matter what.
-    try:
+    with contextlib.suppress(BaseException):
         serversocket.close()
-    except BaseException:
-        pass

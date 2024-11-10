@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Vector Module
 
-"""Vector module"""
+"""Vector module."""
 
 # Programmed by CoolCat467
 
@@ -28,7 +28,7 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 def vmathop(function: F) -> F:
-    """Vector math operator decorator"""
+    """Vector math operator decorator."""
 
     @wraps(function)
     def wrapped_op(self, rhs, *args, **kwargs):  # type: ignore
@@ -143,14 +143,14 @@ def boolop(
     [Callable[[Iterable[bool]], bool]],
     Callable[[Iterable[bool], Iterable[bool]], bool],
 ]:
-    """Return vector boolian simple operator. Combine can by ('any', 'all')"""
+    """Return vector boolian simple operator. Combine can by ('any', 'all')."""
     if combine not in {"any", "all"}:
         raise ValueError("Combine must be either 'any' or 'all'!")
 
     def wrapper(
         function: Callable[[Iterable[bool]], bool],
     ) -> Callable[[Iterable[bool], Iterable[bool]], bool]:
-        """Vector boolian operator decorator"""
+        """Vector boolian operator decorator."""
 
         def apply(values: Iterable[bool]) -> bool:
             return function(*values)  # type: ignore
@@ -254,7 +254,7 @@ class Vector(Iterable[V]):
 
     @classmethod
     def from_radians(cls, radians: int | float) -> "Vector[float]":
-        """Return 2d unit vector from measure in radians"""
+        """Return 2d unit vector from measure in radians."""
         return cast(type["Vector[float]"], cls)(
             math.cos(radians),
             math.sin(radians),
@@ -273,12 +273,12 @@ class Vector(Iterable[V]):
 
     @property
     def magnitude(self) -> float:
-        """Magnitude of this vector"""
+        """Magnitude of this vector."""
         ##        return math.sqrt(sum(self ** 2))
         return math.hypot(*self.__v)
 
     def copy(self) -> "Vector[V]":
-        """Return a copy of this vector"""
+        """Return a copy of this vector."""
         return self.from_iter(self.__v, dtype=self.dtype)
 
     def __reversed__(self) -> Iterable[V]:
@@ -286,41 +286,41 @@ class Vector(Iterable[V]):
         return reversed(self.__v)
 
     def __contains__(self, value: Any) -> bool:
-        """Return if self contains value"""
+        """Return if self contains value."""
         return value in self.__v
 
     def normalize(self) -> "Vector[float]":
-        """Normalize this vector **IN PLACE**"""
+        """Normalize this vector **IN PLACE**."""
         self.__v = self.dtype(self / self.magnitude)  # type: ignore[operator]
         return cast(Vector[float], self)
 
     def normalized(self) -> "Vector[float]":
-        """Return normalized copy of this vector"""
+        """Return normalized copy of this vector."""
         return self / self.magnitude  # type: ignore[operator, no-any-return]
 
     @mapop
     def __pos__(self) -> "Vector[V]":
-        """Return unary positive of self"""
+        """Return unary positive of self."""
         return +self
 
     @mapop
     def __neg__(self) -> "Vector[V]":
-        """Return negated vector"""
+        """Return negated vector."""
         return -self
 
     @onlytype(int)
     @mapop
     def __invert__(self) -> "Vector[V]":
-        """Return bitwise NOT of self if all items are intigers"""
+        """Return bitwise NOT of self if all items are intigers."""
         return ~self
 
     @mapop
     def __abs__(self) -> "Vector[V]":
-        """Return abs'd vector"""
+        """Return abs'd vector."""
         return abs(self)
 
     def __round__(self, ndigits: int | None = None) -> "Vector[int]":
-        """Return vector but each element is rounded"""
+        """Return vector but each element is rounded."""
         return self.__class__.from_iter(
             (round(x, ndigits) for x in self.__v),
             dtype=self.dtype,
@@ -328,27 +328,27 @@ class Vector(Iterable[V]):
 
     @mapop
     def __ceil__(self) -> int:
-        """Return vector but each element is ceil ed"""
+        """Return vector but each element is ceil ed."""
         return math.ceil(self)
 
     @mapop
     def __floor__(self) -> int:
-        """Return vector but each element is floored"""
+        """Return vector but each element is floored."""
         return math.floor(self)
 
     @mapop
     def __trunc__(self) -> int:
-        """Return vector but each element is trunc ed"""
+        """Return vector but each element is trunc ed."""
         return math.trunc(self)
 
     def __bool__(self) -> bool:
-        """Return True if any element is true, False otherwise"""
+        """Return True if any element is true, False otherwise."""
         return any(self.__v)
 
     @vmathop
     @simpleop
     def __add__(self, rhs: V | Iterable[V]) -> "Vector[V]":
-        """Add two vectors/iterables or add Union[int, float, complex] to each element"""
+        """Add two vectors/iterables or add Union[int, float, complex] to each element."""
         return self + rhs
 
     __radd__ = __add__
@@ -356,19 +356,19 @@ class Vector(Iterable[V]):
     @vmathop
     @simpleop
     def __sub__(self, rhs: V | Iterable[V]) -> "Vector[V]":
-        """Subtract two vectors/iterables or subtract Union[int, float, complex] from each element"""
+        """Subtract two vectors/iterables or subtract Union[int, float, complex] from each element."""
         return self - rhs
 
     @vmathop
     @simpleop
     def __rsub__(self, lhs: V | Iterable[V]) -> "Vector[V]":
-        """Subtract but from left hand side"""
+        """Subtract but from left hand side."""
         return lhs - self
 
     @vmathop
     @simpleop
     def __mul__(self, rhs: V | Iterable[V]) -> "Vector[V]":
-        """Multiply two vectors/iterables or multiply each element by number"""
+        """Multiply two vectors/iterables or multiply each element by number."""
         return self * rhs
 
     __rmul__ = __mul__
@@ -376,43 +376,43 @@ class Vector(Iterable[V]):
     @vmathop
     @simpleop
     def __truediv__(self, rhs: V | Iterable[V]) -> "Vector[V]":
-        """Divide two vectors/iterables or divide each element by number"""
+        """Divide two vectors/iterables or divide each element by number."""
         return self / rhs
 
     @vmathop
     @simpleop
     def __rtruediv__(self, lhs: V | Iterable[V]) -> "Vector[V]":
-        """Division but from left hand side"""
+        """Division but from left hand side."""
         return lhs / self
 
     @vmathop
     @simpleop
     def __floordiv__(self, rhs: V | Iterable[V]) -> "Vector[V]":
-        """Floor divide two vectors/iterables or floor divide each element by number"""
+        """Floor divide two vectors/iterables or floor divide each element by number."""
         return self // rhs
 
     @vmathop
     @simpleop
     def __rfloordiv__(self, lhs: V | Iterable[V]) -> "Vector[V]":
-        """Floor division but from left hand side"""
+        """Floor division but from left hand side."""
         return lhs // self
 
     @vmathop
     @simpleop
     def __pow__(self, rhs: V | Iterable[V]) -> "Vector[V]":
-        """Get element to the power of Union[int, float, complex] or matching item in vector/iterable for each element"""
+        """Get element to the power of Union[int, float, complex] or matching item in vector/iterable for each element."""
         return self**rhs
 
     @vmathop
     @simpleop
     def __rpow__(self, lhs: V | Iterable[V]) -> "Vector[V]":
-        """Power, but from left hand side"""
+        """Power, but from left hand side."""
         return lhs**self
 
     @vmathop
     @simpleop
     def __mod__(self, rhs: V | Iterable[V]) -> "Vector[V]":
-        """Return remainder of division (modulo) of self by rhs"""
+        """Return remainder of division (modulo) of self by rhs."""
         return self % rhs
 
     @vmathop
@@ -425,14 +425,14 @@ class Vector(Iterable[V]):
         self,
         rhs: V | Iterable[V],
     ) -> tuple["Vector[V]", "Vector[V]"]:
-        """Return tuple of (self // rhs, self % rhs)"""
+        """Return tuple of (self // rhs, self % rhs)."""
         return self // rhs, self % rhs
 
     def __rdivmod__(
         self,
         lhs: V | Iterable[V],
     ) -> tuple["Vector[V]", "Vector[V]"]:
-        """Divmod but from left hand side"""
+        """Divmod but from left hand side."""
         return lhs // self, lhs % self
 
     @vmathop  # type: ignore
@@ -444,7 +444,7 @@ class Vector(Iterable[V]):
     @vmathop  # type: ignore
     @boolop("any")
     def __ne__(self, rhs: object) -> bool:
-        """Return True if any element is not equal to it's counterpart in the other vector"""
+        """Return True if any element is not equal to it's counterpart in the other vector."""
         return cast(bool, self != rhs)
 
     @vmathop  # type: ignore
@@ -472,16 +472,16 @@ class Vector(Iterable[V]):
         return self >= rhs  # type: ignore
 
     def __hash__(self) -> int:
-        """Return hash of internal data"""
+        """Return hash of internal data."""
         return hash(self.__v)
 
     def set_length(self, new_length: V) -> "Vector[V]":
-        """Set length of this vector by normalizing it and then scaling it. **IN PLACE**"""
+        """Set length of this vector by normalizing it and then scaling it. **IN PLACE**."""
         self.__v = self.dtype(self * new_length / self.magnitude)  # type: ignore[operator]
         return self
 
     def as_length(self, length: V) -> "Vector[V]":
-        """Return this vector scaled to new length"""
+        """Return this vector scaled to new length."""
         return self * (length / self.magnitude)  # type: ignore[operator, no-any-return]
 
     def lerp(self, other: Iterable[V], value: float) -> "Vector[V]":
@@ -493,7 +493,7 @@ class Vector(Iterable[V]):
     @onlylen(3)
     @vmathop
     def cross(self, other: Iterable[V]) -> "Vector[V]":
-        """Returns the cross product of this vector with another IF both are 3d vectors"""
+        """Returns the cross product of this vector with another IF both are 3d vectors."""
         # pylint: disable=C0103
         x, y, z = self.__v
         bx, by, bz = other
@@ -504,7 +504,7 @@ class Vector(Iterable[V]):
         )
 
     def dot(self, other: V | Iterable[V]) -> float:
-        """Return the dot product of this vector with another"""
+        """Return the dot product of this vector with another."""
         ##        return sum(self * other)
         return math.fsum(self * other)  # type: ignore[arg-type]
 
@@ -517,26 +517,26 @@ class Vector(Iterable[V]):
 
     @onlylen(1)
     def __index__(self) -> int:
-        """Return value of self as int"""
-        if not isinstance(self[0], (int, float)):
+        """Return value of self as int."""
+        if not isinstance(self[0], int | float):
             raise ValueError("Value is not an integer or float.")
         return int(self[0])
 
     @onlylen(1)
     def __float__(self) -> float:
-        """Return value of self as float"""
-        if not isinstance(self[0], (int, float)):
+        """Return value of self as float."""
+        if not isinstance(self[0], int | float):
             raise ValueError("Value is not an integer or float.")
         return float(self[0])
 
     @mapop
     def conv_ints(self) -> int:
-        """Return copy of self, but all items are intigers"""
+        """Return copy of self, but all items are intigers."""
         return int(self)
 
     @mapop
     def conv_floats(self) -> float:
-        """Return copy of self, but all items are floats"""
+        """Return copy of self, but all items are floats."""
         return float(self)
 
     # Integer operators
@@ -544,7 +544,7 @@ class Vector(Iterable[V]):
     @onlytypemath(int)
     @simpleop
     def __and__(self, rhs: int | Iterable[int]) -> "Vector[int]":
-        """Return bitwise AND of self and rhs if both are composed of intigers"""
+        """Return bitwise AND of self and rhs if both are composed of intigers."""
         return cast("Vector[int]", self) & rhs
 
     __rand__ = __and__
@@ -553,7 +553,7 @@ class Vector(Iterable[V]):
     @onlytypemath(int)
     @simpleop
     def __or__(self, rhs: int | Iterable[int]) -> "Vector[int]":
-        """Return bitwise OR of self and rhs if both are composed of intigers"""
+        """Return bitwise OR of self and rhs if both are composed of intigers."""
         return cast("Vector[int]", self) | rhs
 
     __ror__ = __or__
@@ -562,28 +562,28 @@ class Vector(Iterable[V]):
     @onlytypemath(int)
     @simpleop
     def __lshift__(self, rhs: int | Iterable[int]) -> "Vector[int]":
-        """Return bitwise left shift of self by rhs if both are composed of intigers"""
+        """Return bitwise left shift of self by rhs if both are composed of intigers."""
         return cast("Vector[int]", self) << rhs
 
     @vmathop
     @onlytypemath(int)
     @simpleop
     def __rlshift__(self, lhs: int | Iterable[int]) -> "Vector[int]":
-        """Bitwise left shift but from left hand side"""
+        """Bitwise left shift but from left hand side."""
         return lhs << cast("Vector[int]", self)
 
     @vmathop
     @onlytypemath(int)
     @simpleop
     def __rshift__(self, rhs: int | Iterable[int]) -> "Vector[int]":
-        """Return bitwise right shift of self by rhs if both are composed of intigers"""
+        """Return bitwise right shift of self by rhs if both are composed of intigers."""
         return cast("Vector[int]", self) >> rhs
 
     @vmathop
     @onlytypemath(int)
     @simpleop
     def __rrshift__(self, lhs: int | Iterable[int]) -> "Vector[int]":
-        """Bitwise right shift but from left hand side"""
+        """Bitwise right shift but from left hand side."""
         return lhs >> cast("Vector[int]", self)
 
     @vmathop

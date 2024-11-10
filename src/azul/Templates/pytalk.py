@@ -11,6 +11,7 @@
 # Copyright (C) 2004-2009 Simon Budig, available at
 # http://www.home.unix-ag.org/simon/woof
 
+import contextlib
 import os
 import socket
 import time
@@ -76,14 +77,14 @@ class serverClient(Thread):
         finally:
             self.socket.close()
             self.stopped = True
-            self.server.log("Client %s: Connection Terminated" % self.name)
+            self.server.log(f"Client {self.name}: Connection Terminated")
 
     def chat(self, message):
         """Adds message to self.server.chat."""
         self.server.clientSentMsg(self.name, str(message))
 
     def send_all(self, message):
-        """Encode message in utf-8 format and sendall to self.socket"""
+        """Encode message in utf-8 format and sendall to self.socket."""
         if self.active:
             self.socket.sendall(message.encode("utf-8"))
 
@@ -104,7 +105,7 @@ class AcceptClients(Thread):
                 clientSocket, addr = self.server.socket.accept()
             except OSError as e:
                 if str(e) != "[Errno 22] Invalid argument":
-                    self.server.log("AcceptClients: Error: %s" % str(e))
+                    self.server.log(f"AcceptClients: Error: {e!s}")
                 break
             if not self.server.active:
                 break
@@ -117,12 +118,14 @@ class AcceptClients(Thread):
             self.server.nextCid += 1
 
             self.server.log(
-                "%s (%s) Joined Server."
-                % (newCid, addr[0] + ":" + str(addr[1])),
+                "{} ({}) Joined Server.".format(
+                    newCid,
+                    addr[0] + ":" + str(addr[1]),
+                ),
             )
             # Tell clients about new client
             for cid in self.server.clients:
-                self.server.clients[cid].send_all("S %s Joined;" % newCid)
+                self.server.clients[cid].send_all(f"S {newCid} Joined;")
 
             # Add client's address to cidToAddr dictionary
             self.server.cidToAddr[newCid] = ip
@@ -137,8 +140,7 @@ class AcceptClients(Thread):
 
             # Tell new client about other clients
             self.server.clients[newCid].send_all(
-                "S You: %s Others: [%s];"
-                % (
+                "S You: {} Others: [{}];".format(
                     newCid,
                     "/".join(
                         [cid for cid in self.server.clients if cid != newCid],
@@ -194,7 +196,7 @@ class Server(Thread):
         try:
             self.socket.bind((self.host, self.port))
         except OSError as e:
-            self.log("Error: %s" % str(e))
+            self.log(f"Error: {e!s}")
         else:
             self.active = True
             # Allow no backlog to exist. All connections should be accepted by AcceptClients thread.
@@ -207,10 +209,8 @@ class Server(Thread):
         if not self.stopped:
             self.log("Shutting down server...")
             self.active = False
-            try:
+            with contextlib.suppress(BaseException):
                 self.socket.shutdown(0)
-            except BaseException:
-                pass
             self.socket.close()
             for client in [
                 client for client in self.clients.values() if client.is_alive()
@@ -225,7 +225,7 @@ class Server(Thread):
                 try:
                     os.wait()
                 except ChildProcessError as e:
-                    self.log("Error: %s" % e)
+                    self.log(f"Error: {e}")
             self.stopped = True
             self.log("Server shut down.")
         else:
@@ -247,15 +247,13 @@ class Server(Thread):
             self.clients[toCid].send_all(messageWithFromAddr)
             if log:
                 self.log(
-                    'Send message "%s" to client %s.'
-                    % (messageWithFromAddr, toCid),
+                    f'Send message "{messageWithFromAddr}" to client {toCid}.',
                 )
         else:
             self.log(
-                'Cannot send message "%s" to client %s, client does not exist!'
-                % (messageWithFromAddr, toCid),
+                f'Cannot send message "{messageWithFromAddr}" to client {toCid}, client does not exist!',
             )
-            raise KeyError("Client %s does not exist!" % toCid)
+            raise KeyError(f"Client {toCid} does not exist!")
 
     def forwardMessageToClient(self, fromCid, message, toCid, log=True):
         """Forward a given message from given from client id to given to client id."""
@@ -263,15 +261,13 @@ class Server(Thread):
             self.sendMessageToClient(fromCid + " " + message, toCid, False)
             if log:
                 self.log(
-                    'Forwarded client %s\'s message "%s" to client %s.'
-                    % (fromCid, message, toCid),
+                    f'Forwarded client {fromCid}\'s message "{message}" to client {toCid}.',
                 )
         else:
             self.log(
-                'Cannot forward message "%s" to client %s, client does not exist!'
-                % (message, toCid),
+                f'Cannot forward message "{message}" to client {toCid}, client does not exist!',
             )
-            raise KeyError("Client %s does not exist!" % toCid)
+            raise KeyError(f"Client {toCid} does not exist!")
 
     def forwardMessageToAllClients(self, fromCid, message, log=True):
         """Forward message <message> from client <fromCid> to all active clients."""
@@ -280,8 +276,7 @@ class Server(Thread):
                 self.forwardMessageToClient(fromCid, message, client, False)
         if log:
             self.log(
-                'Forwarded client %s\'s message "%s" to all clients.'
-                % (fromCid, message),
+                f'Forwarded client {fromCid}\'s message "{message}" to all clients.',
             )
 
     def processCommand(self, fromCid, command):
@@ -301,7 +296,7 @@ class Server(Thread):
         cmd = cdata[0]
         args = cdata[1:]
         self.log(
-            'Processing command "%s" from client %s.' % (command, fromCid),
+            f'Processing command "{command}" from client {fromCid}.',
         )
 
         if cmd == "kick":
@@ -316,12 +311,12 @@ class Server(Thread):
                     validClients = [cid for cid in validClients if cid != "0"]
                 for cid in validClients:
                     self.sendMessageToClient(
-                        "S Client %s kicked you from the server;" % fromCid,
+                        f"S Client {fromCid} kicked you from the server;",
                         cid,
                         False,
                     )
                     self.clients[cid].close()
-                    self.log("Kicked client %s." % cid)
+                    self.log(f"Kicked client {cid}.")
                 self.sendMessageToClient(
                     "S Successfully kicked %i client(s);" % len(validClients),
                     fromCid,
@@ -334,7 +329,7 @@ class Server(Thread):
                     False,
                 )
                 self.clients[fromCid].close()
-                self.log("Kicked client %s at their request." % fromCid)
+                self.log(f"Kicked client {fromCid} at their request.")
             else:
                 self.sendMessageToClient(
                     "S You, being the host of the server, are not allowed to kick yourself. Press CTRL+C to shut down.;",
@@ -346,12 +341,14 @@ class Server(Thread):
                 )
         elif cmd == "list":
             self.sendMessageToClient(
-                "S You: %s Others: [%s]"
-                % (fromCid, "/".join(iter(validClients))),
+                "S You: {} Others: [{}]".format(
+                    fromCid,
+                    "/".join(iter(validClients)),
+                ),
                 fromCid,
                 False,
             )
-            self.log("Told client %s about connected users." % fromCid)
+            self.log(f"Told client {fromCid} about connected users.")
         elif cmd == "help":
             self.sendMessageToClient(
                 "".join(
@@ -363,11 +360,11 @@ class Server(Thread):
                 fromCid,
                 False,
             )
-            self.log("Client %s requested help message." % fromCid)
+            self.log(f"Client {fromCid} requested help message.")
         else:
             # If nothing has already processed a command,
             # then the command is invalid
-            self.log("Client %s sent an invalid command." % fromCid)
+            self.log(f"Client {fromCid} sent an invalid command.")
             self.sendMessageToClient(
                 'S Invalid command. Use "help" to list valid commands.',
                 fromCid,
@@ -396,8 +393,7 @@ class Server(Thread):
                     # Otherwise, see if the client is sending a message to another client
                     elif " " in clientMsg:
                         self.log(
-                            'Recieved message "%s" from client id %s.'
-                            % (clientMsg, fromCid),
+                            f'Recieved message "{clientMsg}" from client id {fromCid}.',
                         )
                         splitMsg = clientMsg.split(" ")
                         toCid = str(splitMsg[0])
@@ -433,10 +429,11 @@ class Server(Thread):
                 self.clients[client].close()
                 del self.clients[client]
             for cid in clientsToDelete:
-                self.forwardMessageToAllClients("S", "%s Left;" % cid, False)
+                self.forwardMessageToAllClients("S", f"{cid} Left;", False)
             self.log(
-                "All users informed of the leaving of user(s) %s."
-                % " ,".join(clientsToDelete),
+                "All users informed of the leaving of user(s) {}.".format(
+                    " ,".join(clientsToDelete),
+                ),
             )
 
     def run(self):
@@ -444,12 +441,12 @@ class Server(Thread):
         self.startSocket()
         try:
             if self.active:
-                self.log("Server up and running on %s!" % self.ipAddr)
+                self.log(f"Server up and running on {self.ipAddr}!")
                 AcceptClients(self)
                 while self.active:
                     self.processChat()
         except BaseException as e:
-            self.log("Error: %s" % str(e))
+            self.log(f"Error: {e!s}")
         finally:
             self.stop()
 
@@ -476,7 +473,7 @@ class Client(Thread):
         """Logs a message if self.doPrint is True."""
         self.chat.append(message)
         if self.doPrint:
-            print("Client: %s" % str(message))
+            print(f"Client: {message!s}")
 
     def startSocket(self):
         """Initialize the socket and connect to server with given info."""
@@ -583,8 +580,7 @@ def find_ip():
 
 if __name__ == "__main__":
     print(
-        "%s Version %s Programmed by %s"
-        % (__title__, __version__, __author__),
+        f"{__title__} Version {__version__} Programmed by {__author__}",
     )
     args = os.sys.argv[1:]
 
@@ -592,7 +588,7 @@ if __name__ == "__main__":
     doServer = True
     showServerMessages = False
 
-    kwargs = {k: v for k, v in [a.split("=") for a in args if "=" in a]}
+    kwargs = dict([a.split("=") for a in args if "=" in a])
 
     if "-h" in args or "-help" in args or "--help" in args:
         print(
@@ -610,14 +606,12 @@ If no arguments are given at all, mode is automatically set to Server mode.""",
         )
         os.sys.exit(0)
 
-    if "mode" in kwargs:
-        if kwargs["mode"] in ("0", "1"):
-            definedServer = True
-            doServer = {"0": True, "1": False}[kwargs["mode"]]
+    if "mode" in kwargs and kwargs["mode"] in ("0", "1"):
+        definedServer = True
+        doServer = {"0": True, "1": False}[kwargs["mode"]]
 
-    if "local" in kwargs:
-        if kwargs["local"] in ("True", "False"):
-            NONLOCAL = {"True": False, "False": True}[kwargs["local"]]
+    if "local" in kwargs and kwargs["local"] in ("True", "False"):
+        NONLOCAL = {"True": False, "False": True}[kwargs["local"]]
 
     if "ip" in kwargs and not definedServer:
         HOST = kwargs["ip"]

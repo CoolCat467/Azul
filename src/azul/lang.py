@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Language file handler
 
-"""Language file handler"""
+"""Language file handler."""
 
 # Programmed by CoolCat467
 
@@ -15,7 +15,7 @@ from os.path import exists, join
 
 
 def load_json(filename: str) -> dict:
-    """Return json data loaded from filename"""
+    """Return json data loaded from filename."""
     with open(filename, encoding="utf-8") as loaded:
         data = json.load(loaded)
         loaded.close()

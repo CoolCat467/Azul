@@ -4,6 +4,7 @@
 
 # Programmed by CoolCat467
 
+import contextlib
 import os
 import socket
 from threading import Thread
@@ -37,7 +38,7 @@ class Client(Thread):
     def log(self, message):
         """Logs a message if self.doPrint is True."""
         if self.doPrint:
-            print("Client: %s" % str(message))
+            print(f"Client: {message!s}")
 
     def startSocket(self):
         """Initialize the socket and connect to server with given info."""
@@ -59,10 +60,8 @@ class Client(Thread):
     def stop(self):
         """Close self.socket."""
         self.log("Shutting down...")
-        try:
+        with contextlib.suppress(OSError):
             self.socket.shutdown(0)
-        except OSError:
-            pass
         self.socket.close()
         self.log("Socket closed.")
 
@@ -95,7 +94,7 @@ class Client(Thread):
             if not data.endswith(";"):
                 data += ";"
             for msg in data.split(";")[:-1]:
-                self.log('Recieved message "%s".' % msg)
+                self.log(f'Recieved message "{msg}".')
                 self.chat.append(msg)
         self.stop()
 
@@ -115,7 +114,7 @@ class ClientWithInput(Client):
             if not data.endswith(";"):
                 data += ";"
             for msg in data.split(";")[:-1]:
-                self.log('Recieved message "%s".' % msg)
+                self.log(f'Recieved message "{msg}".')
                 self.chat.append(msg)
             self.send(input("Send: "))
         self.stop()

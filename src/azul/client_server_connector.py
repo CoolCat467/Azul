@@ -20,7 +20,7 @@ class ClientServerConnector(
     Timer,
     EventHandler,
 ):  # pylint: disable=R0901
-    """Game client server connector"""
+    """Game client server connector."""
 
     __slots__ = ("net", "addr", "runner_state")
     gear_type = "client"
@@ -62,7 +62,7 @@ class ClientServerConnector(
         return self.net.active_state is None
 
     async def net_stop(self) -> None:
-        """Await self.net.stop if it exists"""
+        """Await self.net.stop if it exists."""
         if hasattr(self.net, "stop"):
             await self.net.stop()
 
@@ -71,21 +71,21 @@ class ClientServerConnector(
         super().gear_shutdown()
 
     def on_stop(self) -> None:
-        """Remove this gear"""
+        """Remove this gear."""
         self.bot.remove_gear(self.name)
 
     def submit_event(self, event) -> int:
-        """Submit an event to runner"""
+        """Submit an event to runner."""
         return self.bot.submit_event(event)
 
     async def read_event(self, event) -> None:
-        """Give event to network statemachine"""
+        """Give event to network statemachine."""
         if hasattr(self.net, "read_event"):
             await self.net.read_event(event)
 
 
 def run():
-    """Run example"""
+    """Run example."""
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Azul Server
 
-"""Azul Server"""
+"""Azul Server."""
 
 # Programmed by CoolCat467
 
@@ -28,7 +28,7 @@ MAX_CLIENTS = MAX_ROOMS * 4
 
 
 class GameServer(EventLoop):
-    """Game Server Class"""
+    """Game Server Class."""
 
     __slots__ = ("port", "host", "server", "next_id", "ready", "num_clients")
 
@@ -68,7 +68,7 @@ class GameServer(EventLoop):
         ##    },
         ##    "favicon": "data:image/png;base64,<data>"
         ##}
-        data = {
+        return {
             "version": {
                 "name": __version__,
                 "protocol": PROTOCOL,
@@ -87,10 +87,9 @@ class GameServer(EventLoop):
             ##                ]
             ##            }
         }
-        return data
 
     async def bind(self):
-        """Bind server"""
+        """Bind server."""
         host_ip_type = ip_type(self.host)
         if host_ip_type is None:
             host_ip_type = 4
@@ -104,7 +103,7 @@ class GameServer(EventLoop):
     ##        self.loop = self.server.get_loop()
 
     def add_client(self, client_reader, client_writer):
-        """Add client"""
+        """Add client."""
         ##        writer_socket = client_writer.get_extra_info('socket')
         ##        writer_socket.settimeout(30)
         print(f"[Connect] client_{self.next_id}")
@@ -121,19 +120,19 @@ class GameServer(EventLoop):
         self.num_clients += 1
 
     def remove_client(self, client_name):
-        """Remove client"""
+        """Remove client."""
         print(f"[Disconnect] {client_name}")
         self.remove_gear(client_name)
         self.num_clients -= 1
 
     async def client_connect(self, client_reader, client_writer):
-        """Client connects"""
+        """Client connects."""
         # reader = StreamReader
         # writer = StreamWriter
         self.add_client(client_reader, client_writer)
 
     async def start(self):
-        """Start server"""
+        """Start server."""
         await self.bind()
         proc = EventLoopProcessor(self)
         self.add_gear(proc)
@@ -142,7 +141,7 @@ class GameServer(EventLoop):
         await self.run()
 
     async def run(self):
-        """Run server"""
+        """Run server."""
         async with self.server:
             try:
                 await self.server.serve_forever()
@@ -161,18 +160,18 @@ class GameServer(EventLoop):
                 connection.close()
 
     async def stop(self):
-        """Stop server"""
+        """Stop server."""
         self.server.close()
         await self.close()
 
 
 def create_server(host: str, port: int, loop) -> GameServer:
-    """Create server and return server and event loop"""
+    """Create server and return server and event loop."""
     return GameServer(port, host, loop)
 
 
 def run(host, port):
-    """Run server"""
+    """Run server."""
     ##    global server
 
     loop = asyncio.new_event_loop()
