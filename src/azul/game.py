@@ -1057,15 +1057,15 @@ class Grid(TileRenderer):
         return False
 
     @gscBoundIndex()
-    def getTile(self, xy, replace=-6):
+    def get_tile(self, xy, replace=-6):
         """Return a Tile Object from a given position in the grid if permitted. Return None on failure."""
         x, y = xy
-        tileCopy = self.data[x, y]
-        if tileCopy.color < 0:
+        tile_copy = self.data[x, y]
+        if tile_copy.color < 0:
             return None
         self.data[x, y] = Tile(replace)
         self.imageUpdate = True
-        return tileCopy
+        return tile_copy
 
     @gscBoundIndex()
     def get_info(self, xy):
@@ -1472,7 +1472,7 @@ class Row(TileRenderer):
         """Return the number of tiles permitted to be placed on self."""
         return self.size - self.getPlaced()
 
-    def isFull(self):
+    def is_full(self):
         """Return True if this row is full."""
         return self.getPlaced() == self.size
 
@@ -1483,7 +1483,7 @@ class Row(TileRenderer):
             return None
         return self.tiles[index]
 
-    def canPlace(self, tile):
+    def can_place(self, tile):
         """Return True if permitted to place given tile object on self."""
         placeable = (tile.color == self.color) or (
             self.color < 0 and tile.color >= 0
@@ -1496,7 +1496,7 @@ class Row(TileRenderer):
 
         return placeable and colorCorrect and numCorrect and colorNotPresent
 
-    def getTile(self, replace=-6):
+    def get_tile(self, replace=-6):
         """Return the leftmost tile while deleting it from self."""
         self.tiles.appendleft(Tile(replace))
         self.imageUpdate = True
@@ -1504,7 +1504,7 @@ class Row(TileRenderer):
 
     def place_tile(self, tile):
         """Place a given Tile Object on self if permitted."""
-        if self.canPlace(tile):
+        if self.can_place(tile):
             self.color = tile.color
             self.tiles.append(tile)
             end = self.tiles.popleft()
@@ -1519,7 +1519,7 @@ class Row(TileRenderer):
         if len(tiles) > self.get_placeable():
             return False
         for tile in tiles:
-            if not self.canPlace(tile):
+            if not self.can_place(tile):
                 return False
         tileColors = []
         for tile in tiles:
@@ -1537,13 +1537,13 @@ class Row(TileRenderer):
         """Move tiles around and into add dictionary for the wall tiling phase of the game. Removes tiles from self."""
         if "toBox" not in addToDict:
             addToDict["toBox"] = []
-        if not self.isFull():
+        if not self.is_full():
             addToDict[str(self.size)] = None
             return
         self.color = blankColor
-        addToDict[str(self.size)] = self.getTile()
+        addToDict[str(self.size)] = self.get_tile()
         for _i in range(self.size - 1):
-            addToDict["toBox"].append(self.getTile())
+            addToDict["toBox"].append(self.get_tile())
 
     def set_background(self, color):
         """Set the background color for this row."""
@@ -1626,9 +1626,9 @@ class PatternLine(MultipartObject):
                 return x, y
         return None
 
-    def isFull(self):
+    def is_full(self):
         """Return True if self is full."""
-        return all(self.get_row(rid).isFull() for rid in range(self.size[1]))
+        return all(self.get_row(rid).is_full() for rid in range(self.size[1]))
 
     def wall_tileing(self):
         """Return a dictionary to be used with wall tiling. Removes tiles from rows."""
@@ -1912,7 +1912,7 @@ class Factory(Grid):
         return [
             tile
             for tile in (
-                self.getTile((x, y))
+                self.get_tile((x, y))
                 for x in range(self.size[0])
                 for y in range(self.size[1])
             )
@@ -2110,7 +2110,7 @@ class TableCenter(Grid):
                 if self.firstTileExists:
                     if self.get_info((x, y)).color == self.firstTileColor:
                         continue
-                at = self.getTile((x, y), replace)
+                at = self.get_tile((x, y), replace)
 
                 if at is not None:
                     full.append(at)
@@ -2130,7 +2130,7 @@ class TableCenter(Grid):
                     if infoTile.color == self.firstTileColor:
                         toPull.append((x, y))
                         self.firstTileExists = False
-        tiles = [self.getTile(pos, replace) for pos in toPull]
+        tiles = [self.get_tile(pos, replace) for pos in toPull]
         self.reorder_tiles(replace)
         return tiles
 
@@ -2465,7 +2465,7 @@ class Player(MultipartObject):
                                 if obj == "PatternLine":
                                     pos, rowNum = point
                                     row = pattern_line.get_row(rowNum)
-                                    if not row.isFull():
+                                    if not row.is_full():
                                         info = row.get_info(pos)
                                         if info is not None and info.color < 0:
                                             color, held = (
@@ -2483,7 +2483,7 @@ class Player(MultipartObject):
                                                 cursor.force_hold(tiles)
                                 elif obj == "FloorLine":
                                     tiles_to_add = cursor.drop()
-                                    if floorLine.isFull():  # Floor is full,
+                                    if floorLine.is_full():  # Floor is full,
                                         # Add tiles to box instead.
                                         boxLid.add_tiles(tiles_to_add)
                                     elif floorLine.get_placeable() < len(

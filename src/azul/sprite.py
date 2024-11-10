@@ -1,170 +1,147 @@
-#!/usr/bin/env python3
-# Client Sprite and Renderer
-
 """Client Sprite and Renderer."""
 
 # Programmed by CoolCat467
 
-from collections import deque
-from collections.abc import Iterable, Iterator
-from typing import ClassVar, Union
+from __future__ import annotations
+
+# Copyright (C) 2023  CoolCat467
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+__title__ = "Client Sprite"
+__author__ = "CoolCat467"
+__license__ = "GNU General Public License Version 3"
+__version__ = "0.0.0"
+
+from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, TypedDict, cast
 
 import trio
-from component import Component, ComponentManager, Event
 from pygame.color import Color
 from pygame.event import Event as PygameEvent, event_name
 from pygame.mask import Mask, from_surface as mask_from_surface
 from pygame.rect import Rect
-from pygame.sprite import DirtySprite, LayeredDirty, LayeredUpdates
+from pygame.sprite import LayeredDirty, LayeredUpdates, WeakDirtySprite
 from pygame.surface import Surface
-from vector import Vector, Vector2
 
-__title__ = "Client Sprite"
-__author__ = "CoolCat467"
-__version__ = "0.0.0"
+from azul.component import Component, ComponentManager, Event
+from azul.statemachine import AsyncStateMachine
+from azul.vector import Vector2
 
-
-class Location(Vector2):
-    """Location bound to the center of a given rectangle."""
-
-    __slots__ = ("_rect",)
-
-    def __new__(
-        cls,
-        *args: int | float | complex,
-        dtype: type | None = None,
-    ) -> Union["Location", Vector2]:  # type: ignore
-        """Super hack to return Vector2 if data type is not None, otherwise new Location."""
-        if dtype is not None:
-            new_vec = super().__new__(Vector2)
-            new_vec.__init__(*args, dtype=dtype)  # type: ignore
-            return new_vec
-        return super().__new__(cls)
-
-    def __init__(self, rect: Rect) -> None:
-        """Initialize Location with rectangle."""
-        self._rect = rect
-        super().__init__(*self._rect.center, dtype=list)
-
-    def __setitem__(
-        self,
-        index: int,
-        value: int | float | complex,
-        normal: bool = False,
-    ) -> None:
-        """Set item, but if not normal, updates rectangle as well."""
-        super().__setitem__(index, value)
-        if normal:
-            return
-        new_x, new_y = tuple(self)
-        self._rect.center = new_x, new_y
-
-    def __getitem__(self, index: int) -> int | float | complex:
-        """Get item, but sets internal data at index to data from rectangle center first."""
-        self.__setitem__(index, self._rect.center[index], normal=True)  # type: ignore
-        return super().__getitem__(index)
-
-    def normalize(self) -> Vector:
-        """Raise NotImplemented, original is in place."""
-        raise NotImplementedError
-
-    def set_length(self, new_length: int | float | complex) -> Vector:
-        """Raise NotImplemented, original is in place."""
-        raise NotImplementedError
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator
 
 
-class Sprite(ComponentManager, DirtySprite):
+class TickEventData(NamedTuple):
+    """Tick Event Data."""
+
+    time_passed: float
+    fps: float
+
+
+class PygameMouseEventData(TypedDict):
+    """PygameMouse Event Data."""
+
+    pos: tuple[int, int]
+    touch: bool
+    window: None
+
+
+class PygameMouseButtonEventData(PygameMouseEventData):
+    """PygameMouseButton Event Data."""
+
+    button: int
+
+
+class PygameMouseMotion(PygameMouseEventData):
+    """PygameMouseMotion Event Data."""
+
+    rel: tuple[int, int]
+    buttons: tuple[int, int, int]
+
+
+class Sprite(ComponentManager, WeakDirtySprite):
     """Client sprite component."""
 
-    __slots__ = ("rect", "__location", "__image", "sync_events", "mask")
+    __slots__ = ("rect", "__image", "mask", "update_location_on_resize")
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: object) -> None:
+        """Initialize with name."""
         ComponentManager.__init__(self, name, "sprite")
-        DirtySprite.__init__(self)
+        WeakDirtySprite.__init__(self)
 
         self.__image: Surface | None = None
         self.visible = False
-        self.mask = None
+        self.mask: Mask | None = None
         self.rect: Rect = Rect(0, 0, 0, 0)
-        self.__location = Location(self.rect)
 
-        self.sync_events: deque[Event] = deque()
+        self.update_location_on_resize = False
 
     def __repr__(self) -> str:
+        """Return representation of self."""
         return f"<{self.__class__.__name__} Sprite {self.list_components()}>"
 
-    # pylint: disable=unused-private-member
-    def __get_location(self) -> Location:
-        return self.__location
+    def __get_location(self) -> Vector2:
+        """Return rect center as new Vector2."""
+        return Vector2.from_iter(self.rect.center)
 
-    def __set_location(self, value: list | tuple) -> None:
-        # pylint: disable=invalid-name
-        self.__location.x = value[0]
-        self.__location.y = value[1]
+    def _set_location(self, value: tuple[int, int]) -> None:
+        """Set rect center from tuple of integers."""
+        self.rect.center = value
 
-    location = property(__get_location, __set_location, doc="Location")
+    def __set_location(self, value: tuple[int, int]) -> None:
+        """Set rect center from tuple of integers."""
+        self._set_location(value)
 
-    def __get_image_dims(self) -> tuple[int, int]:
-        """Return size of internal rectangle."""
-        return self.rect.size
-
-    def __set_image_dims(self, value: tuple[int, int]) -> None:
-        """Set internal rectangle size while keeping self.location intact."""
-        prev_size = self.rect.size
-        pre_loc = self.location.conv_ints()
-        self.rect.size = value
-
-        if self.rect.center == pre_loc:
-            return
-
-        rel = tuple(self.rect.center - pre_loc)
-
-        self.location = pre_loc
-
-        if prev_size == (0, 0) or self.rect.size == (0, 0):
-            return
-        self.sync_events.append(
-            Event(
-                "sprite_image_resized",
-                {
-                    "prev_size": prev_size,
-                    "size": self.rect.size,
-                    "rel": rel,
-                },
-            ),
-        )
-
-    image_dims = property(
-        __get_image_dims,
-        __set_image_dims,
-        doc="Image dimensions",
+    location = property(
+        __get_location,
+        __set_location,
+        doc="Location (Center of image)",
     )
 
     def __get_image(self) -> Surface | None:
-        """Return surface of this sprite."""
+        """Return the surface of this sprite."""
         return self.__image
 
     def __set_image(self, image: Surface | None) -> None:
-        """Set surface and update image_dims."""
+        """Set surface, update image dimensions, and set dirty bit.
+
+        Automatically updates location if self.update_location_on_resize is set.
+        """
         self.__image = image
         if image is not None:
-            self.image_dims = image.get_size()
-        self.dirty = 1
+            pre_loc = self.location
+            self.rect.size = image.get_size()
+            if self.update_location_on_resize:
+                self.location = pre_loc
+        if self.dirty == 0:
+            self.dirty = 1
 
     image = property(
         __get_image,
         __set_image,
-        doc="Image property auto-updating dimensions.",
-    )  # type: ignore
+        doc="Image property auto-updating dimensions and setting dirty bit.",
+    )
 
-    ##### Extra
+    # Extra
     def is_selected(self, position: tuple[int, int]) -> bool:
-        """Return True if visible, collision with point, and topmost at point."""
+        """Return True if visible and collision with point."""
         if not self.visible:
             return False
-        if not self.rect.collidepoint(position):
-            return False
+        return self.rect.collidepoint(position)
 
+    def is_topmost(self, position: tuple[int, int]) -> bool:
+        """Return True if topmost at point in any group this sprite is in."""
         for group in self.groups():
             assert isinstance(
                 group,
@@ -173,35 +150,36 @@ class Sprite(ComponentManager, DirtySprite):
             sprites_at = group.get_sprites_at(position)
             if not sprites_at:
                 continue
-            top = sprites_at[-1]
-            if top != self:
-                return False
+            for top in reversed(sprites_at):
+                if top != self and top.visible:
+                    return False
         return True
-
-    async def raise_queued_sync_events(self, _: Event) -> None:
-        """Raise queued sync events."""
-        async with trio.open_nursery() as nursery:
-            for event in (
-                self.sync_events.popleft()
-                for _ in range(len(self.sync_events))
-            ):
-                nursery.start_soon(self.raise_event, event)
-
-    def bind_handlers(self) -> None:
-        """Have tick raise queued sync events."""
-        self.register_handler("tick", self.raise_queued_sync_events)
 
 
 class ImageComponent(ComponentManager):
-    """Allow sprite to use multiple images easily."""
+    """Allow sprite to use multiple images easily.
+
+    Components Supplied:
+        AnimationComponent
+        OutlineComponent
+
+    Requires Component:
+        Sprite
+
+    Attributes
+    ----------
+        mask_threshold: Threshold value used in pygame.mask.from_surface
+
+    """
 
     __slots__ = ("__surfaces", "__masks", "set_surface", "mask_threshold")
 
     def __init__(self) -> None:
+        """Initialize image component."""
         super().__init__("image")
 
-        self.__surfaces: dict[int | str, Surface] = {}
-        self.__masks: dict[int | str, Mask] = {}
+        self.__surfaces: dict[int | str, Surface | int | str] = {}
+        self.__masks: dict[int | str, Mask | int | str] = {}
         self.set_surface: int | str | None = None
 
         self.mask_threshold = 0x7F
@@ -213,55 +191,85 @@ class ImageComponent(ComponentManager):
             ),
         )
 
-    def _compute_mask(self, identifier: int | str) -> None:
-        """Save mask for identifier."""
-        self.__masks[identifier] = mask_from_surface(
-            self.get_image(identifier),
-            self.mask_threshold,
-        )
+    def add_image_and_mask(
+        self,
+        identifier: int | str,
+        surface: Surface | int | str,
+        mask: Mask | int | str,
+    ) -> None:
+        """Add image and mask to internal database.
 
-    def add_image(self, identifier: int | str, surface: Surface) -> None:
-        """Add image to internal database."""
+        If mask is not a Mask object, it's expected
+        to be a valid identifier for another surface so copy the
+        mask from
+        """
+        if not isinstance(surface, Surface) and not self.image_exists(surface):
+            raise ValueError("Expected surface to be a valid identifier")
         self.__surfaces[identifier] = surface
-        self._compute_mask(identifier)
+        if not isinstance(mask, Mask) and not self.image_exists(mask):
+            raise ValueError("Expected mask to be a valid identifier")
+        self.__masks[identifier] = mask
 
-    def add_images(self, images: dict[int | str, Surface]) -> None:
+    def add_image(
+        self,
+        identifier: int | str,
+        surface: Surface | int | str,
+    ) -> None:
+        """Add image to internal database."""
+        mask: int | str | Mask
+        if isinstance(surface, Surface):
+            mask = mask_from_surface(surface, self.mask_threshold)
+        else:
+            mask = surface
+        self.add_image_and_mask(identifier, surface, mask)
+
+    def add_images(self, images: dict[int | str, Surface | int | str]) -> None:
         """Add images to internal database."""
         for ident, surf in images.items():
             self.add_image(ident, surf)
 
-    def list_images(self) -> list[int | str]:
-        """Return a list of saved image identifiers."""
-        return list(self.__surfaces)
+    def list_images(self) -> tuple[int | str, ...]:
+        """Return a tuple of saved image identifiers."""
+        return tuple(self.__surfaces)
 
     def image_exists(self, identifier: int | str) -> bool:
         """Return if identifier exists in saved images."""
         return identifier in self.__surfaces
 
     def get_image(self, identifier: int | str) -> Surface:
-        """Get saved image from identifier."""
-        if not self.image_exists(identifier):
-            raise ValueError(f'No image saved for identifier "{identifier}"')
-        return self.__surfaces[identifier]
+        """Return saved image from identifier."""
+        while True:
+            if not self.image_exists(identifier):
+                raise ValueError(
+                    f'No image saved for identifier "{identifier}"',
+                )
+            surface = self.__surfaces[identifier]
+            if isinstance(surface, Surface):
+                return surface
+            identifier = surface
 
     def get_mask(self, identifier: int | str) -> Mask:
-        """Get saved mask for saved image if exists, otherwise save and return."""
-        if not self.image_exists(identifier):
-            raise ValueError(f'No image saved for identifier "{identifier}"')
-        if identifier not in self.__masks:
-            self._compute_mask(identifier)
-        return self.__masks[identifier]
+        """Return saved mask for saved image if exists, otherwise save and return."""
+        while True:
+            if not self.image_exists(identifier):
+                raise ValueError(
+                    f'No image saved for identifier "{identifier}"',
+                )
+            mask = self.__masks[identifier]
+            if isinstance(mask, Mask):
+                return mask
+            identifier = mask
 
     def set_image(self, identifier: int | str) -> None:
         """Set sprite component's image by identifier."""
-        outline: OutlineComponent = self.get_component("outline")
+        outline = cast(OutlineComponent, self.get_component("outline"))
         if outline.active and outline.mod not in str(identifier):
             identifier = outline.get_outline(identifier)
 
         if identifier == self.set_surface:
             return
 
-        sprite: Sprite = self.manager.get_component("sprite")
+        sprite = cast(Sprite, self.manager.get_component("sprite"))
         sprite.image = self.get_image(identifier)
         sprite.mask = self.get_mask(identifier)
 
@@ -269,83 +277,125 @@ class ImageComponent(ComponentManager):
 
 
 class OutlineComponent(Component):
-    """Add outline to sprite."""
+    """Add outline to sprite.
+
+    Requires Manager:
+        ImageComponent
+
+    Attributes
+    ----------
+        size: controls width of the outline.
+        active: Is outline currently active (settable with set_color)
+        mod: String to separate original identifier from outline data.
+
+    """
 
     __slots__ = ("__active", "__color", "size")
     mod = "_outlined_"
 
     def __init__(self) -> None:
+        """Initialize self."""
         super().__init__("outline")
 
         self.__active = False
-        self.__color = Color(0xFF, 0xFF, 0xFF, 0)
+        self.__color: Color | tuple[int, int, int] = Color(0xFF, 0xFF, 0xFF, 0)
         self.size = 5
 
     @property
     def active(self) -> bool:
-        """Is active?"""
+        """Is active?."""
         return self.__active
 
     def set_color(self, color: Color | None) -> None:
         """Set color. If None, disable, otherwise enable."""
+        manager = cast(ImageComponent, self.manager)
         prev = self.active
         self.__active = color is not None
-        if not self.__active:
+        if color is None:
             if prev:
-                search = str(self.manager.set_surface).split(self.mod)[0]
-                for term in self.manager.list_images():
+                search = str(manager.set_surface).split(self.mod)[0]
+                for term in manager.list_images():
                     if term == search or str(term) == search:
                         break
                 else:
                     return
-                self.manager.set_image(term)
+                manager.set_image(term)
             return
         self.__color = color
-        self.manager.set_image(self.manager.set_surface)
+        assert manager.set_surface is not None
+        manager.set_image(manager.set_surface)
 
     def get_outline_discriptor(self, identifier: str | int) -> str:
         """Return outlined identifier for given original identifier."""
-        return f"{identifier}{self.mod}{int(self.__color)}_{self.size}"
+        color = "_".join(map(str, self.__color))
+        return f"{identifier}{self.mod}{color}_{self.size}"
 
     def save_outline(self, identifier: str | int) -> None:
         """Save outlined version of given identifier image."""
+        manager = cast(ImageComponent, self.manager)
+
         outlined = self.get_outline_discriptor(identifier)
-        if self.manager.image_exists(outlined):
+        if manager.image_exists(outlined):
             return
 
-        surface = self.manager.get_image(identifier)
+        surface = manager.get_image(identifier)
 
         w, h = surface.get_size()
 
-        diameter = self.size * 2
-        surf = Surface((w + diameter, h + diameter)).convert_alpha()
+        radius = abs(self.size)
+        diameter = radius * 2
+        ##        if self.size < 0:
+        ##            surface = surface_scale(
+        ##                surface, (w - diameter, h - diameter)
+        ##            )
+        ##            offset = 0
+        ##        else:
+        offset = diameter
+        surf = Surface((w + offset, h + offset)).convert_alpha()
         surf.fill(Color(0, 0, 0, 0))
 
         surf.lock()
-        for ox, oy in self.manager.get_mask(identifier).outline():
+        for ox, oy in manager.get_mask(identifier).outline():
             for x in range(diameter + 1):
                 for y in range(diameter + 1):
                     surf.set_at((ox + x, oy + y), self.__color)
         surf.unlock()
-        surf.blit(surface, (self.size, self.size))
+        surf.blit(surface, (radius, radius))
 
-        self.manager.add_image(outlined, surf)
+        manager.add_image(outlined, surf)
 
     def get_outline(self, identifier: str | int) -> str:
-        """Get saved outline effect identifier."""
+        """Return saved outline effect identifier."""
         self.save_outline(identifier)
         return self.get_outline_discriptor(identifier)
 
-    def precalculate_all_outlined(self, color: Color) -> None:
-        """Precalculate all images outlined."""
+    def precalculate_outline(
+        self,
+        identifier: str | int,
+        color: Color | tuple[int, int, int],
+    ) -> str:
+        """Return outline descriptor after precalculating outline for image."""
         prev, self.__color = self.__color, color
-        for image in self.manager.list_images():
-            self.save_outline(image)
+        outline = self.get_outline(identifier)
         self.__color = prev
+        return outline
+
+    def precalculate_all_outlined(
+        self,
+        color: Color | tuple[int, int, int],
+    ) -> None:
+        """Precalculate all images outlined."""
+        manager = cast(ImageComponent, self.manager)
+
+        for image in manager.list_images():
+            self.precalculate_outline(image, color)
 
 
 class AnimationComponent(Component):
     """Allows sprite texture to be animated.
+
+    Requires Manager:
+        ImageComponent
 
     self.controller is an Iterator that yields
     either None or the name of a state in self.states
@@ -357,28 +407,31 @@ class AnimationComponent(Component):
     __slots__ = ("controller", "update_every", "update_mod")
 
     def __init__(self) -> None:
+        """Initialize with changing image to same image every second."""
         super().__init__("animation")
 
-        def default() -> Iterator[None]:
+        def default() -> Iterator[int | str | None]:
+            manager = cast(ImageComponent, self.manager)
             while True:
-                yield self.manager.set_surface
+                yield manager.set_surface
 
-        self.controller: Iterator[str | None] = default()
+        self.controller: Iterator[int | str | None] = default()
 
         self.update_every: float = 1.0
         self.update_mod: float = 0.0
 
-    def fetch_controller_new_state(self) -> None:
+    def fetch_controller_new_state(self) -> int | str | None:
         """Ask controller for new state."""
         return next(self.controller)
 
-    async def tick(self, tick_event: Event) -> None:
+    async def tick(self, tick_event: Event[TickEventData]) -> None:
         """Update controller if it's time to and update sprite image."""
-        passed = tick_event.data["time_passed"]
-        new, update = None, False
+        await trio.lowlevel.checkpoint()
+
+        passed = tick_event.data.time_passed
+        new = None
         if self.update_every == 0:
             new = self.fetch_controller_new_state()
-            update = True
         else:
             updates, self.update_mod = divmod(
                 self.update_mod + passed,
@@ -386,9 +439,9 @@ class AnimationComponent(Component):
             )
             for _ in range(int(updates)):
                 new = self.fetch_controller_new_state()
-            update = updates > 0
-        if update:
-            self.manager.set_image(new)
+        if new is not None:
+            manager = cast(ImageComponent, self.manager)
+            manager.set_image(new)
 
     def bind_handlers(self) -> None:
         """Bind tick handler."""
@@ -396,19 +449,37 @@ class AnimationComponent(Component):
 
 
 class MovementComponent(Component):
-    """Component that moves sprite in direction of heading with speed."""
+    """Component that moves sprite in direction of heading with speed.
+
+    Requires components:
+        Sprite
+
+    Attributes
+    ----------
+        heading: Unit Vector2 of direction to move in.
+        speed: Number of units to move per time_passed unit.
+
+    """
 
     __slots__ = ("heading", "speed")
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        heading: Vector2 | None = None,
+        speed: float = 0,
+    ) -> None:
+        """Initialize with heading and speed."""
         super().__init__("movement")
 
-        self.heading = Vector2(0, 0)
-        self.speed = 0
+        if heading is None:
+            self.heading = Vector2(0, 0)
+        else:
+            self.heading = heading
+        self.speed = speed
 
-    def point_toward(self, position: Iterable) -> None:
+    def point_toward(self, position: Iterable[int | float]) -> None:
         """Change self.heading to point toward a given position."""
-        sprite: Sprite = self.get_component("sprite")  # type: ignore
+        sprite = cast(Sprite, self.get_component("sprite"))
         self.heading = Vector2.from_points(
             sprite.location,
             position,
@@ -416,7 +487,7 @@ class MovementComponent(Component):
 
     def move_heading_distance(self, distance: float) -> None:
         """Move distance in heading direction."""
-        sprite: Sprite = self.get_component("sprite")  # type: ignore
+        sprite = cast(Sprite, self.get_component("sprite"))
         change = self.heading * distance
         if change:
             sprite.location += change
@@ -428,25 +499,41 @@ class MovementComponent(Component):
 
 
 class TargetingComponent(Component):
-    """Sprite that moves toward a destination and then stops."""
+    """Sprite that moves toward a destination and then stops.
 
-    __slots__ = ("__destination",)
+    Requires components:
+        Sprite
+        MovementComponent
 
-    def __init__(self) -> None:
+    Attributes
+    ----------
+        destination: Target destination.
+        event_raise_name: Name of event to raise when reached destination.
+
+    """
+
+    __slots__ = ("__destination", "__reached", "event_raise_name")
+
+    def __init__(self, event_raise_name: str = "reached_destination") -> None:
+        """Initialize with no destination."""
         super().__init__("targeting")
 
         self.__destination = Vector2(0, 0)
+        self.__reached = True
+        self.event_raise_name = event_raise_name
 
     def update_heading(self) -> None:
         """Update the heading of the movement component."""
-        movement: MovementComponent = self.get_component("movement")
-        if self.to_destination == 0:
+        movement = cast(MovementComponent, self.get_component("movement"))
+        to_dest = self.to_destination()
+        if to_dest @ to_dest == 0:
             movement.heading = Vector2(0, 0)
             return
-        movement.heading = self.to_destination.normalized()
+        movement.heading = to_dest.normalized()
 
     def __set_destination(self, value: Iterable[int]) -> None:
         """Set destination as well as movement heading."""
+        self.__reached = False
         self.__destination = Vector2.from_iter(value)
         self.update_heading()
 
@@ -460,23 +547,29 @@ class TargetingComponent(Component):
         doc="Target Destination",
     )
 
-    @property
-    def to_destination(self) -> Vector:
+    def to_destination(self) -> Vector2:
         """Return vector of self.location to self.destination."""
-        sprite: Sprite = self.get_component("sprite")  # type: ignore
+        sprite = cast(Sprite, self.get_component("sprite"))
         return Vector2.from_points(sprite.location, self.destination)
 
-    def move_destination_time(self, time_passed: float) -> None:
+    async def move_destination_time(self, time_passed: float) -> None:
         """Move with time_passed."""
-        sprite: Sprite
-        movement: MovementComponent
-        sprite, movement = self.get_components(("sprite", "movement"))  # type: ignore
-
-        if sprite.location == self.destination:
+        if self.__reached:
             return
 
+        sprite, movement = cast(
+            tuple[Sprite, MovementComponent],
+            self.get_components(("sprite", "movement")),
+        )
+
+        if sprite.location == self.destination:
+            self.__reached = True
+            await self.raise_event(Event(self.event_raise_name, None))
+            return
+        await trio.lowlevel.checkpoint()
+
         travel_distance = min(
-            self.to_destination.magnitude,
+            self.to_destination().magnitude(),
             movement.speed * time_passed,
         )
 
@@ -486,38 +579,76 @@ class TargetingComponent(Component):
 
 
 class DragClickEventComponent(Component):
-    """Raise drag events when motion, sprite visible, and sprite is top most."""
+    """Raise drag events when motion and sprite visible.
+
+    Uses Events:
+        PygameMouseButtonDown[PygameMouseButtonEventData]
+        PygameMouseButtonUp[PygameMouseButtonEventData]
+        PygameMouseMotion[PygameMouseMotion]
+
+    Raises Events:
+        click_other[PygameMouseButtonEventData]
+        click[PygameMouseButtonEventData]
+        drag
+    """
 
     __slots__ = ("pressed",)
 
     def __init__(self) -> None:
+        """Initialize pressed."""
         super().__init__("drag_click_event")
 
         self.pressed: dict[int, bool] = {}
 
-    async def press_start(self, event: Event) -> None:
-        """Set pressed for event button if selected. Also raise Click events."""
-        sprite: Sprite = self.get_component("sprite")
+    def bind_handlers(self) -> None:
+        """Bind PygameMouseMotion."""
+        # self.register_handler('PygameMouseMotion', self.motion)
+        self.register_handlers(
+            {
+                "PygameMouseButtonDown": self.press_start,
+                "PygameMouseButtonUp": self.press_end,
+                "PygameMouseMotion": self.motion,
+            },
+        )
 
-        if not sprite.is_selected(event.data["pos"]):
+    async def press_start(
+        self,
+        event: Event[PygameMouseButtonEventData],
+    ) -> None:
+        """Set pressed for event button if selected. Also raise Click events."""
+        await trio.lowlevel.checkpoint()
+
+        if not self.manager_exists:
+            return
+        sprite = cast(Sprite, self.get_component("sprite"))
+
+        pos = event.data["pos"]
+        button = event.data["button"]
+
+        if not sprite.is_selected(pos):
             await self.raise_event(Event("click_other", event.data))
             return
 
-        self.pressed[event.data["button"]] = True
+        self.pressed[button] = True
 
         await self.raise_event(Event("click", event.data))
 
-    async def press_end(self, event: Event) -> None:
+    async def press_end(
+        self,
+        event: Event[PygameMouseButtonEventData],
+    ) -> None:
         """Unset pressed for event button."""
         self.pressed[event.data["button"]] = False
 
-    async def motion(self, event: Event) -> None:
+    async def motion(
+        self,
+        event: Event[PygameMouseMotion],
+    ) -> None:
         """PygameMouseMotion event -> drag."""
-        ##        sprite: Sprite = self.get_component('sprite')
-        ##
-        ##        if not sprite.is_selected(event.data['pos']):
-        ##            self.pressed.clear()
+        await trio.lowlevel.checkpoint()
 
+        if not self.manager_exists:
+            return
         async with trio.open_nursery() as nursery:
             for button, pressed in self.pressed.items():
                 if not pressed:
@@ -534,32 +665,18 @@ class DragClickEventComponent(Component):
                     ),
                 )
 
-    def bind_handlers(self) -> None:
-        """Bind PygameMouseMotion."""
-        ##        self.register_handler('PygameMouseMotion', self.motion)
-        self.register_handlers(
-            {
-                "PygameMouseButtonDown": self.press_start,
-                "PygameMouseButtonUp": self.press_end,
-                "PygameMouseMotion": self.motion,
-            },
-        )
 
+class GroupProcessor(AsyncStateMachine):
+    """Layered Dirty Sprite group handler."""
 
-##class Group(ComponentManager, LayeredDirty):
-##    def __init__(self) -> None:
-##        ComponentManager.__init__(self, 'group')
-##        LayeredDirty.__init__(self)
-
-
-class GroupProcessor:
-    """Gear Runner and Layered Dirty Sprite group handler."""
-
-    ##    __slots__ = ('groups', 'group_names', 'new_gid', '_timing', '_clear')
+    __slots__ = ("groups", "group_names", "new_gid", "_timing", "_clear")
     sub_renderer_class: ClassVar = LayeredDirty
     groups: dict[int, sub_renderer_class]
 
     def __init__(self) -> None:
+        """Initialize group processor."""
+        super().__init__()
+
         self.groups = {}
         self.group_names: dict[str, int] = {}
         self.new_gid = 0
@@ -572,22 +689,33 @@ class GroupProcessor:
         for group in self.groups.values():
             group.clear(*self._clear)
 
-    def set_timing_treshold(self, value: float) -> None:
-        """set_timing_treshold for all groups."""
+    def set_timing_threshold(self, value: float) -> None:
+        """set_timing_threshold for all groups."""
         self._timing = value
         for renderer in self.groups.values():
-            renderer.set_timing_treshold(self._timing)
+            renderer.set_timing_threshold(self._timing)
+
+    def new_group_class(
+        self,
+        group_class: type[LayeredDirty[Any]],
+        name: str | None = None,
+    ) -> int:
+        """Make a new group from given group class and return id."""
+        if name is not None:
+            self.group_names[name] = self.new_gid
+        group_instance = group_class()
+        self.groups[self.new_gid] = group_instance
+        group_instance.set_timing_threshold(self._timing)
+        screen, background = self._clear
+        if background is not None:
+            assert screen is not None
+            group_instance.clear(screen, background)
+        self.new_gid += 1
+        return self.new_gid - 1
 
     def new_group(self, name: str | None = None) -> int:
         """Make a new group and return id."""
-        if name is not None:
-            self.group_names[name] = self.new_gid
-        self.groups[self.new_gid] = self.sub_renderer_class()
-        self.groups[self.new_gid].set_timing_treshold(self._timing)
-        if self._clear[1] is not None:
-            self.groups[self.new_gid].clear(*self._clear)
-        self.new_gid += 1
-        return self.new_gid - 1
+        return self.new_group_class(self.sub_renderer_class, name)
 
     def remove_group(self, gid: int) -> None:
         """Remove group."""
@@ -598,14 +726,10 @@ class GroupProcessor:
             del self.groups[gid]
             for name, v_gid in self.group_names.items():
                 if v_gid == gid:
-                    # pylint: disable=unnecessary-dict-index-lookup
                     del self.group_names[name]
                     return
 
-    def get_group(
-        self,
-        gid_name: str | int,
-    ) -> sub_renderer_class | None:
+    def get_group(self, gid_name: str | int) -> sub_renderer_class | None:
         """Return group from group ID or name."""
         named = None
         if isinstance(gid_name, str):
@@ -616,14 +740,12 @@ class GroupProcessor:
             group_id = gid_name
         if group_id in self.groups:
             return self.groups[group_id]
+        # Erase old named group that is not in groups anymore.
+        # Not sure how that would happen, pretty weird this is here
+        # to be honest (comment written months/years later).
         if named is not None:
             del self.group_names[named]
         return None
-
-    ##    def update(self, time_passed: float) -> None:
-    ##        "Process gears and update sprites"
-    ##        for group in self.groups.values():
-    ##            group.update(time_passed)
 
     def draw(self, screen: Surface) -> list[Rect]:
         """Draw all groups."""
@@ -638,27 +760,23 @@ class GroupProcessor:
             group.repaint_rect(screen_rect)
 
     def clear_groups(self) -> None:
-        """Clear all groups."""
+        """Remove all groups."""
         for group_id in tuple(self.groups):
             self.remove_group(group_id)
 
     def __del__(self) -> None:
+        """Clear groups."""
         self.clear_groups()
 
 
-def convert_pygame_event(event: PygameEvent) -> Event:
+def convert_pygame_event(event: PygameEvent) -> Event[Any]:
     """Convert Pygame Event to Component Event."""
-    ##    data = event.dict
-    ##    data['type_int'] = event.type
-    ##    data['type'] = event_name(event.type)
-    ##    return Event('pygame', data)
+    # data = event.dict
+    # data['type_int'] = event.type
+    # data['type'] = event_name(event.type)
+    # return Event('pygame', data)
     return Event(f"Pygame{event_name(event.type)}", event.dict)
 
 
-def run() -> None:
-    """Run test."""
-
-
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: nocover
     print(f"{__title__}\nProgrammed by {__author__}.")
-    run()
