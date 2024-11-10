@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 # Async Clock - Asyncronous version of pygame.time.Clock
 
-"Asyncronous FPS clock"
+"""Asyncronous FPS clock"""
 
 # Programmed by CoolCat467
 
-__title__ = 'Async Clock'
-__author__ = 'CoolCat467'
-__version__ = '0.0.0'
+__title__ = "Async Clock"
+__author__ = "CoolCat467"
+__version__ = "0.0.0"
 __ver_major__ = 0
 __ver_minor__ = 0
 __ver_patch__ = 0
@@ -16,9 +15,19 @@ __ver_patch__ = 0
 import pygame.time
 import trio
 
+
 class Clock:
-    "pygame.time.Clock but with asyncronous tick"
-    __slots__ = ('fps_tick', 'timepassed', 'rawpassed', 'last_tick', 'fps', 'fps_count')
+    """pygame.time.Clock but with asyncronous tick"""
+
+    __slots__ = (
+        "fps_tick",
+        "timepassed",
+        "rawpassed",
+        "last_tick",
+        "fps",
+        "fps_count",
+    )
+
     def __init__(self) -> None:
         self.fps_tick = 0
         self.timepassed = 0
@@ -28,22 +37,22 @@ class Clock:
         self.fps_count = 0
 
     def __repr__(self) -> str:
-        return f'<Clock({self.fps:2f})>'
+        return f"<Clock({self.fps:2f})>"
 
     def get_fps(self) -> float:
-        "compute the clock framerate"
+        """Compute the clock framerate"""
         return self.fps
 
     def get_rawtime(self) -> int:
-        "actual time used in the previous tick"
+        """Actual time used in the previous tick"""
         return self.rawpassed
 
     def get_time(self) -> int:
-        "time used in the previous tick"
+        """Time used in the previous tick"""
         return self.timepassed
 
     async def tick(self, framerate: int = 0) -> int:
-        "update the clock"
+        """Update the clock"""
         endtime = 1000 // framerate
         self.rawpassed = pygame.time.get_ticks() - self.last_tick
         delay = endtime - self.rawpassed
@@ -66,12 +75,9 @@ class Clock:
 
 
 def run() -> None:
-    "Run program"
+    """Run program"""
 
 
-
-
-
-if __name__ == '__main__':
-    print(f'{__title__} v{__version__}\nProgrammed by {__author__}.\n')
+if __name__ == "__main__":
+    print(f"{__title__} v{__version__}\nProgrammed by {__author__}.\n")
     run()

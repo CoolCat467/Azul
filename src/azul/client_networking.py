@@ -1,30 +1,32 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 # Client Networking
 
-"Client Networking"
+"""Client Networking"""
 
 # Programmed by CoolCat467
 
-__title__ = 'Client Networking'
-__author__ = 'CoolCat467'
-__version__ = '0.0.0'
+__title__ = "Client Networking"
+__author__ = "CoolCat467"
+__version__ = "0.0.0"
 
-from typing import Union, Final
+import datetime
 import json
 import random
-import datetime
+from typing import Final
 
-from gears import AsyncStateMachine, StateTimerExitState
-from events import Event, log_active_exception
-from event_statetimer import StatorEventExtend, EventAsyncState
 from connection import Connection, TCPAsyncSocketConnection
+from event_statetimer import EventAsyncState, StatorEventExtend
+from events import Event, log_active_exception
+from gears import AsyncStateMachine, StateTimerExitState
 
 PROTO_VER: Final[int] = 0
 
+
 class ClientNetwork(AsyncStateMachine, StatorEventExtend):
-    "Client network"
-    __slots__ = ('client', 'srv_host', 'srv_port')
+    """Client network"""
+
+    __slots__ = ("client", "srv_host", "srv_port")
+
     def __init__(self, client):
         super().__init__()
         self.client = client
@@ -34,28 +36,31 @@ class ClientNetwork(AsyncStateMachine, StatorEventExtend):
         self.add_state(LoginState())
 
     async def initialize_state(self) -> None:
-        "Set state to handshake"
-        await self.set_state('connect')
+        """Set state to handshake"""
+        await self.set_state("connect")
 
     async def think(self) -> None:
-        "Think, but set state to hault on exception and log exception"
+        """Think, but set state to hault on exception and log exception"""
         try:
             await super().think()
-        except Exception:# pylint: disable=broad-except
+        except Exception:  # pylint: disable=broad-except
             log_active_exception()
-            await self.set_state('Hault')
+            await self.set_state("Hault")
 
     async def stop(self) -> None:
-        "Set state to hault."
-        await self.set_state('Hault')
+        """Set state to hault."""
+        await self.set_state("Hault")
 
     def submit_event(self, event):
-        "Submit an event to runner"
+        """Submit an event to runner"""
         return self.client.submit_event(event)
 
+
 class NetworkState(EventAsyncState):
-    "Network State"
-    __slots__ = ('client',)
+    """Network State"""
+
+    __slots__ = ("client",)
+
     def __init__(self, name: str):
         super().__init__(name)
         self.machine: ClientNetwork
@@ -63,15 +68,15 @@ class NetworkState(EventAsyncState):
         self.client: TCPAsyncSocketConnection
 
     async def entry_actions(self) -> None:
-        "Set self.client"
+        """Set self.client"""
         self.client = self.machine.client
 
     async def exit_actions(self) -> None:
-        "Clear self.client"
+        """Clear self.client"""
         del self.client
 
     def do_handshake(self, next_state: int) -> None:
-        "Send handshake to server."
+        """Send handshake to server."""
         # typecheck: error: "TCPAsyncSocketConnection" has no attribute "addr"
         host, port = self.client.addr
 
@@ -86,11 +91,14 @@ class NetworkState(EventAsyncState):
 
         self.client.write_buffer(buffer)
 
+
 class ConnectState(NetworkState):
-    "Preform handshake and get status, then attempt login."
-    __slots__ = ('data',)
+    """Preform handshake and get status, then attempt login."""
+
+    __slots__ = ("data",)
+
     def __init__(self):
-        super().__init__('connect')
+        super().__init__("connect")
 
         self.data = {}
 
@@ -99,17 +107,13 @@ class ConnectState(NetworkState):
         self.data = {}
 
     def send_error(self, text: str) -> None:
-        "Send connect server state error"
+        """Send connect server state error"""
         self.machine.submit_event(
-            Event(
-                'connect_server_state',
-                message_type='error',
-                text=text
-            )
+            Event("connect_server_state", message_type="error", text=text),
         )
 
-    async def do_status(self, status_type: int) -> Union[float, dict]:
-        "Preform status request and return response."
+    async def do_status(self, status_type: int) -> float | dict:
+        """Preform status request and return response."""
         packet = Connection()
         packet.write_varint(status_type)
 
@@ -124,64 +128,66 @@ class ConnectState(NetworkState):
         received = datetime.datetime.now()
 
         if response.read_varint() != status_type:
-            self.send_error('Recieved invalid ping packet from server.')
-            raise IOError('Received invalid ping response packet from server.')
+            self.send_error("Recieved invalid ping packet from server.")
+            raise OSError("Received invalid ping response packet from server.")
 
         if status_type == 0x00:
             return json.loads(response.read_utf())
         response_token = response.read_long()
         if response_token != token:
-            msg = 'Received mangled ping response packet'
+            msg = "Received mangled ping response packet"
             self.send_error(msg)
-            raise IOError(
-                msg+f' (expected token {token}, received {response_token})'
+            raise OSError(
+                msg + f" (expected token {token}, received {response_token})",
             )
         delta = received - sent
-        return (delta.days * 24 * 60 * 60 + delta.seconds) * 1000 + delta.microseconds / 1000
+        return (
+            delta.days * 24 * 60 * 60 + delta.seconds
+        ) * 1000 + delta.microseconds / 1000
 
     async def do_actions(self):
-        "Do status request with server."
+        """Do status request with server."""
         self.do_handshake(0x01)
         json_data = await self.do_status(0x00)
         latency = await self.do_status(0x01)
         self.client.close()
 
-        self.data = {'json': json_data, 'latency': latency}
+        self.data = {"json": json_data, "latency": latency}
 
     async def check_conditions(self):
-        def send_error(text='Server status json response is invalid'):
+        def send_error(text="Server status json response is invalid"):
             self.send_error(text)
-            return 'Hault'
-        if not 'version' in self.data['json']:
-            return send_error()
-        if 'protocol' not in self.data['json']['version']:
-            return send_error()
-        if self.data['json']['version']['protocol'] > PROTO_VER:
-            return send_error('Client is outdated!')
+            return "Hault"
 
-        print(f'{self.data=}')
-        return 'login'
+        if "version" not in self.data["json"]:
+            return send_error()
+        if "protocol" not in self.data["json"]["version"]:
+            return send_error()
+        if self.data["json"]["version"]["protocol"] > PROTO_VER:
+            return send_error("Client is outdated!")
+
+        print(f"{self.data=}")
+        return "login"
+
 
 class LoginState(NetworkState):
-    "Login state"
+    """Login state"""
+
     __slots__: tuple = tuple()
+
     def __init__(self):
-        super().__init__('login')
+        super().__init__("login")
 
     async def entry_actions(self):
         await super().entry_actions()
 
-        print('logging in')
+        print("logging in")
         await self.client.connect_server()
         self.do_handshake(0x02)
 
     async def check_conditions(self):
-        return 'Hault'
+        return "Hault"
 
 
-
-
-
-
-if __name__ == '__main__':
-    print(f'{__title__}\nProgrammed by {__author__}.')
+if __name__ == "__main__":
+    print(f"{__title__}\nProgrammed by {__author__}.")

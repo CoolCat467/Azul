@@ -1,24 +1,22 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 # Server Networking
 
-"Server Networking"
+"""Server Networking"""
 
 # Programmed by CoolCat467
 
-__title__ = 'Server Networking'
-__author__ = 'CoolCat467'
-__version__ = '0.0.0'
+__title__ = "Server Networking"
+__author__ = "CoolCat467"
+__version__ = "0.0.0"
 
-from typing import Union, Final
-import math
 import json
+import math
+from typing import Final
 
-from gears import AsyncStateMachine, StateTimerExitState
-from events import Event, log_active_exception
-from event_statetimer import StatorEventExtend, EventAsyncState
 from connection import Connection as Buffer
-
+from event_statetimer import EventAsyncState, StatorEventExtend
+from events import log_active_exception
+from gears import AsyncStateMachine, StateTimerExitState
 
 PROTOCOL: Final[int] = 0
 
@@ -60,50 +58,60 @@ PROTOCOL: Final[int] = 0
 ##            self.client.write_ascii(msg)
 ##            return
 
+
 class NetworkState(EventAsyncState):
-    "Network State"
-    __slots__ = ('client',)
+    """Network State"""
+
+    __slots__ = ("client",)
+
     def __init__(self, name: str) -> None:
         super().__init__(name)
         self.client = None
 
     # pylint: disable=unused-private-member
     def __get_proto_ver(self) -> int:
-        "Return machine's protocol version"
+        """Return machine's protocol version"""
         # typecheck: Another file has errors: Desktop/Python/Projects/Azul/connection.py
         # typecheck: error: "AsyncStateMachine" has no attribute "proto_ver"
         return self.machine.proto_ver
 
     def __set_proto_ver(self, version: int) -> None:
-        "Set machine's protocol version."
+        """Set machine's protocol version."""
         # typecheck: error: "AsyncStateMachine" has no attribute "proto_ver"
         self.machine.proto_ver = version
 
-    proto_ver = property(__get_proto_ver, __set_proto_ver, doc="Machine's protocol version")
+    proto_ver = property(
+        __get_proto_ver,
+        __set_proto_ver,
+        doc="Machine's protocol version",
+    )
 
     async def entry_actions(self) -> None:
-        "Set self.client"
+        """Set self.client"""
         # typecheck: error: "AsyncStateMachine" has no attribute "client"
         self.client = self.machine.client
 
     async def exit_actions(self) -> None:
-        "Clear self.client"
+        """Clear self.client"""
         self.client = None
 
+
 class Handshake(NetworkState):
-    "Handshake state"
-    __slots__ = ('request_next',)
+    """Handshake state"""
+
+    __slots__ = ("request_next",)
     state_id = 0x00
+
     def __init__(self):
-        super().__init__('handshake')
+        super().__init__("handshake")
 
         self.request_next = self.state_id
 
     async def do_actions(self) -> None:
-        "Handle handshake buffer"
+        """Handle handshake buffer"""
         try:
             buffer = await self.client.read_buffer()
-        except (OSError, IOError):
+        except OSError:
             self.request_next = math.inf
             return
 
@@ -116,28 +124,30 @@ class Handshake(NetworkState):
             self.machine.srv_port = buffer.read_ushort()
             self.request_next = buffer.read_varint()
 
-    async def check_conditions(self) -> Union[str, None]:
-        "Return next state"
+    async def check_conditions(self) -> str | None:
+        """Return next state"""
         if self.request_next in {0x00, 0x01, 0x02}:
-            return (None, 'status', 'login')[self.request_next]
-        return 'Hault'
+            return (None, "status", "login")[self.request_next]
+        return "Hault"
+
 
 class Status(NetworkState):
-    "Status state"
-    __slots__ = ('types_used', 'disconnect')
-    state_id = 0x01
-    def __init__(self):
-        super().__init__('status')
+    """Status state"""
 
-        self.types_used = {0x00: 0,
-                           0x01: 0}
+    __slots__ = ("types_used", "disconnect")
+    state_id = 0x01
+
+    def __init__(self):
+        super().__init__("status")
+
+        self.types_used = {0x00: 0, 0x01: 0}
         self.disconnect = False
 
     async def do_actions(self) -> None:
-        "Handle status requests"
+        """Handle status requests"""
         try:
             buffer = await self.client.read_buffer()
-        except (OSError, IOError):
+        except OSError:
             self.disconnect = True
             return
 
@@ -154,72 +164,75 @@ class Status(NetworkState):
         packet = Buffer()
         packet.write_varint(status_type)
         if status_type == 0x00:
-            print(f'[{self.client.name}][Status Request]')
+            print(f"[{self.client.name}][Status Request]")
             packet.write_utf(json.dumps(self.client.server.get_status()))
         else:
             ping_token = buffer.read_long()
-            print(f'[{self.client.name}][Ping Request]')
+            print(f"[{self.client.name}][Ping Request]")
             packet.write_long(ping_token)
             self.disconnect = True
 
         self.client.write_buffer(packet)
 
     # typecheck: error: Missing return statement
-    async def check_conditions(self) -> Union[str, None]:
-        "Hault if disconnect"
+    async def check_conditions(self) -> str | None:
+        """Hault if disconnect"""
         if self.disconnect:
-            return 'Hault'
+            return "Hault"
         return None
 
-class Login(NetworkState):
-    "Login state"
-    def __init__(self):
-        super().__init__('login')
 
-    async def check_conditions(self) -> Union[str, None]:
-        "Hault if disconnect"
-        return 'Hault'
+class Login(NetworkState):
+    """Login state"""
+
+    def __init__(self):
+        super().__init__("login")
+
+    async def check_conditions(self) -> str | None:
+        """Hault if disconnect"""
+        return "Hault"
+
 
 class ServerClientNetwork(AsyncStateMachine, StatorEventExtend):
-    "Server client network"
-    __slots__ = ('client', 'proto_ver', 'srv_host', 'srv_port')
+    """Server client network"""
+
+    __slots__ = ("client", "proto_ver", "srv_host", "srv_port")
+
     def __init__(self, client):
         super().__init__()
         self.client = client
 
         self.proto_ver = -math.inf
-        self.srv_host = ''
+        self.srv_host = ""
         self.srv_port = 0
 
-##        self.add_state(Test())
+        ##        self.add_state(Test())
         self.add_state(StateTimerExitState())
         self.add_state(Handshake())
         self.add_state(Status())
         self.add_state(Login())
 
     async def initialize_state(self) -> None:
-        "Set state to handshake"
-        await self.set_state('handshake')
+        """Set state to handshake"""
+        await self.set_state("handshake")
 
     async def think(self) -> None:
-        "Think, but set state to hault on exception and log exception"
+        """Think, but set state to hault on exception and log exception"""
         try:
             await super().think()
-        except Exception:# pylint: disable=broad-except
+        except Exception:  # pylint: disable=broad-except
             log_active_exception()
-            await self.set_state('Hault')
+            await self.set_state("Hault")
 
     def submit_event(self, event):
-        "Submit an event to runner"
+        """Submit an event to runner"""
         return self.client.submit_event(event)
 
+
 def run():
-    "Run"
+    """Run"""
 
 
-
-
-
-if __name__ == '__main__':
-    print(f'{__title__}\nProgrammed by {__author__}.')
+if __name__ == "__main__":
+    print(f"{__title__}\nProgrammed by {__author__}.")
     run()

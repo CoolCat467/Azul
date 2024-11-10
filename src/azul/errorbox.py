@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """errorbox, by Pete Shinners
 
@@ -26,50 +25,60 @@ Perhaps pygame raised an exception while initializing. This little
 messagebox can sure be a lot nicer than a stack trace. ;]
 """
 
-__title__ = 'errorbox'
+__title__ = "errorbox"
 
 
 def errorbox(title: str, message: str) -> None:
-    "Attempt to error with a gui"
+    """Attempt to error with a gui"""
     global HANDLERS
     __stdout(title, message)
     for e in HANDLERS:
         try:
             e(title, message)
             break
-        except (ImportError, NameError): pass
+        except (ImportError, NameError):
+            pass
     raise SystemExit
 
+
 def __pyqt4(title: str, message: str) -> None:
-    "Error with PyQt4"
+    """Error with PyQt4"""
     from PyQt4 import QtGui
+
     app = QtGui.QApplication(["Error"])
     QtGui.QMessageBox.critical(None, title, message)
 
 
 def __wxpython(title: str, message: str) -> None:
-    "Error with wxPython"
-    from wxPython.wx import wxApp, wxMessageDialog, wxOK, wxICON_EXCLAMATION
+    """Error with wxPython"""
+    from wxPython.wx import wxApp, wxICON_EXCLAMATION, wxMessageDialog, wxOK
+
     class LameApp(wxApp):
-        def OnInit(self): return 1
+        def OnInit(self):
+            return 1
+
     app = LameApp()
-    dlg = wxMessageDialog(None, message, title, wxOK|wxICON_EXCLAMATION)
+    dlg = wxMessageDialog(None, message, title, wxOK | wxICON_EXCLAMATION)
     dlg.ShowModal()
     dlg.Destroy()
 
 
 def __tkinter(title: str, message: str) -> None:
-    "Error with tkinter"
-    import tkinter, tkinter.messagebox
+    """Error with tkinter"""
+    import tkinter
+    import tkinter.messagebox
+
     tkinter.Tk().wm_withdraw()
     tkinter.messagebox.showerror(title, message)
 
 
 def __pygame(title: str, message: str) -> None:
-    "Error with pygame"
+    """Error with pygame"""
     try:
-        import pygame, pygame.font
-        pygame.quit() #clean out anything running
+        import pygame
+        import pygame.font
+
+        pygame.quit()  # clean out anything running
         pygame.display.init()
         pygame.font.init()
         screen = pygame.display.set_mode((460, 140))
@@ -78,7 +87,7 @@ def __pygame(title: str, message: str) -> None:
         foreg = 0, 0, 0
         backg = 200, 200, 200
         liteg = 255, 255, 255
-        ok = font.render('Ok', True, foreg)
+        ok = font.render("Ok", True, foreg)
         screen.fill(backg)
         okbox = ok.get_rect().inflate(20, 10)
         okbox.centerx = screen.get_rect().centerx
@@ -86,7 +95,7 @@ def __pygame(title: str, message: str) -> None:
         screen.fill(liteg, okbox)
         screen.blit(ok, okbox.inflate(-20, -10))
         pos = [20, 20]
-        for text in message.split('\n'):
+        for text in message.split("\n"):
             msg = font.render(text, True, foreg)
             screen.blit(msg, pos)
             pos[1] += font.get_height()
@@ -94,9 +103,13 @@ def __pygame(title: str, message: str) -> None:
         pygame.display.flip()
         while 1:
             e = pygame.event.wait()
-            if (e.type == pygame.QUIT or e.type == pygame.MOUSEBUTTONDOWN or
-                        pygame.KEYDOWN and hasattr(e, 'key') and e.key
-                        in (pygame.K_ESCAPE, pygame.K_SPACE, pygame.K_RETURN)):
+            if (
+                e.type == pygame.QUIT
+                or e.type == pygame.MOUSEBUTTONDOWN
+                or pygame.KEYDOWN
+                and hasattr(e, "key")
+                and e.key in (pygame.K_ESCAPE, pygame.K_SPACE, pygame.K_RETURN)
+            ):
                 break
         pygame.quit()
     except pygame.error:
@@ -104,14 +117,18 @@ def __pygame(title: str, message: str) -> None:
 
 
 def __stdout(title: str, message: str) -> None:
-    "Error with stdout"
-    text = 'ERROR: ' + title + '\n' + message
+    """Error with stdout"""
+    text = "ERROR: " + title + "\n" + message
     print(text)
+
 
 HANDLERS = __pyqt4, __tkinter, __wxpython, __pygame
 
 
-#test the error box
-if __name__ == '__main__':
-    errorbox("Testing", "This is only a test.\nHad this been " + \
-          "a real emergency, you would be very afraid." )
+# test the error box
+if __name__ == "__main__":
+    errorbox(
+        "Testing",
+        "This is only a test.\nHad this been "
+        + "a real emergency, you would be very afraid.",
+    )
