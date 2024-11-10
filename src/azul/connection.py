@@ -18,7 +18,7 @@
 
 # This version of mcstatus's connection module
 # has support for varlongs and has general text reformatting
-# and spaceing changes. Slight changes to Asyncronous TCP and UDP
+# and spaceing changes. Slight changes to Asynchronous TCP and UDP
 # closing as well.
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ def ip_type(address: int | str) -> int | None:
 
 
 class BaseWriteSync(ABC):
-    """Base syncronous write class"""
+    """Base synchronous write class"""
 
     __slots__: tuple = tuple()
 
@@ -148,7 +148,7 @@ class BaseWriteSync(ABC):
 
 
 class BaseWriteAsync(ABC):
-    """Base syncronous write class"""
+    """Base synchronous write class"""
 
     __slots__: tuple = tuple()
 
@@ -244,7 +244,7 @@ class BaseWriteAsync(ABC):
 
 
 class BaseReadSync(ABC):
-    """Base syncronous read class"""
+    """Base synchronous read class"""
 
     __slots__: tuple = tuple()
 
@@ -265,7 +265,7 @@ class BaseReadSync(ABC):
     def read_varint(self) -> int:
         """Read varint from self and return it.
         Max: 2 ** 31 - 1, Min: -(2 ** 31)
-        Raises IOError when varint recieved is too big.
+        Raises IOError when varint received is too big.
         """
         result = 0
         for i in range(5):
@@ -273,12 +273,12 @@ class BaseReadSync(ABC):
             result |= (part & 0x7F) << (7 * i)
             if not part & 0x80:
                 return signed_int32(result).value
-        raise OSError("Recieved varint is too big!")
+        raise OSError("Received varint is too big!")
 
     def read_varlong(self) -> int:
         """Read varlong from self and return it.
         Max: 2 ** 63 - 1, Min: -(2 ** 63).
-        Raises IOError when varint recieved is too big.
+        Raises IOError when varint received is too big.
         """
         result = 0
         for i in range(10):
@@ -286,7 +286,7 @@ class BaseReadSync(ABC):
             result |= (part & 0x7F) << (7 * i)
             if not part & 0x80:
                 return signed_int64(result).value
-        raise OSError("Recieved varlong is too big!")
+        raise OSError("Received varlong is too big!")
 
     def read_utf(self) -> str:
         """Read up to 32767 bytes by reading a varint, then decode bytes as utf8."""
@@ -333,7 +333,7 @@ class BaseReadSync(ABC):
 
 
 class BaseReadAsync(ABC):
-    """Asyncronous Read connection base class."""
+    """Asynchronous Read connection base class."""
 
     __slots__: tuple = tuple()
 
@@ -354,7 +354,7 @@ class BaseReadAsync(ABC):
     async def read_varint(self) -> int:
         """Read varint from self and return it.
         Max: 2 ** 31 - 1, Min: -(2 ** 31)
-        Raises IOError when varint recieved is too big.
+        Raises IOError when varint received is too big.
         """
         result = 0
         for i in range(5):
@@ -362,12 +362,12 @@ class BaseReadAsync(ABC):
             result |= (part & 0x7F) << 7 * i
             if not part & 0x80:
                 return signed_int32(result).value
-        raise OSError("Recieved a varint that was too big!")
+        raise OSError("Received a varint that was too big!")
 
     async def read_varlong(self) -> int:
         """Read varlong from self and return it.
         Max: 2 ** 63 - 1, Min: -(2 ** 63).
-        Raises IOError when varint recieved is too big.
+        Raises IOError when varint received is too big.
         """
         result = 0
         for i in range(10):
@@ -375,7 +375,7 @@ class BaseReadAsync(ABC):
             result |= (part & 0x7F) << (7 * i)
             if not part & 0x80:
                 return signed_int64(result).value
-        raise OSError("Recieved varlong is too big!")
+        raise OSError("Received varlong is too big!")
 
     async def read_utf(self) -> str:
         """Read up to 32767 bytes by reading a varint, then decode bytes as utf8."""
@@ -448,7 +448,7 @@ class BaseConnection:
 
 
 class BaseSyncConnection(BaseConnection, BaseReadSync, BaseWriteSync):
-    """Base syncronous read and write class"""
+    """Base synchronous read and write class"""
 
     __slots__: tuple = tuple()
 
@@ -458,13 +458,13 @@ class BaseAsyncReadSyncWriteConnection(
     BaseReadAsync,
     BaseWriteSync,
 ):
-    """Base asyncronous read and syncronous write class"""
+    """Base asynchronous read and synchronous write class"""
 
     __slots__: tuple = tuple()
 
 
 class BaseAsyncConnection(BaseConnection, BaseReadAsync, BaseWriteAsync):
-    """Base asyncronous read and write class"""
+    """Base asynchronous read and write class"""
 
     __slots__: tuple = tuple()
 
@@ -480,7 +480,7 @@ class Connection(BaseSyncConnection):
         self.received = bytearray()
 
     def read(self, length: int) -> bytearray:
-        """Return self.recieved up to length bytes, then cut recieved up to that point."""
+        """Return self.received up to length bytes, then cut received up to that point."""
         result = self.received[:length]
         self.received = self.received[length:]
         return result
@@ -537,7 +537,7 @@ class SocketConnection(BaseSyncConnection):
 
 
 class TCPSocketConnection(SocketConnection):
-    """TCP Connection to addr. Timeout defaults to 3 secconds."""
+    """TCP Connection to addr. Timeout defaults to 3 seconds."""
 
     def __init__(self, addr: tuple[str | None, int], timeout: int = 3):
         """Create a connection to addr with self.socket, set TCP NODELAY to True."""
@@ -561,7 +561,7 @@ class TCPSocketConnection(SocketConnection):
 
 
 class UDPSocketConnection(SocketConnection):
-    """UDP Connection to addr. Default timout is 3 secconds."""
+    """UDP Connection to addr. Default timeout is 3 seconds."""
 
     __slots__ = ("addr",)
 
@@ -594,7 +594,7 @@ class UDPSocketConnection(SocketConnection):
 
 
 class TCPAsyncSocketConnection(BaseAsyncReadSyncWriteConnection):
-    """Asyncronous TCP connection to addr. Default timeout is 3 secconds."""
+    """Asynchronous TCP connection to addr. Default timeout is 3 seconds."""
 
     __slots__ = ("reader", "writer")
 
@@ -635,7 +635,7 @@ class TCPAsyncSocketConnection(BaseAsyncReadSyncWriteConnection):
 
 
 class UDPAsyncSocketConnection(BaseAsyncConnection):
-    """Asyncronous UDP connection to addr. Default timeout is 3 secconds."""
+    """Asynchronous UDP connection to addr. Default timeout is 3 seconds."""
 
     __slots__ = ("stream", "timeout")
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# TITLE DISCRIPTION
+# TITLE DESCRIPTION
 # -*- coding: utf-8 -*-
 
 # Programmed by CoolCat467
@@ -46,7 +46,7 @@ def gen_random_proper_seq(length: int, **kwargs: float) -> deque[str]:
     letters = []
     if sum(list(kwargs.values())) != 1:
         raise ArithmeticError(
-            "Sum of perentages of "
+            "Sum of percentages of "
             + " ".join(list(kwargs.keys()))
             + " are not equal to 100 percent!",
         )

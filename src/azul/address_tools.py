@@ -38,7 +38,7 @@ def lookup(
     format_host: str = "{}",
     qname: str = "A",
 ) -> tuple:
-    """Look up address and return ip after sucessful lookup."""
+    """Look up address and return ip after successful lookup."""
     host, port = parse_address(address)
     if port is None:
         port = default_port
@@ -56,7 +56,7 @@ def lookup(
 
 
 # Stolen from WOOF (Web Offer One File), Copyright (C) 2004-2009 Simon Budig,
-# avalable at http://www.home.unix-ag.org/simon/woof
+# available at http://www.home.unix-ag.org/simon/woof
 # with modifications
 
 # Utility function to guess the IP (as a string) where the server can be

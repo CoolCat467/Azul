@@ -8,7 +8,7 @@
 # https://github.com/Cat-Software-Ink/Socket-Chat
 
 # Uses find_ip function, stolen from WOOF (Web Offer One File),
-# Copyright (C) 2004-2009 Simon Budig, avalable at
+# Copyright (C) 2004-2009 Simon Budig, available at
 # http://www.home.unix-ag.org/simon/woof
 
 import os
@@ -365,7 +365,7 @@ class Server(Thread):
             )
             self.log("Client %s requested help message." % fromCid)
         else:
-            # If nothing has already proccessed a command,
+            # If nothing has already processed a command,
             # then the command is invalid
             self.log("Client %s sent an invalid command." % fromCid)
             self.sendMessageToClient(
@@ -375,7 +375,7 @@ class Server(Thread):
             )
 
     def processChat(self):
-        """Read chat messages and act apon them."""
+        """Read chat messages and act upon them."""
         clientsToDelete = []
         if not self.chat:
             time.sleep(0.1)
@@ -440,7 +440,7 @@ class Server(Thread):
             )
 
     def run(self):
-        """Begins accepting clients and proccessing chat data."""
+        """Begins accepting clients and processing chat data."""
         self.startSocket()
         try:
             if self.active:
@@ -523,7 +523,7 @@ class Client(Thread):
         except OSError:
             self.active = False
 
-    def recieve(self):
+    def receive(self):
         """Returns decoded messages from self.socket."""
         try:
             rcvdData = self.socket.recv(BUFSIZE)
@@ -535,11 +535,11 @@ class Client(Thread):
         return rcvdData.decode("utf-8")
 
     def run(self):
-        """Recieved data and stores individual messages in self.chat."""
+        """Received data and stores individual messages in self.chat."""
         try:
             self.startSocket()
             while self.active:
-                data = self.recieve()
+                data = self.receive()
                 if data == "":
                     self.active = False
                     self.log("Connection Terminated. Shutting down...")
@@ -553,7 +553,7 @@ class Client(Thread):
 
 
 # Stolen from WOOF (Web Offer One File), Copyright (C) 2004-2009 Simon Budig,
-# avalable at http://www.home.unix-ag.org/simon/woof
+# available at http://www.home.unix-ag.org/simon/woof
 
 # Utility function to guess the IP (as a string) where the server can be
 # reached from the outside. Quite nasty problem actually.
@@ -605,7 +605,7 @@ if __name__ == "__main__":
 \ttimeout=<Timeout> : Set Timeout for client and set mode to Client mode.
 \tshowServerMessages : Show server messages. Mostly for debug purposes. Only has effect when in server mode.\n
 If no arguments with equals (keyword arguments) are given, first argument if given is IP to connect to and mode is automatically set to Client mode.
-If two arguments are given, first argument is IP address to connect to and seccond argument is custom Port to connect to at given IP address and mode is automatically set to Client mode.
+If two arguments are given, first argument is IP address to connect to and second argument is custom Port to connect to at given IP address and mode is automatically set to Client mode.
 If no arguments are given at all, mode is automatically set to Server mode.""",
         )
         os.sys.exit(0)
@@ -669,7 +669,7 @@ If no arguments are given at all, mode is automatically set to Server mode.""",
                 for message in seeKill(server.logs):
                     print("Server: " + message)
                 print("\nError: Server stopped!")
-                print("Would you like to initalize a client anyways?")
+                print("Would you like to initialize a client anyways?")
                 if input("(y/n) : ").lower() in ("y", "yes"):
                     doServer = False
                 else:

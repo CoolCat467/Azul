@@ -77,11 +77,11 @@ class Vector2:
         return vec
 
     def getHeading(self) -> float:
-        """Returns the arc tangent (mesured in radians) of self.y/self.x."""
+        """Returns the arc tangent (measured in radians) of self.y/self.x."""
         return math.atan2(self.y, self.x)
 
     def getHeadingDeg(self) -> float:
-        """Returns the arc tangent (mesured in degrees) of self.y/self.x."""
+        """Returns the arc tangent (measured in degrees) of self.y/self.x."""
         return math.degrees(self.getHeading())
 
     def rotate(self, radians: float) -> "Vector2":
@@ -90,7 +90,7 @@ class Vector2:
         magnitude = self.get_magnitude()
         x = math.cos(newHeading) * magnitude
         y = math.sin(newHeading) * magnitude
-        # Round up to 13 digits, or we'll get wierd rounding errors, like
+        # Round up to 13 digits, or we'll get weird rounding errors, like
         # .00000000000001
         return Vector2(round(x, 13), round(y, 13))
 
@@ -112,7 +112,7 @@ class Vector2:
                 ##                return self._addv(self.__class__(x, y))
                 return Vector2(self.x + x, self.y + y)
             raise LookupError(
-                "Length of right hand sign opperator length is not equal to two!",
+                "Length of right hand sign operator length is not equal to two!",
             )
         raise AttributeError("Length not found.")
 
@@ -129,7 +129,7 @@ class Vector2:
                 x, y = rhs
                 return Vector2(self.x - x, self.y - y)
             raise LookupError(
-                "Length of right hand sign opperator length is not equal to two!",
+                "Length of right hand sign operator length is not equal to two!",
             )
         raise AttributeError("Length not found.")
 

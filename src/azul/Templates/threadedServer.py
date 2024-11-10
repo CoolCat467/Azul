@@ -272,7 +272,7 @@ class Server(Thread):
                         self.log('Trusting client "%s"' % fromCid)
                         self.trustedClients.append(fromCid)
                         self.clients[fromCid].send_all(
-                            "S Authentication successfull;",
+                            "S Authentication successful;",
                         )
                     else:
                         self.bannedIps.append(self.cidToAddr[fromCid])
@@ -379,7 +379,7 @@ class Server(Thread):
                 )
             self.log('Client "%s" requested help message.' % fromCid)
         else:
-            # If nothing has already proccessed a command,
+            # If nothing has already processed a command,
             # then the command is invalid
             self.log('Client "%s" sent an invalid command.' % fromCid)
             self.clients[fromCid].send_all(
@@ -387,7 +387,7 @@ class Server(Thread):
             )
 
     def processChat(self):
-        """Read chat messages and act apon them."""
+        """Read chat messages and act upon them."""
         deletedClients = []
         while self.active:
             clientsToDelete = []
@@ -459,7 +459,7 @@ class Server(Thread):
                     client.send_all("S %s Left;" % cid)
 
     def run(self):
-        """Begins accepting clients and proccessing chat data."""
+        """Begins accepting clients and processing chat data."""
         self.startSocket()
         if self.active:
             self.log("Server up and running on %s!" % self.ipAddr)
@@ -474,7 +474,7 @@ class Server(Thread):
 
 
 # Stolen from WOOF (Web Offer One File), Copyright (C) 2004-2009 Simon Budig,
-# avalable at http://www.home.unix-ag.org/simon/woof
+# available at http://www.home.unix-ag.org/simon/woof
 
 # Utility function to guess the IP (as a string) where the server can be
 # reached from the outside. Quite nasty problem actually.

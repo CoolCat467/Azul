@@ -222,7 +222,7 @@ def get_tile_image(
 
 
 def set_alpha(surface, alpha):
-    """Return a surface by replacing the alpha chanel of it with given alpha value, preserve color."""
+    """Return a surface by replacing the alpha channel of it with given alpha value, preserve color."""
     surface = surface.copy().convert_alpha()
     w, h = surface.get_size()
     for y in range(h):
@@ -234,7 +234,7 @@ def set_alpha(surface, alpha):
 
 @lru_cache
 def get_tile_container_image(wh, back):
-    """Return a tile container image from a width and a heigth and a background color, and use a game's cache to help."""
+    """Return a tile container image from a width and a height and a background color, and use a game's cache to help."""
     image = pygame.surface.Surface(wh)
     image.convert_alpha()
     image = set_alpha(image, 0)
@@ -367,7 +367,7 @@ class Font:
 
 
 class ObjectHandler:
-    """ObjectHandler class, ment to be used for other classes."""
+    """ObjectHandler class, meant to be used for other classes."""
 
     def __init__(self):
         self.objects = {}
@@ -396,7 +396,7 @@ class ObjectHandler:
         self.nextId = 0
 
     def get_object(self, objectId: int):
-        """Return the object accociated with object id given. Return None if object not found."""
+        """Return the object associated with object id given. Return None if object not found."""
         if objectId in self.objects:
             return self.objects[objectId]
         return None
@@ -563,7 +563,7 @@ class Object:
         )
 
     def getImageZero(self):
-        """Return the screen location of the topleft point of self.image fixed to intiger values."""
+        """Return the screen location of the topleft point of self.image fixed to integer values."""
         x, y = self.getImageZero_noFix()
         return int(x), int(y)
 
@@ -580,7 +580,7 @@ class Object:
         # Get zero zero in image locations
         zx, zy = self.getImageZero()  # Zero x and y
         sx, sy = screenLocation  # Screen x and y
-        return sx - zx, sy - zy  # Location with respect to image dimentions
+        return sx - zx, sy - zy  # Location with respect to image dimensions
 
     def process(self, time_passed):
         """Process Object. Replace when calling this class."""
@@ -631,10 +631,10 @@ class Object:
 
 
 class MultipartObject(Object, ObjectHandler):
-    """Thing that is both an Object and an ObjectHandler, and is ment to be an Object made up of multiple Objects."""
+    """Thing that is both an Object and an ObjectHandler, and is meant to be an Object made up of multiple Objects."""
 
     def __init__(self, name):
-        """Initalize Object and ObjectHandler of self.
+        """Initialize Object and ObjectHandler of self.
 
         Also set self._lastloc and self._lasthidden to None
         """
@@ -752,7 +752,7 @@ class TileRenderer(Object):
         tileSeperation="Auto",
         background=TILEDEFAULT,
     ):
-        """Initialize renderer. Needs a game object for its cache and optional tile seperation value and background RGB color.
+        """Initialize renderer. Needs a game object for its cache and optional tile separation value and background RGB color.
 
         Defines the following attributes during initialization and uses throughout:
          self.game
@@ -970,7 +970,7 @@ def gscBoundIndex(boundsFalureReturn=None):
 
         @wraps(function)
         def keepWithinBounds(self, index, *args, **kwargs):
-            """Wraper function that makes sure a position tuple (x, y) is valid."""
+            """Wrapper function that makes sure a position tuple (x, y) is valid."""
             x, y = index
             if x < 0 or x >= self.size[0]:
                 return boundsFalureReturn
@@ -1037,7 +1037,7 @@ class Grid(TileRenderer):
 
     @gscBoundIndex()
     def getTile(self, xy, replace=-6):
-        """Return a Tile Object from a given position in the grid if permitted. Return None on falure."""
+        """Return a Tile Object from a given position in the grid if permitted. Return None on failure."""
         x, y = xy
         tileCopy = self.data[x, y]
         if tileCopy.color < 0:
@@ -1048,7 +1048,7 @@ class Grid(TileRenderer):
 
     @gscBoundIndex()
     def get_info(self, xy):
-        """Return the Tile Object at a given position without deleteing it from the Grid."""
+        """Return the Tile Object at a given position without deleting it from the Grid."""
         x, y = xy
         return self.data[x, y]
 
@@ -1228,7 +1228,7 @@ class Board(Grid):
         return success
 
     def wall_tileingMode(self, movedDict):
-        """Set self into Wall Tiling Mode. Finishes automatically if not in varient play mode."""
+        """Set self into Wall Tiling Mode. Finishes automatically if not in variant play mode."""
         self.wall_tileing = True
         for key, value in ((key, movedDict[key]) for key in movedDict.keys()):
             key = int(key) - 1
@@ -1272,7 +1272,7 @@ class Board(Grid):
 
         # Both
         def gt(v, size, data):
-            """Go through data foreward and backward from point v out by size, and return all points from data with a value >= 0."""
+            """Go through data forward and backward from point v out by size, and return all points from data with a value >= 0."""
 
             def trng(rng, data):
                 """Try range. Return all of data in range up to when indexed value is < 0."""
@@ -1378,7 +1378,7 @@ class Board(Grid):
                 adds += chr(t.color + 6 + 65)  # 97)
             elif isinstance(t, int):  # If int, return string repr of value.
                 if t > 9:
-                    raise RuntimeError(f"Intiger overflow with value {t} > 9!")
+                    raise RuntimeError(f"Integer overflow with value {t} > 9!")
                 adds += str(t)
             else:
                 raise RuntimeError(f'Invalid additions value "{t}"!')
@@ -1453,7 +1453,7 @@ class Row(TileRenderer):
         return self.getPlaced() == self.size
 
     def get_info(self, location):
-        """Return tile at location without deleteing it. Return None on invalid location."""
+        """Return tile at location without deleting it. Return None on invalid location."""
         index = self.size - 1 - location
         if index < 0 or index > len(self.tiles):
             return None
@@ -1473,7 +1473,7 @@ class Row(TileRenderer):
         return placeable and colorCorrect and numCorrect and colorNotPresent
 
     def getTile(self, replace=-6):
-        """Return the leftmost tile while deleteing it from self."""
+        """Return the leftmost tile while deleting it from self."""
         self.tiles.appendleft(Tile(replace))
         self.imageUpdate = True
         return self.tiles.pop()
@@ -1486,7 +1486,7 @@ class Row(TileRenderer):
             end = self.tiles.popleft()
             if not end.color < 0:
                 raise RuntimeError(
-                    "Attempted deleteion of real tile from Row!",
+                    "Attempted deletion of real tile from Row!",
                 )
             self.imageUpdate = True
 
@@ -1583,7 +1583,7 @@ class PatternLine(MultipartObject):
         w = self.get_row(last - 1).wh[0]
         if w is None:
             raise RuntimeError(
-                "Image Dimentions for Row Object (row.wh) are None!",
+                "Image Dimensions for Row Object (row.wh) are None!",
             )
         h1 = self.get_row(0).tileFull
         h = last * h1
@@ -1894,7 +1894,7 @@ class Factory(Grid):
         ]
 
     def grabColor(self, color):
-        """Return all tiles of color given in the first list, and all non-matches in the seccond list."""
+        """Return all tiles of color given in the first list, and all non-matches in the second list."""
         tiles = self.grab()
         right, wrong = [], []
         for tile in tiles:
@@ -2244,7 +2244,7 @@ class BoxLid(Object):
             self.add_tile(tile)
 
     def getTiles(self):
-        """Return all tiles in self while deleteing them from self."""
+        """Return all tiles in self while deleting them from self."""
         return [self.tiles.popleft() for i in range(len(self.tiles))]
 
     def isEmpty(self):
@@ -2265,7 +2265,7 @@ class BoxLid(Object):
 
 
 class Player(MultipartObject):
-    """Repesents a player. Made of lots of objects."""
+    """Represents a player. Made of lots of objects."""
 
     def __init__(
         self,
@@ -2274,7 +2274,7 @@ class Player(MultipartObject):
         networked=False,
         varient_play=False,
     ):
-        """Requires a player Id and can be told to be controled by the network or be in varient play mode."""
+        """Requires a player Id and can be told to be controlled by the network or be in variant play mode."""
         MultipartObject.__init__(self, "Player%i" % playerId)
 
         self.game = game
@@ -2660,17 +2660,17 @@ class GameState:
         return f"<GameState {self.name}>"
 
     def entry_actions(self):
-        """Preform entry actions for this GameState."""
+        """Perform entry actions for this GameState."""
 
     def do_actions(self):
-        """Preform actions for this GameState."""
+        """Perform actions for this GameState."""
 
     def check_state(self):
         """Check state and return new state. None remains in current state."""
         return
 
     def exit_actions(self):
-        """Preform exit actions for this GameState."""
+        """Perform exit actions for this GameState."""
 
 
 class MenuState(GameState):
@@ -2787,7 +2787,7 @@ class MenuState(GameState):
         return updater
 
     def toggle_button_state(self, textname, boolattr, textfunc):
-        """Return function that will toggle the value of text object <textname>, toggleing attribute <boolattr>, and setting text value with textfunc."""
+        """Return function that will toggle the value of text object <textname>, toggling attribute <boolattr>, and setting text value with textfunc."""
 
         def valfunc():
             """Return the new value for the text object. Gets called AFTER value is toggled."""
@@ -2907,7 +2907,7 @@ class SettingsScreen(MenuState):
                     ),
                 )
                 def set_player_count():
-                    f"Set varibable player_count to {display} while updating text."
+                    f"Set variable player_count to {display} while updating text."
                     return self.set_var("player_count", display)
 
                 self.add_button(
@@ -2940,19 +2940,19 @@ class SettingsScreen(MenuState):
             size=self.fontsize / 1.5,
         )
 
-        # TEMPORARY: Hide everything to do with "Host Mode", networked games arn't done yet.
+        # TEMPORARY: Hide everything to do with "Host Mode", networked games aren't done yet.
         self.game.set_attr_all("hidden", True)
 
-        varient_text = lambda x: f"Varient Play: {x}"
+        varient_text = lambda x: f"Variant Play: {x}"
         self.add_text(
-            "Varient",
+            "Variant",
             varient_text(self.variant_play),
             (cx, cy - self.bh),
         )
         self.add_button(
             "ToggleVarient",
             "Toggle",
-            self.toggle_button_state("Varient", "variant_play", varient_text),
+            self.toggle_button_state("Variant", "variant_play", varient_text),
             (cx, cy),
             size=self.fontsize / 1.5,
         )
@@ -3272,7 +3272,7 @@ class Game(ObjectHandler):
         return "Game()"
 
     def is_pressed(self, key):
-        """Function that is ment to be overwritten by the Keyboard object."""
+        """Function that is meant to be overwritten by the Keyboard object."""
         return False
 
     def debug(self):
@@ -3315,28 +3315,28 @@ class Game(ObjectHandler):
             self.states[state.name] = state
 
     def set_state(self, new_state_name):
-        """Change states and preform any exit / entry actions."""
+        """Change states and perform any exit / entry actions."""
         # Ensure the new state is valid.
         if new_state_name not in self.states:
             raise ValueError(f'State "{new_state_name}" does not exist!')
 
         # If we have an active state,
         if self.active_state is not None:
-            # Preform exit actions
+            # Perform exit actions
             self.active_state.exit_actions()
 
         # The active state is the new state
         self.active_state = self.states[new_state_name]
-        # Preform entry actions for new active state
+        # Perform entry actions for new active state
         self.active_state.entry_actions()
 
     def update_state(self):
-        """Preform the actions of the active state and potentially change states."""
+        """Perform the actions of the active state and potentially change states."""
         # Only continue if there is an active state
         if self.active_state is None:
             return
 
-        # Preform the actions of the active state and check conditions
+        # Perform the actions of the active state and check conditions
         self.active_state.do_actions()
 
         new_state_name = self.active_state.check_state()
@@ -3492,7 +3492,7 @@ class Keyboard:
         return False
 
     def add_listener(self, key: int, name: str):
-        """Listen for key down events with event.key == key arguement and when that happens set self.actions[name] to true."""
+        """Listen for key down events with event.key == key argument and when that happens set self.actions[name] to true."""
         self.keys[key] = name  # key to name
         self.actions[name] = lambda: None  # name to function
         self.time[name] = 0  # name to time until function recall
@@ -3594,7 +3594,7 @@ def run():
                 SCREENSIZE = event.size
                 game.screen_size_update()
             else:
-                # If it's not a quit or music end event, tell the keybord handler about it.
+                # If it's not a quit or music end event, tell the keyboard handler about it.
                 keyboard.read_event(event)
 
         # Get the time passed from the FPS clock
@@ -3651,7 +3651,7 @@ def cli_run() -> None:
     ##    except BaseException as ex:
     ##        reraise = True#False
     ##
-    ####        print('Debug: Activiting Post motem.')
+    ####        print('Debug: Activating Post motem.')
     ####        import pdb
     ####        pdb.post_mortem()
     ##

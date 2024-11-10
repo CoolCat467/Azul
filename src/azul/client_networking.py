@@ -93,7 +93,7 @@ class NetworkState(EventAsyncState):
 
 
 class ConnectState(NetworkState):
-    """Preform handshake and get status, then attempt login."""
+    """Perform handshake and get status, then attempt login."""
 
     __slots__ = ("data",)
 
@@ -113,7 +113,7 @@ class ConnectState(NetworkState):
         )
 
     async def do_status(self, status_type: int) -> float | dict:
-        """Preform status request and return response."""
+        """Perform status request and return response."""
         packet = Connection()
         packet.write_varint(status_type)
 
@@ -128,7 +128,7 @@ class ConnectState(NetworkState):
         received = datetime.datetime.now()
 
         if response.read_varint() != status_type:
-            self.send_error("Recieved invalid ping packet from server.")
+            self.send_error("Received invalid ping packet from server.")
             raise OSError("Received invalid ping response packet from server.")
 
         if status_type == 0x00:

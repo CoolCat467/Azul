@@ -16,7 +16,7 @@ from gears import AsyncState, AsyncStateMachine, StateTimerExitState
 
 
 class Runner(AsyncStateMachine, EventLoop):
-    """Asyncronous State Machine + Gear Runner.
+    """Asynchronous State Machine + Gear Runner.
     Important: In process, event proc AFTER think, THEN active state none check
     """
 

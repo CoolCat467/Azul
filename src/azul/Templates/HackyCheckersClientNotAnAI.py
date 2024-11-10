@@ -4,8 +4,8 @@
 
 # IMPORTANT NOTE:
 # I know this may not be efficiant, but this is a bit of
-# a challange I made for myself, in using nothing but
-# what is already existant in the checkers game already
+# a challenge I made for myself, in using nothing but
+# what is already existent in the checkers game already
 # to make a networked game. I did have to make some changes,
 # though, that were absolutely necessary for proper function.
 
@@ -13,12 +13,12 @@ import os
 import socket
 from random import choice
 
-# Import choice for the event that something wierd happens
+# Import choice for the event that something weird happens
 # (see turn() for information)
 
 HOST = None  # Given to us by user (but can be set to a default value here)
 PORT = 8673  # Port is this, which according to my research, nothing important in the public domain uses.
-BUFSIZE = 1040  # Standard message size is somewere around 300 bytes long, so this is fine.
+BUFSIZE = 1040  # Standard message size is somewhere around 300 bytes long, so this is fine.
 WAKEUP = 60 * 3.5  # Wake up/Re-sync every three and a half minnutes
 WAKEUPMSG = "Wake up and re-sync you fool!"  # Re-sync message lul
 
@@ -27,7 +27,7 @@ AUTHOR = "CoolCat467"
 __version__ = "0.0.1"
 
 REGISTERED = True
-# Please send your finnished version of your AI to CoolCat467 at Github
+# Please send your finished version of your AI to CoolCat467 at Github
 # for review and testing and obain permission to change this flag to True.
 # Flag doesn't really do much anyways, just a thing to indicate this AI has
 # been tested by the creator for proper functionality.
@@ -582,7 +582,7 @@ emptyBoardData = {
 def board_data_to_str(board, flip=False):
     """Make the board data into a compressed string"""
     global TIDSHIFT
-    # If the game has not been won, say 'N' insted of 'None'
+    # If the game has not been won, say 'N' instead of 'None'
     w = "N" if board["won"] == "None" else board["won"]
     # The compressed string should start being 'w=' and then who's won, then '-'
     data = ["w=" + str(w + "-")]
@@ -595,7 +595,7 @@ def board_data_to_str(board, flip=False):
                 # Flip the tile id using the TIDSHIFT dictionary generated in init()
                 data += [TIDSHIFT[tid] + "="]
             else:
-                # Othewise, just put the tile in the data.
+                # Otherwise, just put the tile in the data.
                 data += [tid + "="]
             # Get the tile's piece.
             p = board["tiles"][tid]["piece"]
@@ -626,7 +626,7 @@ def board_data_to_str(board, flip=False):
 
 
 def str_to_board_info(string):  # , flip=False):
-    """Convert a board data sting into a board info list"""
+    """Convert a board data string into a board info list"""
     global TIDSHIFT
     # Split the data into each individual tile (dashes), and then spit the individual data declarations.
     data = [i.split("=") for i in string.split("-")]
@@ -664,10 +664,10 @@ def findChange(old, new):
     ## Get valid moves the old board can make
     # Get the start tile id and valid moves that tile can make if there are valid moves
     moves = [[i[0], i[2]] for i in one if i[2] != "N"]
-    # Convert the move information so that each start tile corrosponds to each end tile, insted of
-    # refrencing all end tiles.
+    # Convert the move information so that each start tile corresponds to each end tile, instead of
+    # referencing all end tiles.
     moves = sum([[[i[0], f] for f in i[1].split("/")] for i in moves], [])
-    # Get all start and end points seperated
+    # Get all start and end points separated
     startends = {i[0]: i[1] for i in moves}
     ##    starters = [i[0] for i in moves]
     ##    enders = [i[1] for i in moves]
@@ -720,14 +720,14 @@ def update(boardData):
     global LASTSENT
     # If the game has been won,
     if boardData["won"] != "None":
-        # Dissconnect from the server
+        # Disconnect from the server
         print("AI: Game Won!\nDisconnecting from Server...")
         disconnectFromServer()
     # If the board size is not 8 x 8,
     if not boardData["boardsize"] == (8, 8):
         # Break cause we can't handle that (theoretically COULD do 9 x 9, but no more tho...)
         raise RuntimeError(
-            "Board Size is not 8 x 8, and is not compatable with this AI Module (not an ai lol)",
+            "Board Size is not 8 x 8, and is not compatible with this AI Module (not an ai lol)",
         )
     print("AI: Transmitting board data...")
     ##    changes = findChange(board_data_to_str(BOARD), boardData)
@@ -764,15 +764,15 @@ def turn():
     global LASTRCVD
     global WAKEUPMSG
     print("AI: Awaiting Server for Play Data...")
-    # Try to recieve data from the server
+    # Try to receive data from the server
     try:
         rcvdData = S.recv(BUFSIZE).decode()
     except OSError:
-        # If something broke, data is '', which gets processed as server ded.
+        # If something broke, data is '', which gets processed as server dead.
         rcvdData = ""
     else:
-        # Otherwise, tell the user we recieved data properly
-        print("AI: Transmission recieved.")
+        # Otherwise, tell the user we received data properly
+        print("AI: Transmission received.")
     # If the data was None (somehow), replace it with ''. Otherwise, leave it how it is.
     rcvdData = "" if rcvdData is None else rcvdData
     # If the word 'bye' is in the list of words in any message,
@@ -792,22 +792,22 @@ def turn():
     ##    if changes:
     ##        return changes[len(changes)-1]
     ##    send += ';'+'-'.join(['/'.join(change) for change in changes])
-    # Split up the data by the semicolons (seperates messages),
+    # Split up the data by the semicolons (separates messages),
     # and then split each message by spaces.
     data = [i.split(" ") for i in rcvdData[:-1].split(";")]
-    # For each message we recieved,
+    # For each message we received,
     for i in data:
         # If the message (re-combined spacing) is the wakeup message,
         if " ".join(i[1:-1]) == WAKEUPMSG or " ".join(i[1:]) == WAKEUPMSG:
-            # Tell the user we recieved a re-sync message
+            # Tell the user we received a re-sync message
             print(
-                "AI: Re-Sync Message Recieved (Happens every %i secconds)."
+                "AI: Re-Sync Message Received (Happens every %i seconds)."
                 % round(WAKEUP),
             )
             continue
         # If the message is not a wake up message and the length is not two,
         if len(i) != 2:
-            # Tell the user we recieved an invalid message
+            # Tell the user we received an invalid message
             print("AI: Invalid Message from Server.")
             print(i)
             continue
@@ -822,7 +822,7 @@ def turn():
                 # Find the changes from our opponent's new board data and our old
                 # board data.
                 changes = findChange(board_data_to_str(BOARD), msg)
-                # Set our last recieved message to this new message
+                # Set our last received message to this new message
                 LASTRCVD = str(msg)
                 # If there are board data changes,
                 if changes:
@@ -830,7 +830,7 @@ def turn():
                     return changes[len(changes) - 1]
             else:
                 # If this is a duplicate message, find the changes between
-                # the current board data and the last recieved message
+                # the current board data and the last received message
                 changes = findChange(board_data_to_str(BOARD), LASTRCVD)
                 # If there were changes,
                 if changes:
@@ -850,18 +850,18 @@ def turn():
 
 
 def turnSuccess(tf):
-    """This function is called immidiately after the ai's play is made, telling it if it was successfull or not"""
+    """This function is called immediately after the ai's play is made, telling it if it was successful or not"""
     if not tf:
         print("AI: Something went wrong playing move...")
 
 
 def stop():
-    """This function is called immidiately after the game's window is closed"""
+    """This function is called immediately after the game's window is closed"""
     disconnectFromServer()
 
 
 def init():
-    """This function is called immidiately after the game imports the AI"""
+    """This function is called immediately after the game imports the AI"""
     # We dunno what the board looks like, so set it to blank.
     global PLAYERS
     global BOARD
@@ -878,7 +878,7 @@ def init():
     send = {}
     # Set board data to an empty board
     BOARD = dict(emptyBoardData)
-    # We have not sent or recieved anything yet
+    # We have not sent or received anything yet
     LASTSENT = None
     LASTRCVD = None
     # Generate board flip tile id translation table
@@ -892,7 +892,7 @@ def init():
             modded.append(chr(65 + (7 - x)) + str(y + 1))
     # Combine the two in a dictionary
     TIDSHIFT = {nermal[i]: modded[i] for i in range(64)}
-    # Initalize the socket we'll be using to send and recive data
+    # Initialize the socket we'll be using to send and receive data
     S = socket.socket()
     # Setup the timeout time to none so it doesn't time out
     S.settimeout(None)
@@ -916,7 +916,7 @@ def init():
                     ):  # If there are 3 periods in text
                         if [i.isnumeric() for i in ip.split(".")] == [
                             True,
-                        ] * 4:  # If each thing seperated by periods is a number,
+                        ] * 4:  # If each thing separated by periods is a number,
                             break
                 print(
                     "AI: Please enter a valid IP Address.\n",
@@ -941,14 +941,14 @@ def init():
         "AI: Waiting for confermation message from server (happens once two clients join)...",
     )
     rcvdData = S.recv(BUFSIZE).decode()
-    print("AI: Recieved confermation message from server.")
+    print("AI: Received confermation message from server.")
     # Get our Client ID from the server's message
     CID = rcvdData.split(";")[0].split(" ")[1][1:-1]
     # Get the IDs of all connected clients from the server's message
     CLIENTS = rcvdData.split(";")[0].split(" ")[3][1:-1].split("/")
     # Get our opponent's id
     OPPONENT = CLIENTS[(CLIENTS.index(CID) + 1) % len(CLIENTS)]
-    # Send the server a message that we wish to be woken up every <WAKEUP> secconds
+    # Send the server a message that we wish to be woken up every <WAKEUP> seconds
     S.sendall(
         ("[S] Wakeup %s %s" % (str(round(WAKEUP)), WAKEUPMSG)).encode("utf-8"),
     )
@@ -965,7 +965,7 @@ def init():
         print(
             "AI: Important: When it is the opponent's turn, the screen may freeze or go to black.",
         )
-    # Set our socket's timeout time to be five secconds after we're supposed
+    # Set our socket's timeout time to be five seconds after we're supposed
     # to get our wakeup message, so if the server dies without us knowing,
     # the socket disconnects and nothing breaks
     S.settimeout(round(WAKEUP) + 5)

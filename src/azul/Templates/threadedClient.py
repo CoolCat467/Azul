@@ -73,7 +73,7 @@ class Client(Thread):
         except OSError:
             self.active = False
 
-    def recieve(self):
+    def receive(self):
         """Returns decoded messages from self.socket."""
         try:
             rcvdData = self.socket.recv(BUFSIZE)
@@ -84,10 +84,10 @@ class Client(Thread):
         return rcvdData.decode("utf-8")
 
     def run(self):
-        """Recieved data and stores individual messages in self.chat."""
+        """Received data and stores individual messages in self.chat."""
         self.startSocket()
         while self.active:
-            data = self.recieve()
+            data = self.receive()
             if data == "":
                 self.active = False
                 self.log("Connection Terminated. Shutting down...")
@@ -107,7 +107,7 @@ class ClientWithInput(Client):
         self.doPrint = True
         self.startSocket()
         while self.active:
-            data = self.recieve()
+            data = self.receive()
             if data == "":
                 self.active = False
                 self.log("Connection Terminated. Shutting down...")

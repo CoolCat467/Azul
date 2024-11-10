@@ -219,7 +219,7 @@ class Vector(Iterable[V]):
 
     def __getitem__(self, index: int) -> V:
         if not isinstance(index, int):
-            raise TypeError("Index is not an intiger.")
+            raise TypeError("Index is not an integer.")
         if index > len(self):
             raise IndexError("Index out of range for this vector")
         ##        if isinstance(index, str):
@@ -237,7 +237,7 @@ class Vector(Iterable[V]):
                 f"'{dtype}' does not support item assignment. Change vector dtype.",
             )
         if not isinstance(index, int):
-            raise TypeError("Index is not an intiger.")
+            raise TypeError("Index is not an integer.")
         if index > len(self):
             raise IndexError("Index out of range for this vector")
         self.__v[index] = value
@@ -388,7 +388,7 @@ class Vector(Iterable[V]):
     @vmathop
     @simpleop
     def __floordiv__(self, rhs: V | Iterable[V]) -> "Vector[V]":
-        """Floor divide two vectors/iterables or flor divide each element by number"""
+        """Floor divide two vectors/iterables or floor divide each element by number"""
         return self // rhs
 
     @vmathop
@@ -519,14 +519,14 @@ class Vector(Iterable[V]):
     def __index__(self) -> int:
         """Return value of self as int"""
         if not isinstance(self[0], (int, float)):
-            raise ValueError("Value is not an intiger or float.")
+            raise ValueError("Value is not an integer or float.")
         return int(self[0])
 
     @onlylen(1)
     def __float__(self) -> float:
         """Return value of self as float"""
         if not isinstance(self[0], (int, float)):
-            raise ValueError("Value is not an intiger or float.")
+            raise ValueError("Value is not an integer or float.")
         return float(self[0])
 
     @mapop
@@ -539,7 +539,7 @@ class Vector(Iterable[V]):
         """Return copy of self, but all items are floats"""
         return float(self)
 
-    # Intiger operators
+    # Integer operators
     @vmathop
     @onlytypemath(int)
     @simpleop

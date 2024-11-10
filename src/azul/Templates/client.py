@@ -28,7 +28,7 @@ def run():
         input("Press Return to Continue.\n")
         os.abort()
     else:
-        # Othewise,
+        # Otherwise,
         print("Connection established!\nWaiting for messages...")
         while True:
             # Receive up to buffersize bytes from the socket.
@@ -36,8 +36,8 @@ def run():
                 rcvdData = s.recv(BUFSIZE).decode()
             except TimeoutError:
                 rcvdData = ""
-            # Print the recieved transmission
-            print("Recieve: " + "\n".join(rcvdData.split(";"))[:-1])
+            # Print the received transmission
+            print("Receive: " + "\n".join(rcvdData.split(";"))[:-1])
             # If the transmission is the word 'bye', exit loop
             if rcvdData.lower() == "bye" or "bye" in sum(
                 [i.split(" ") for i in rcvdData.split(";")],

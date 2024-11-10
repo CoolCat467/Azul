@@ -17,7 +17,7 @@ from component import ComponentManager
 
 
 class Keyboard(ComponentManager):
-    """Keyboard Componet"""
+    """Keyboard Component"""
 
     def __init__(self):
         super().__init__("keyboard")
@@ -75,7 +75,7 @@ class Keyboard:
         return False
 
     def add_listener(self, key: int, name: str):
-        """Listen for key down events with event.key == key arguement and when that happens set self.actions[name] to true."""
+        """Listen for key down events with event.key == key argument and when that happens set self.actions[name] to true."""
         self.keys[key] = name  # key to name
         self.actions[name] = lambda: None  # name to function
         self.time[name] = 0  # name to time until function recall

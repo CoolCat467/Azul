@@ -149,7 +149,7 @@ class EventLoop(BaseBot):
 
 
 class EventLoopProcessor(Timer):
-    """EventLoopProcessor timer for in the case that runner is buisy elsewere,"""
+    """EventLoopProcessor timer for in the case that runner is buisy elsewhere,"""
 
     min_delay: int = 1
 

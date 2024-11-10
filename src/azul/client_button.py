@@ -369,7 +369,7 @@ class TextBox(Label):
                         scrap.put(SCRAP_TEXT, self.text.encode("utf-8"))
                     elif event["unicode"] == "\x16":  # paste
                         if scrap.contains(SCRAP_TEXT):
-                            selt.text = scrap.get(SCRAP_TEXT).decode("utf-8")
+                            self.text = scrap.get(SCRAP_TEXT).decode("utf-8")
                 except Exception:
                     pass
 
