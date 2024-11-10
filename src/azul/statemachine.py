@@ -1,58 +1,82 @@
-#!/usr/bin/env python3
-# State Machines
-
 """State Machine module."""
 
 # Programmed by CoolCat467
 
+from __future__ import annotations
+
+# Copyright (C) 2020-2024  CoolCat467
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 __title__ = "State Machine"
 __author__ = "CoolCat467"
-__version__ = "0.1.8"
-__ver_major__ = 0
-__ver_minor__ = 1
-__ver_patch__ = 8
+__version__ = "0.1.10"
+__license__ = "GNU General Public License Version 3"
 
-from collections.abc import Iterable
-from typing import Generic, Self, TypeVar
+
+from typing import TYPE_CHECKING, Generic, TypeVar
 from weakref import ref
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from typing_extensions import Self
+import trio
 
 __all__ = ["State", "AsyncState", "StateMachine", "AsyncStateMachine"]
 
 
-Machine = TypeVar("Machine", bound="BaseStateMachine", covariant=True)
-
-
-class BaseState(Generic[Machine]):
+class BaseState:
     """Base class for states."""
 
-    __slots__ = ("name", "machine_ref")
+    __slots__ = ("name",)
 
     def __init__(self, name: str) -> None:
         """Initialize state with a name."""
         self.name = name
-        self.machine_ref: ref[Machine]
-
-    def __str__(self) -> str:
-        """Return <{self.name} {class-name}>."""
-        return f"<{self.name} {self.__class__.__name__}>"
 
     def __repr__(self) -> str:
-        """Return self as string."""
-        return str(self)
+        """Return representation of self."""
+        return f"{self.__class__.__name__}({self.name!r})"
 
-    @property
-    def machine(self) -> Machine | None:
-        """Get machine from internal weak reference."""
-        return self.machine_ref()
+    def add_actions(self) -> None:
+        """Perform actions when this state added to a State Machine."""
+        return
 
 
 SyncMachine = TypeVar("SyncMachine", bound="StateMachine", covariant=True)
 
 
-class State(BaseState[SyncMachine]):
+class State(BaseState, Generic[SyncMachine]):
     """Base class for synchronous states."""
 
-    __slots__ = ()
+    __slots__ = ("machine_ref",)
+
+    def __init__(self, name: str) -> None:
+        """Initialize state with a name."""
+        super().__init__(name)
+        self.machine_ref: ref[SyncMachine]
+
+    @property
+    def machine(self) -> SyncMachine:
+        """Get machine from internal weak reference."""
+        if not hasattr(self, "machine_ref"):
+            raise RuntimeError("State has no statemachine bound")
+        machine = self.machine_ref()
+        if machine is None:
+            raise RuntimeError("State has no statemachine bound")
+        return machine
 
     def entry_actions(self) -> None:
         """Perform entry actions for this State."""
@@ -78,39 +102,63 @@ AsyncMachine = TypeVar(
 )
 
 
-class AsyncState(BaseState[AsyncMachine]):
+class AsyncState(BaseState, Generic[AsyncMachine]):
     """Base class for asynchronous states."""
 
-    __slots__ = ()
+    __slots__ = ("machine_ref",)
+
+    def __init__(self, name: str) -> None:
+        """Initialize state with a name."""
+        super().__init__(name)
+        self.machine_ref: ref[AsyncMachine]
+
+    @property
+    def machine(self) -> AsyncMachine:
+        """Get machine from internal weak reference."""
+        if not hasattr(self, "machine_ref"):
+            raise RuntimeError("State has no statemachine bound")
+        machine = self.machine_ref()
+        if machine is None:
+            raise RuntimeError("State has no statemachine bound")
+        return machine
 
     async def entry_actions(self) -> None:
         """Perform entry actions for this State."""
-        return
+        await trio.lowlevel.checkpoint()
 
     async def do_actions(self) -> None:
         """Perform actions for this State."""
-        return
+        await trio.lowlevel.checkpoint()
 
     async def check_conditions(self) -> str | None:
         """Check state and return new state name or stay in current."""
+        await trio.lowlevel.checkpoint()
         return None
 
     async def exit_actions(self) -> None:
         """Perform exit actions for this State."""
-        return
+        await trio.lowlevel.checkpoint()
 
 
 class BaseStateMachine:
     """State Machine base class."""
 
-    __slots__ = ("states", "active_state")
+    __slots__ = ("states", "active_state", "__weakref__")
 
     def __repr__(self) -> str:
         """Return <{class-name} {self.states}>."""
         text = f"<{self.__class__.__name__}"
-        if hasattr(self, "states"):
+        if hasattr(self, "states"):  # pragma: nocover
             text += f" {self.states}"
-        return text + ">"
+        return f"{text}>"
+
+    @property
+    def running(self) -> bool:
+        """Boolean of if state machine is running."""
+        try:
+            return self.active_state is not None  # type: ignore[attr-defined]
+        except AttributeError:
+            return False
 
 
 class StateMachine(BaseStateMachine):
@@ -119,6 +167,7 @@ class StateMachine(BaseStateMachine):
     __slots__ = ()
 
     def __init__(self) -> None:
+        """Initialize synchronous state machine."""
         self.states: dict[str, State[Self]] = {}  # Stores the states
         self.active_state: State[Self] | None = (
             None  # The currently active state
@@ -132,6 +181,7 @@ class StateMachine(BaseStateMachine):
             )
         state.machine_ref = ref(self)
         self.states[state.name] = state
+        state.add_actions()
 
     def add_states(self, states: Iterable[State[Self]]) -> None:
         """Add multiple State instances to internal dictionary."""
@@ -142,6 +192,12 @@ class StateMachine(BaseStateMachine):
         """Remove state with given name from internal dictionary."""
         if state_name not in self.states:
             raise ValueError(f"{state_name} is not a registered State.")
+        if (
+            self.active_state is not None
+            and self.active_state.name == state_name
+        ):
+            self.active_state.exit_actions()
+            self.active_state = None
         del self.states[state_name]
 
     def set_state(self, new_state_name: str | None) -> None:
@@ -171,7 +227,6 @@ class StateMachine(BaseStateMachine):
         new_state_name = self.active_state.check_conditions()
         if new_state_name is not None:
             self.set_state(new_state_name)
-        return
 
 
 class AsyncStateMachine(BaseStateMachine):
@@ -180,6 +235,7 @@ class AsyncStateMachine(BaseStateMachine):
     __slots__ = ()
 
     def __init__(self) -> None:
+        """Initialize async state machine."""
         self.states: dict[str, AsyncState[Self]] = {}  # Stores the states
         self.active_state: AsyncState[Self] | None = None  # active state
 
@@ -191,6 +247,7 @@ class AsyncStateMachine(BaseStateMachine):
             )
         state.machine_ref = ref(self)
         self.states[state.name] = state
+        state.add_actions()
 
     def add_states(self, states: Iterable[AsyncState[Self]]) -> None:
         """Add multiple State instances to internal dictionary."""
@@ -201,6 +258,12 @@ class AsyncStateMachine(BaseStateMachine):
         """Remove state with given name from internal dictionary."""
         if state_name not in self.states:
             raise ValueError(f"{state_name} is not a registered AsyncState.")
+        if (
+            self.active_state is not None
+            and self.active_state.name == state_name
+        ):
+            # await self.active_state.exit_actions()
+            self.active_state = None
         del self.states[state_name]
 
     async def set_state(self, new_state_name: str | None) -> None:
@@ -232,5 +295,5 @@ class AsyncStateMachine(BaseStateMachine):
             await self.set_state(new_state_name)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: nocover
     print(f"{__title__} v{__version__}\nProgrammed by {__author__}.")
