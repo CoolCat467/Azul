@@ -18,10 +18,10 @@ from pygame.rect import Rect
 def crop_color(surface: Surface, color: Color) -> Surface:
     "Crop out color from surface"
     w, h = surface.get_size()
-    
+
     surf = surface.copy().convert_alpha()
     surf.fill(Color(0, 0, 0, 0))
-    
+
     area = Rect(0, 0, 0, 0)
     surf.lock()
     y_inter = False

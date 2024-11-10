@@ -31,11 +31,11 @@ class Client(Thread):
         self.addr = addr
         self.name = name
         self.server = server
-        
+
         self.active = False
         self.recvData = None
         self.start()
-    
+
     def run(self):
         self.active = True
         while self.active and not self.server.closeEvent.isSet():
@@ -54,7 +54,7 @@ class Client(Thread):
         self.server.chat.append([self.name, self.server.clientLeaveMsg])
         self.close()
         self.server.log('Client %s: Connection Terminated' % self.name)
-    
+
     def close(self):
         """Completely close self.socket."""
         try:
@@ -62,11 +62,11 @@ class Client(Thread):
         except OSError:
             pass
         self.socket.close()
-    
+
     def chat(self, message):
         """Adds message to self.server.chat."""
         self.server.chat.append([self.name, message])
-    
+
     def send_all(self, message):
         """Encode message in utf-8 format and sendall to self.socket"""
         if self.active:
@@ -79,7 +79,7 @@ class AcceptClients(Thread):
         Thread.__init__(self, name='Server Client Acceptor')
         self.server = server
         self.start()
-    
+
     def run(self):
         """While the server is active, if we get a connection that's IP is not it the server's bannedIps list, add the connection with a new Client Thread."""
         while server.active and not self.server.closeEvent.isSet():
@@ -104,22 +104,22 @@ class AcceptClients(Thread):
                     # Log this event
                     self.server.log('Banned IP Address "%s" attempted to join server.' % ip)
                     continue
-                
+
                 # Get the name for this new client
                 newCid = str(self.server.nextCid)
                 self.server.nextCid += 1
-                
+
                 self.server.log('%s (%s) Joined Server.' % (addr, newCid))
                 # Tell clients about new client
                 for cid in self.server.clients.keys():
                     self.server.clients[cid].send_all('S %s Joined;' % newCid)
-                
+
                 # Add client's address to cidToAddr dictionary
                 self.server.cidToAddr[newCid] = ip
-                
+
                 # Add client to clients dictionary
                 self.server.clients[newCid] = Client(clientSocket, addr, newCid, self.server)
-                
+
                 # Tell new client about other clients
                 self.server.clients[newCid].send_all(
                     'S You: %s Others: [%s];' % (newCid, '/'.join(list(self.server.clients.keys()))))
@@ -148,33 +148,33 @@ class Server(Thread):
             self.password = str(passwd)
         else:
             self.password = str(''.join(''.join(passwd.split(' ')).split(';')))
-        
+
         self.clientLeaveMsg = 'S Connection Terminated'
-        
+
         self.socket = None
         self.ipAddr = None
         self.active = False
         self.stopped = False
-        
+
         self.clients = {}
         self.trustedClients = []
         self.bannedIps = []
         self.closeEvent = Event()
         self.nextCid = 0
         self.cidToAddr = {}
-        
+
         self.chat = []
-        
+
         self.start()
-    
+
     def __repr__(self):
         return '<Server Object>'
-    
+
     def log(self, data):
         """Prints data."""
         if self.doPrint:
             print('Server: %s' % str(data))
-    
+
     def startSocket(self):
         """Initializes a new socket for the server to work on."""
         self.log('Binding Socket to %s:%i...' % (self.host, self.port))
@@ -190,7 +190,7 @@ class Server(Thread):
             self.socket.listen(0)
             self.ipAddr = ':'.join([str(i) for i in self.socket.getsockname()])
             self.log('Bound to address successfully.')
-    
+
     def stop(self):
         """Shuts down the server."""
         if not self.stopped:
@@ -214,7 +214,7 @@ class Server(Thread):
             self.stopped = True
         else:
             self.log('Server already shut down!')
-    
+
     def processCommand(self, fromCid, command):
         """Process commands sent to server."""
         if ' ' in command:
@@ -295,7 +295,7 @@ class Server(Thread):
             # then the command is invalid
             self.log('Client "%s" sent an invalid command.' % fromCid)
             self.clients[fromCid].send_all('S Invalid command. Use "help" to list commands.')
-    
+
     def processChat(self):
         """Read chat messages and act apon them."""
         deletedClients = []
@@ -306,7 +306,7 @@ class Server(Thread):
                 continue
             for cidx in range(len(self.chat)-1, -1, -1):
                 fromCid, clientMsgs = self.chat[cidx]
-                
+
                 # Messages are split by semicolons.
                 for clientMsg in clientMsgs.split(';'):
                     self.log('Recieved message "%s" from client id "%s"' % (clientMsg, fromCid))
@@ -345,7 +345,7 @@ class Server(Thread):
                 del self.clients[cid]
                 for client in iter(self.clients.values()):
                     client.send_all('S %s Left;' % cid)
-    
+
     def run(self):
         """Begins accepting clients and proccessing chat data."""
         self.startSocket()
@@ -375,7 +375,7 @@ def find_ip():
     # the ip address of the default route.
     # We're doing multiple tests, to guard against the computer being
     # part of a test installation.
-    
+
     candidates = []
     for test_ip in ["192.0.2.0", "198.51.100.0", "203.0.113.0"]:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -385,7 +385,7 @@ def find_ip():
         if ip_addr in candidates:
             return ip_addr
         candidates.append(ip_addr)
-    
+
     return candidates[0]
 
 if __name__ == '__main__':

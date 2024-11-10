@@ -19,7 +19,7 @@ def find_ip():
     # the ip address of the default route.
     # We're doing multiple tests, to guard against the computer being
     # part of a test installation.
-    
+
     candidates = []
     for test_ip in ["192.0.2.0", "198.51.100.0", "203.0.113.0"]:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -29,7 +29,7 @@ def find_ip():
         if ip_addr in candidates:
             return ip_addr
         candidates.append(ip_addr)
-    
+
     return candidates[0]
 
 # Set up port information
@@ -51,7 +51,7 @@ class Client(Thread):
         self.timer = None
         self.lastMsg = float(time.time())
         self.start()
-    
+
     def run(self):
         # We are now active
         self.active = True
@@ -85,7 +85,7 @@ class Client(Thread):
         # If we are inactive, close our socket.
         self.sock.close()
         print('Client Connection Terminated', file=os.sys.stderr)
-    
+
     def send_all(self, data):
         """Send data to client using supplied socket"""
         # If we are active,
@@ -104,7 +104,7 @@ class ClientTimer(Thread):
         self.wakeup = bool(wakeupMsg)
         self.msg = ('[%s] %s;' % (str(self.cid), str(wakeupMsg))).encode('utf-8')
         self.start()
-    
+
     def run(self):
         # If our given client id is in the clients dictionary,
         if self.cid in self.clients.keys():
@@ -148,12 +148,12 @@ class ClientTimer(Thread):
 def getServer():
     # Initialize the socket
     s = socket.socket()
-    
+
     print('Server: Attempting to bind socket to %s on port %i...' % (HOST, PORT))
 
     # Bind the socket to a local address.
     s.bind((HOST, PORT))
-        
+
     # Enable a server to accept connections.
     # specifies the number of unaccepted connections that the
     # system will allow before refusing new connections.
@@ -168,13 +168,13 @@ def run():
     closeWaitEvent = Event()
     # Set up a list to hold chat data
     chatData = []
-    
+
     # Get the ip address we are working on
     ip_addr = ':'.join([str(i) for i in serversocket.getsockname()])
-    
+
     print('Server: Server and running on', ip_addr)
     print('Server: Awaiting %i connections.' % MAXCONNS)
-    
+
     # Server should only permit a certain number of connections; No more, no less.
     cid = 0
     idToAddr = {}
@@ -231,7 +231,7 @@ def run():
                             msglst = [i for i in sum([i.split(' ') for i in srvrmsg.split(';')], [])]
                             # If the message is a valid wake up command,
                             if len(msglst) >= 3 and msglst[1].lower() == 'wakeup' and msglst[2].isnumeric():
-                                print('Server: Starting Wakeup Thread for Client "%s"' % chatData[idx][0]) 
+                                print('Server: Starting Wakeup Thread for Client "%s"' % chatData[idx][0])
                                 # Start a wake up thread for that client
                                 cid = int(chatData[idx][0])
                                 wait, wkupmsg = float(msglst[2]), ' '.join(msglst[3:-1])
@@ -241,11 +241,11 @@ def run():
                     # Close the server.
                     print("Server: Client said 'bye'. Closing server.")
                     close = True
-                
+
                 # If we are to close the server, exit the loop.
                 if close:
                     break
-                
+
                 # For each client,
                 for client in iter(clients.values()):
                     # Get the client's id

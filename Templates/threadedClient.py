@@ -30,12 +30,12 @@ class Client(Thread):
         self.active = False
         self.chat = []
         self.start()
-    
+
     def log(self, message):
         """Logs a message if self.doPrint is True."""
         if self.doPrint:
             print('Client: %s' % str(message))
-    
+
     def startSocket(self):
         """Initialize the socket and connect to server with given info."""
         # Initialize the socket
@@ -52,7 +52,7 @@ class Client(Thread):
         else:
             self.active = True
             self.log('Connection established!')
-    
+
     def stop(self):
         """Close self.socket."""
         self.log('Shutting down...')
@@ -62,14 +62,14 @@ class Client(Thread):
             pass
         self.socket.close()
         self.log('Socket closed.')
-    
+
     def send(self, message):
         """Encodes message and sends all on self.socket."""
         try:
             self.socket.sendall(message.encode('utf-8'))
         except OSError:
             self.active = False
-    
+
     def recieve(self):
         """Returns decoded messages from self.socket."""
         try:
@@ -79,7 +79,7 @@ class Client(Thread):
         except OSError:
             rcvdData = b''
         return rcvdData.decode('utf-8')
-    
+
     def run(self):
         """Recieved data and stores individual messages in self.chat."""
         self.startSocket()

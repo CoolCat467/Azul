@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 """errorbox, by Pete Shinners
 
 Tries multiple python GUI libraries to display an error box
@@ -12,7 +15,7 @@ states, so this function will never return, but instead end the
 program when the error has been dismissed. That makes this only
 useful for errors, and not general message boxes.
 
-Feel free to perhaps add some GUI handlers, as well as enhance
+Feel free to perhaps add some GUI HANDLERS, as well as enhance
 any that are here. They have all been tested on their appropriate
 platforms.
 
@@ -23,28 +26,29 @@ Perhaps pygame raised an exception while initializing. This little
 messagebox can sure be a lot nicer than a stack trace. ;]
 """
 
+__title__ = 'errorbox'
 
 
-def errorbox(title, message):
-    "attempt to error with a gui"
-    global handlers
+def errorbox(title: str, message: str) -> None:
+    "Attempt to error with a gui"
+    global HANDLERS
     __stdout(title, message)
-    for e in handlers:
+    for e in HANDLERS:
         try:
             e(title, message)
             break
         except (ImportError, NameError): pass
     raise SystemExit
 
-
-
-def __pyqt4(title, message):
+def __pyqt4(title: str, message: str) -> None:
+    "Error with PyQt4"
     from PyQt4 import QtGui
     app = QtGui.QApplication(["Error"])
     QtGui.QMessageBox.critical(None, title, message)
 
 
-def __wxpython(title, message):
+def __wxpython(title: str, message: str) -> None:
+    "Error with wxPython"
     from wxPython.wx import wxApp, wxMessageDialog, wxOK, wxICON_EXCLAMATION
     class LameApp(wxApp):
         def OnInit(self): return 1
@@ -54,13 +58,15 @@ def __wxpython(title, message):
     dlg.Destroy()
 
 
-def __tkinter(title, message):
+def __tkinter(title: str, message: str) -> None:
+    "Error with tkinter"
     import tkinter, tkinter.messagebox
     tkinter.Tk().wm_withdraw()
     tkinter.messagebox.showerror(title, message)
 
 
-def __pygame(title, message):
+def __pygame(title: str, message: str) -> None:
+    "Error with pygame"
     try:
         import pygame, pygame.font
         pygame.quit() #clean out anything running
@@ -72,7 +78,7 @@ def __pygame(title, message):
         foreg = 0, 0, 0
         backg = 200, 200, 200
         liteg = 255, 255, 255
-        ok = font.render('Ok', 1, foreg)
+        ok = font.render('Ok', True, foreg)
         screen.fill(backg)
         okbox = ok.get_rect().inflate(20, 10)
         okbox.centerx = screen.get_rect().centerx
@@ -81,7 +87,7 @@ def __pygame(title, message):
         screen.blit(ok, okbox.inflate(-20, -10))
         pos = [20, 20]
         for text in message.split('\n'):
-            msg = font.render(text, 1, foreg)
+            msg = font.render(text, True, foreg)
             screen.blit(msg, pos)
             pos[1] += font.get_height()
 
@@ -97,11 +103,12 @@ def __pygame(title, message):
         raise ImportError
 
 
-def __stdout(title, message):
+def __stdout(title: str, message: str) -> None:
+    "Error with stdout"
     text = 'ERROR: ' + title + '\n' + message
     print(text)
 
-handlers = __pyqt4, __tkinter, __wxpython, __pygame
+HANDLERS = __pyqt4, __tkinter, __wxpython, __pygame
 
 
 #test the error box

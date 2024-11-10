@@ -38,12 +38,12 @@ class Location(Vector2[int]):
             new_vec.__init__(*args, dtype=dtype)# type: ignore
             return new_vec
         return super().__new__(cls)
-    
+
     def __init__(self, rect: Rect) -> None:
         "Initialize Location with rectangle."
         self._rect = rect
         super().__init__(*self._rect.center, dtype=list)
-    
+
     def __setitem__(self, index: int,
                     value: int | float | complex,
                     normal: bool=False) -> None:
@@ -55,16 +55,16 @@ class Location(Vector2[int]):
             return
         new_x, new_y = tuple(self)
         self._rect.center = new_x, new_y
-    
+
     def __getitem__(self, index: int) -> int:
         "Get item, but sets internal data at index to data from rectangle center first."
         self.__setitem__(index, self._rect.center[index], normal=True)  # type: ignore[call-arg]
         return super().__getitem__(index)
-    
+
     def normalize(self) -> Vector[float]:
         "Raise NotImplemented, original is in place."
         raise NotImplementedError
-    
+
     def set_length(self, new_length: T) -> Vector[T]:
         "Raise NotImplemented, original is in place."
         raise NotImplementedError

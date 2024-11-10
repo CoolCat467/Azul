@@ -51,7 +51,7 @@ def run():
             # If we said 'bye', exit the loop
             if sendData.lower() == 'bye':
                 break
-            
+
         # Try to inform the server you are leaving, but don't ensure it happened.
         try:
             s.send(b'bye')

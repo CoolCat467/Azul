@@ -1,0 +1,24 @@
+{
+  "main_menu": {
+    "title": "Azul",
+    "host_server": "Host Game",
+    "join_server": "Join Game",
+    "close": "Close"
+  },
+  "host_server_menu": {
+    "title": "Host Server",
+    "port_input": "Enter Host Port ({})",
+    "start_server": "Start Server",
+    "return_title": "Return to Title"
+  },
+  "join_server_menu": {
+    "title": "Join Server",
+    "host_input": "Enter Host Address",
+    "port_input": "Enter Host Port ({})",
+    "join_server": "Connect to Server",
+    "return_title": "Return to Title"
+  },
+  "connect_server": {
+    "connecting": "Connecting to Server..."
+  }
+}
