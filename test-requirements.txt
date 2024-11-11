@@ -6,8 +6,10 @@ attrs==24.2.0
     #   trio
 black==24.10.0 ; implementation_name == 'cpython'
     # via -r test-requirements.in
-cffi==1.17.1 ; implementation_name != 'pypy' and os_name == 'nt'
-    # via trio
+cffi==1.17.1 ; (os_name != 'nt' and platform_python_implementation != 'PyPy') or (implementation_name != 'pypy' and os_name == 'nt') or (implementation_name == 'pypy' and platform_python_implementation != 'PyPy')
+    # via
+    #   cryptography
+    #   trio
 click==8.1.7 ; implementation_name == 'cpython'
     # via black
 codespell==2.3.0
@@ -20,6 +22,8 @@ coverage==7.6.4
     # via
     #   -r test-requirements.in
     #   pytest-cov
+cryptography==43.0.3
+    # via -r test-requirements.in
 exceptiongroup==1.2.2 ; python_full_version < '3.11'
     # via
     #   -r test-requirements.in
@@ -54,7 +58,7 @@ platformdirs==4.3.6 ; implementation_name == 'cpython'
     # via black
 pluggy==1.5.0
     # via pytest
-pycparser==2.22 ; implementation_name != 'pypy' and os_name == 'nt'
+pycparser==2.22 ; (os_name != 'nt' and platform_python_implementation != 'PyPy') or (implementation_name != 'pypy' and os_name == 'nt') or (implementation_name == 'pypy' and platform_python_implementation != 'PyPy')
     # via cffi
 pygame==2.6.1
     # via -r test-requirements.in

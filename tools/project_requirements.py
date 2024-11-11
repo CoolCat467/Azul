@@ -76,7 +76,7 @@ def run() -> None:
         )
 
     # Create overwrite text
-    dependencies_text = "\n".join(dependencies)
+    dependencies_text = "\n".join(sorted(dependencies))
     overwrite_text = "\n".join(
         (
             key_start,
