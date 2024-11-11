@@ -13,7 +13,7 @@ __version__ = "0.0.0"
 from configparser import ConfigParser
 
 
-def load_config(config_file: str) -> dict:
+def load_config(config_file: str) -> dict[str, str]:
     """Return a config object from config_file."""
     config = ConfigParser()
     config.read((config_file,))

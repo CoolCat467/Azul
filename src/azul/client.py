@@ -40,10 +40,9 @@ VSYNC = True
 ##PORT = server.PORT
 
 
-class AzulState(AsyncState):
+class AzulState(AsyncState[AzulClient]):
     """Azul Client Asynchronous base class."""
 
-    machine: AzulClient
     __slots__ = ("id", "manager")
 
     def __init__(self, name: str) -> None:
@@ -88,10 +87,10 @@ class ClickDestinationComponent(Component):
             },
         )
 
-    async def test(self, event: Event) -> None:
+    async def test(self, event: Event[object]) -> None:
         print(f"{event = }")
 
-    async def cache_outline(self, _: Event) -> None:
+    async def cache_outline(self, _: Event[None]) -> None:
         """Precalculate outlined images."""
         image: sprite.ImageComponent = self.get_component("image")
         outline: sprite.OutlineComponent = image.get_component("outline")
@@ -109,7 +108,7 @@ class ClickDestinationComponent(Component):
             movement: sprite.MovementComponent = self.get_component("movement")
             movement.speed = 0
 
-    async def click(self, event: Event) -> None:
+    async def click(self, event: Event[dict[str, int]]) -> None:
         """Toggle selected."""
         if event.data["button"] == 1:
             self.selected = not self.selected
@@ -379,7 +378,7 @@ class Tracer(trio.abc.Instrument):
     def before_run(self) -> None:
         print("!!! run started")
 
-    def _print_with_task(self, msg: str, task):
+    def _print_with_task(self, msg: str, task) -> None:
         # repr(task) is perhaps more useful than task.name in general,
         # but in context of a tutorial the extra noise is unhelpful.
         print(f"{msg}: {task.name}")
@@ -399,14 +398,14 @@ class Tracer(trio.abc.Instrument):
     def task_exited(self, task) -> None:
         self._print_with_task("### task exited", task)
 
-    def before_io_wait(self, timeout) -> None:
+    def before_io_wait(self, timeout: float) -> None:
         if timeout:
             print(f"### waiting for I/O for up to {timeout} seconds")
         else:
             print("### doing a quick check for I/O")
         self._sleep_time = trio.current_time()
 
-    def after_io_wait(self, timeout) -> None:
+    def after_io_wait(self, timeout: float) -> None:
         duration = trio.current_time() - self._sleep_time
         print(f"### finished I/O check (took {duration} seconds)")
 

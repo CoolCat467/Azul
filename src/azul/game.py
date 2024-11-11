@@ -31,7 +31,7 @@ import time
 from collections import Counter, deque
 from functools import lru_cache, wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, Literal
+from typing import TYPE_CHECKING, Final, Literal, NamedTuple
 
 import pygame
 from numpy import array
@@ -56,7 +56,7 @@ from azul.tools import (
 from azul.Vector2 import Vector2
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable, Iterable, Sequence
 
 SCREENSIZE = (650, 600)
 
@@ -173,7 +173,6 @@ def auto_crop_clear(
     surface = surface.convert_alpha()
     w, h = surface.get_size()
     surface.lock()
-    find_end = None
 
     def find_end(
         iterfunc: Callable[[int], Iterable[tuple[int, int, int, int]]],
@@ -213,7 +212,9 @@ def get_tile_color(
     if tile_color < 0:
         if tile_color == -6:
             return GREY
-        return lerp_color(tile_colors[abs(tile_color + 1)], GREY, greyshift)
+        color = tile_colors[abs(tile_color + 1)]
+        assert len(color) == 3
+        return lerp_color(color, GREY, greyshift)
     if tile_color < 5:
         return tile_colors[tile_color]
     if tile_color >= 5:
@@ -224,7 +225,7 @@ def get_tile_color(
 
 
 @lru_cache
-def get_tile_symbol_and_color(tile_color, greyshift=GREYSHIFT):
+def get_tile_symbol_and_color(tile_color: int, greyshift: float = GREYSHIFT) -> tuple[str, tuple[int, int, int]] | None:
     """Return the color a given tile should be."""
     if tile_color < 0:
         if tile_color == -6:
@@ -241,12 +242,12 @@ def get_tile_symbol_and_color(tile_color, greyshift=GREYSHIFT):
 
 
 def add_symbol_to_tile_surf(
-    surf,
-    tilecolor,
-    tilesize,
-    greyshift=GREYSHIFT,
-    font=FONT,
-):
+    surf: pygame.surface.Surface,
+    tilecolor: int,
+    tilesize: int,
+    greyshift: float = GREYSHIFT,
+    font: azul.game.Path = FONT,
+) -> None:
     symbol, scolor = get_tile_symbol_and_color(tilecolor, greyshift)
     pyfont = pygame.font.Font(font, math.floor(math.sqrt(tilesize**2 * 2)) - 1)
 
@@ -275,19 +276,21 @@ def add_symbol_to_tile_surf(
 
 @lru_cache
 def get_tile_image(
-    tile,
-    tilesize,
-    greyshift=GREYSHIFT,
-    outlineSize=0.2,
-    font=FONT,
-):
+    tile: Tile,
+    tilesize: int,
+    greyshift: float = GREYSHIFT,
+    outlineSize: float = 0.2,
+    font: azul.game.Path = FONT,
+) -> pygame.surface.Surface:
     """Return a surface of a given tile."""
     cid = tile.color
     if cid < 5:
         color = get_tile_color(cid, greyshift)
 
     elif cid >= 5:
-        color, outline = tile_colors[cid]
+        color_data = tile_colors[cid]
+        assert len(color_data) == 2
+        color, outline = color_data
         surf = outline_rectangle(
             make_square_surf(color, tilesize),
             outline,
@@ -302,7 +305,7 @@ def get_tile_image(
     ##    add_symbol_to_tile_surf(surf, cid, tilesize, greyshift, font)
 
 
-def set_alpha(surface, alpha):
+def set_alpha(surface: pygame.surface.Surface, alpha: int) -> pygame.surface.Surface:
     """Return a surface by replacing the alpha channel of it with given alpha value, preserve color."""
     surface = surface.copy().convert_alpha()
     w, h = surface.get_size()
@@ -314,7 +317,7 @@ def set_alpha(surface, alpha):
 
 
 @lru_cache
-def get_tile_container_image(wh, back):
+def get_tile_container_image(wh: tuple[int, int], back: pygame.color.Color | int | str | tuple[int, int, int] | tuple[int, int, int, int] | Sequence[int]) -> pygame.surface.Surface:
     """Return a tile container image from a width and a height and a background color, and use a game's cache to help."""
     image = pygame.surface.Surface(wh)
     image.convert_alpha()
@@ -347,7 +350,7 @@ class Font:
         self.antialias = bool(antialias)
         self.background = background
         self.do_cache = bool(do_cache)
-        self.cache = None
+        self.cache: pygame.surface.Surface | None = None
         self.last_text: str | None = None
         self._change_font()
 
@@ -380,7 +383,7 @@ class Font:
         text: str | None,
         size: int | None = None,
         color: tuple[int, int, int] | None = None,
-        background: tuple[int, int, int] | str | None = None,
+        background: tuple[int, int, int] | None = None,
         force_update: bool = False,
     ) -> pygame.surface.Surface:
         """Render and return a surface of given text. Use stored data to render, if arguments change internal data and render."""
@@ -439,9 +442,9 @@ class Font:
             cx, cy = self.center
             w, h = surf.get_size()
             if cx:
-                x -= w / 2
+                x -= w // 2
             if cy:
-                y -= h / 2
+                y -= h // 2
             xy = (int(x), int(y))
 
         surface.blit(surf, xy)
@@ -453,12 +456,12 @@ class ObjectHandler:
     ##    __slots__ = ("objects", "next_id", "cache")
 
     def __init__(self) -> None:
-        self.objects = {}
+        self.objects: dict[int, Object] = {}
         self.next_id = 0
-        self.cache = {}
+        self.cache: dict[str, int] = {}
 
         self.recalculate_render = True
-        self._render_order = ()
+        self._render_order: tuple[int, ...] = ()
 
     def add_object(self, obj: Object) -> None:
         """Add an object to the game."""
@@ -492,7 +495,7 @@ class ObjectHandler:
             if hasattr(self.objects[oid], attribute)
         )
 
-    def get_object_by_attr(self, attribute: str, value) -> tuple[Object, ...]:
+    def get_object_by_attr(self, attribute: str, value: object) -> tuple[Object, ...]:
         """Return a tuple of object ids with <attribute> that are equal to <value>."""
         matches = []
         for oid in self.get_objects_with_attr(attribute):
@@ -516,16 +519,19 @@ class ObjectHandler:
                 self.cache[object_name] = min(ids)
             else:
                 raise RuntimeError(f"{object_name} Object Not Found!")
-        return self.get_object(self.cache[object_name])
+        result = self.get_object(self.cache[object_name])
+        if result is None:
+            raise RuntimeError(f"{object_name} Object Not Found!")
+        return result
 
-    def set_attr_all(self, attribute: str, value) -> None:
+    def set_attr_all(self, attribute: str, value: object) -> None:
         """Set given attribute in all of self.objects to given value in all objects with that attribute."""
         for oid in self.get_objects_with_attr(attribute):
             setattr(self.objects[oid], attribute, value)
 
     def recalculate_render_order(self) -> None:
         """Recalculate the order in which to render objects to the screen."""
-        new = {}
+        new: dict[int, int] = {}
         cur = 0
         for oid in reversed(self.objects):
             obj = self.objects[oid]
@@ -534,16 +540,14 @@ class ObjectHandler:
                 if isinstance(prior, str):
                     add = 0
                     if prior[:4] == "last":
-                        add = prior[4:] or 0
                         try:
-                            add = int(add)
+                            add = int(prior[4:] or 0)
                         except ValueError:
                             add = 0
                         pos = len(self.objects) + add
                     if prior[:5] == "first":
-                        add = prior[5:] or 0
                         try:
-                            add = int(add)
+                            add = int(prior[5:] or 0)
                         except ValueError:
                             add = 0
                         pos = -1 + add
@@ -578,9 +582,7 @@ class ObjectHandler:
                 new[oid] = cur
                 cur += 1
         revnew = {new[k]: k for k in new}
-        new = []
-        for key in sorted(revnew):
-            new.append(revnew[key])
+        new: list[int] = [revnew[key] for key in sorted(revnew)]
         self._render_order = tuple(new)
 
     def process_objects(self, time_passed: float) -> None:
@@ -633,7 +635,7 @@ class Object:
          self.id
         """
         self.name = str(name)
-        self.image = None
+        self.image: pygame.surface.Surface | None = None
         self.location = Vector2(
             round(SCREENSIZE[0] / 2),
             round(SCREENSIZE[1] / 2),
@@ -645,31 +647,31 @@ class Object:
 
         self.id = 0
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return {self.name}()."""
-        return f"{self.name}()"
+        return f"{self.__class__.__name__}()"
 
-    def getImageZero_noFix(self):
+    def getImageZero_noFix(self) -> tuple[float, float]:
         """Return the screen location of the topleft point of self.image."""
         return (
             self.location[0] - self.wh[0] / 2,
             self.location[1] - self.wh[1] / 2,
         )
 
-    def get_image_zero(self):
+    def get_image_zero(self) -> tuple[int, int]:
         """Return the screen location of the topleft point of self.image fixed to integer values."""
         x, y = self.getImageZero_noFix()
         return int(x), int(y)
 
-    def getRect(self):
+    def get_rect(self) -> Rect:
         """Return a Rect object representing this Object's area."""
         return Rect(self.get_image_zero(), self.wh)
 
-    def point_intersects(self, screen_location):
+    def point_intersects(self, screen_location: tuple[int, int]) -> bool:
         """Return True if this Object intersects with a given screen location."""
-        return self.getRect().collidepoint(screen_location)
+        return self.get_rect().collidepoint(screen_location)
 
-    def toImageSurfLoc(self, screen_location):
+    def to_image_surface_location(self, screen_location: tuple[int, int]) -> tuple[int, int]:
         """Return the location a screen location would be at on the objects image. Can return invalid data."""
         # Get zero zero in image locations
         zx, zy = self.get_image_zero()  # Zero x and y
@@ -687,9 +689,9 @@ class Object:
         x, y = self.get_image_zero()
         surface.blit(self.image, (int(x), int(y)))
 
-    ##        pygame.draw.rect(surface, MAGENTA, self.getRect(), 1)
+    ##        pygame.draw.rect(surface, MAGENTA, self.get_rect(), 1)
 
-    def __del__(self):
+    def __del__(self) -> None:
         """Delete self.image."""
         del self.image
 
@@ -704,7 +706,7 @@ class Object:
             x, y = self.location
             nx, ny = x * (nw / ow), y * (nh / oh)
 
-        self.location = (nx, ny)
+        self.location = Vector2(nx, ny)
         self.screen_size_last = SCREENSIZE
 
 
@@ -719,14 +721,14 @@ class MultipartObject(Object, ObjectHandler):
         Object.__init__(self, name)
         ObjectHandler.__init__(self)
 
-        self._lastloc = None
-        self._lasthidden = None
+        self._lastloc: tuple[int, int] | None = None
+        self._lasthidden: bool | None = None
 
-    def reset_position(self):
+    def reset_position(self) -> None:
         """Reset the position of all objects within."""
         raise NotImplementedError
 
-    def getWhereTouches(self, point):
+    def get_intersection(self, point: tuple[int, int]) -> tuple[str, tuple[int, int]] | tuple[None, None]:
         """Return where a given point touches in self. Returns (None, None) with no intersections."""
         for oid in self.objects:
             obj = self.objects[oid]
@@ -758,63 +760,16 @@ class MultipartObject(Object, ObjectHandler):
         Object.render(self, surface)
         ObjectHandler.render_objects(self, surface)
 
-    def get_data(self):
-        """Return what makes this MultipartObject special."""
-        data = super().get_data()
-        data["objs"] = tuple(
-            [self.objects[oid].get_data() for oid in self.objects],
-        )
-        return data
-
-    def from_data(self, data):
-        """Update this MultipartObject from data."""
-        super().from_data(self)
-        for objdata in data["objs"]:
-            self.objects[int(objdata["id"])].from_data(objdata)
-
-    def __del__(self):
+    def __del__(self) -> None:
         Object.__del__(self)
         ObjectHandler.__del__(self)
 
 
-class NerworkServer:
-    """NetworkServer Class, job is to talk to connect classes over the interwebs."""
-
-    def __init__(self, port):
-        self.name = "NetworkServer"
-
-
-##    def add_client(self)
-
-
-class NetworkClient:
-    """NetworkClient Class, job is to talk to NetworkServer and therefore other NetworkClient classes over the interwebs."""
-
-    def __init__(self, ip_address, port):
-        self.name = "NetworkClient"
-
-    def requestData(self, dataName):
-        """Request a certain field of information from the server."""
-
-
-class Tile:
+class Tile(NamedTuple):
     """Represents a Tile."""
 
-    def __init__(self, color):
-        """Needs a color value, or this is useless."""
-        self.color = color
+    color: int
 
-    def __repr__(self):
-        return "Tile(%i)" % self.color
-
-    def get_data(self):
-        """Return self.color."""
-        return f"T[{self.color}]"
-
-    @classmethod
-    def from_data(cls, data):
-        """Return a new Tile object using data."""
-        return cls.__init__(int(data[2:-1]))
 
 
 class TileRenderer(Object):
@@ -825,68 +780,68 @@ class TileRenderer(Object):
 
     def __init__(
         self,
-        name,
-        game,
-        tileSeperation="Auto",
-        background=TILEDEFAULT,
-    ):
+        name: str,
+        game: Any,
+        tile_seperation: int | Literal["Auto"] = "Auto",
+        background: tuple[int, int, int] = TILEDEFAULT,
+    ) -> None:
         """Initialize renderer. Needs a game object for its cache and optional tile separation value and background RGB color.
 
         Defines the following attributes during initialization and uses throughout:
          self.game
          self.wh
          self.tileSep
-         self.tileFull
+         self.tile_full
          self.back
          and finally, self.image_update
 
         The following functions are also defined:
          self.clear_image
-         self.renderTile
+         self.render_tile
          self.update_image (but not implemented)
          self.process
         """
         super().__init__(name)
         self.game = game
 
-        if tileSeperation == "Auto":
+        if tile_seperation == "Auto":
             self.tileSep = self.tile_size / 3.75
         else:
-            self.tileSep = tileSeperation
+            self.tileSep = tile_seperation
 
-        self.tileFull = self.tile_size + self.tileSep
+        self.tile_full = self.tile_size + self.tileSep
         self.back = background
 
         self.image_update = True
 
-    def getRect(self):
+    def get_rect(self) -> Rect:
         """Return a Rect object representing this row's area."""
         wh = self.wh[0] - self.tileSep * 2, self.wh[1] - self.tileSep * 2
         location = self.location[0] - wh[0] / 2, self.location[1] - wh[1] / 2
         return Rect(location, wh)
 
-    def clear_image(self, tileDimentions):
-        """Reset self.image using tileDimentions tuple and fills with self.back. Also updates self.wh."""
-        tw, th = tileDimentions
+    def clear_image(self, tile_dimensions: tuple[int, int]) -> None:
+        """Reset self.image using tile_dimensions tuple and fills with self.back. Also updates self.wh."""
+        tw, th = tile_dimensions
         self.wh = Vector2(
-            round(tw * self.tileFull + self.tileSep),
-            round(th * self.tileFull + self.tileSep),
+            round(tw * self.tile_full + self.tileSep),
+            round(th * self.tile_full + self.tileSep),
         )
         self.image = get_tile_container_image(self.wh, self.back)
 
-    def renderTile(self, tileObj, tileLoc):
+    def render_tile(self, tile_object: Tile, tile_location: tuple[int, int]) -> None:
         """Blit the surface of a given tile object onto self.image at given tile location. It is assumed that all tile locations are xy tuples."""
-        x, y = tileLoc
-        surf = get_tile_image(tileObj, self.tile_size, self.greyshift)
+        x, y = tile_location
+        surf = get_tile_image(tile_object, self.tile_size, self.greyshift)
         self.image.blit(
             surf,
             (
-                round(x * self.tileFull + self.tileSep),
-                round(y * self.tileFull + self.tileSep),
+                round(x * self.tile_full + self.tileSep),
+                round(y * self.tile_full + self.tileSep),
             ),
         )
 
-    def update_image(self):
+    def update_image(self) -> None:
         """Called when processing image changes, directed by self.image_update being True."""
         raise NotImplementedError
 
@@ -896,28 +851,6 @@ class TileRenderer(Object):
             self.update_image()
             self.image_update = False
 
-    def get_data(self):
-        """Return the data that makes this TileRenderer special."""
-        data = super().get_data()
-        data["tsp"] = f"{math.floor(self.tileSep*10):x}"
-        data["tfl"] = f"{math.floor(self.tileFull*10):x}"
-        if self.back is None:
-            data["bac"] = "N"
-        else:
-            data["bac"] = "".join(f"{i:02x}" for i in self.back)
-        return data
-
-    def from_data(self, data):
-        """Update this TileRenderer from data."""
-        super().from_data(data)
-        self.tileSep = int(f"0x{data['tsp']}", 16) / 10
-        self.tileFull = int(f"0x{data['tfl']}", 16) / 10
-        if data["bac"] == "N":
-            self.back = None
-        else:
-            lst = [int(f"0x{data['bac'][i:i+1]}", 16) for i in range(0, 6, 2)]
-            self.back = tuple(lst)
-
 
 class Cursor(TileRenderer):
     """Cursor Object."""
@@ -925,19 +858,19 @@ class Cursor(TileRenderer):
     greyshift = GREYSHIFT
     Render_Priority = "last"
 
-    def __init__(self, game):
+    def __init__(self, game: Game) -> None:
         """Initialize cursor with a game it belongs to."""
-        TileRenderer.__init__(self, "Cursor", game, "Auto", None)
+        super().__init__("Cursor", game, "Auto", None)
 
         self.holding_number_one = False
-        self.tiles = deque()
+        self.tiles: deque[Tile] = deque()
 
     def update_image(self) -> None:
         """Update self.image."""
         self.clear_image((len(self.tiles), 1))
 
         for x in range(len(self.tiles)):
-            self.renderTile(self.tiles[x], (x, 0))
+            self.render_tile(self.tiles[x], (x, 0))
 
     def is_pressed(self) -> bool:
         """Return True if the right mouse button is pressed."""
@@ -1072,11 +1005,11 @@ class Grid(TileRenderer):
         self,
         size,
         game,
-        tileSeperation="Auto",
+        tile_seperation="Auto",
         background=TILEDEFAULT,
     ):
         """Grid Objects require a size and game at least."""
-        TileRenderer.__init__(self, "Grid", game, tileSeperation, background)
+        TileRenderer.__init__(self, "Grid", game, tile_seperation, background)
 
         self.size = tuple(size)
 
@@ -1090,7 +1023,7 @@ class Grid(TileRenderer):
 
         for y in range(self.size[1]):
             for x in range(self.size[0]):
-                self.renderTile(self.data[x, y], (x, y))
+                self.render_tile(self.data[x, y], (x, y))
 
     def get_tile_point(self, screen_location):
         """Return the xy choordinates of which tile intersects given a point. Returns None if no intersections."""
@@ -1098,9 +1031,9 @@ class Grid(TileRenderer):
         if not self.point_intersects(screen_location):
             return None
         # Otherwise, find out where screen point is in image locations
-        bx, by = self.toImageSurfLoc(screen_location)  # board x and y
-        # Finally, return the full divides (no decimals) of xy location by self.tileFull.
-        return int(bx // self.tileFull), int(by // self.tileFull)
+        bx, by = self.to_image_surface_location(screen_location)  # board x and y
+        # Finally, return the full divides (no decimals) of xy location by self.tile_full.
+        return int(bx // self.tile_full), int(by // self.tile_full)
 
     @gsc_bound_index()
     def place_tile(self, xy: tuple[int, int], tile: Tile) -> bool:
@@ -1480,7 +1413,7 @@ class Row(TileRenderer):
         self.clear_image((self.size, 1))
 
         for x in range(len(self.tiles)):
-            self.renderTile(self.tiles[x], (x, 0))
+            self.render_tile(self.tiles[x], (x, 0))
 
     def get_tile_point(self, screen_location: tuple[int, int]) -> int | None:
         """Return the xy choordinates of which tile intersects given a point. Returns None if no intersections."""
@@ -1621,7 +1554,7 @@ class PatternLine(MultipartObject):
             raise RuntimeError(
                 "Image Dimensions for Row Object (row.wh) are None!",
             )
-        h1 = self.get_row(0).tileFull
+        h1 = self.get_row(0).tile_full
         h = last * h1
         self.wh = w, h
         w1 = h1 / 2
@@ -1770,7 +1703,7 @@ class FloorLine(Row):
             return
         w, h = self.wh
         for x in range(self.size):
-            xy = round(x * self.tileFull + self.tileSep + sx - w / 2), round(
+            xy = round(x * self.tile_full + self.tileSep + sx - w / 2), round(
                 self.tileSep + sy - h / 2,
             )
             self.text.update_value(str(self.numbers[x]))
@@ -1853,7 +1786,7 @@ class Factory(Grid):
         self.name = f"Factory{self.number}"
 
         self.radius = math.ceil(
-            self.tileFull * self.size[0] * self.size[1] / 3 + 3,
+            self.tile_full * self.size[0] * self.size[1] / 3 + 3,
         )
 
     def __repr__(self) -> str:
@@ -1930,7 +1863,7 @@ class Factory(Grid):
     def process(self, time_passed: float) -> None:
         """Process self."""
         if self.image_update:
-            self.radius = self.tileFull * self.size[0] * self.size[1] / 3 + 3
+            self.radius = self.tile_full * self.size[0] * self.size[1] / 3 + 3
         super().process(time_passed)
 
 
@@ -1939,7 +1872,7 @@ class Factories(MultipartObject):
 
     teach = 4
 
-    def __init__(self, game: Game, factories: int, size="Auto"):
+    def __init__(self, game: Game, factories: int, size: int | Literal["Auto"]="Auto") -> None:
         """Requires a number of factories."""
         super().__init__("Factories")
 
@@ -1977,13 +1910,15 @@ class Factories(MultipartObject):
         super().process(time_passed)
         if not self.hidden:
             cursor = self.game.get_object_by_name("Cursor")
+            assert isinstance(cursor, Cursor)
             if cursor.is_pressed() and not cursor.is_holding():
-                obj, point = self.getWhereTouches(cursor.location)
+                obj, point = self.get_intersection(cursor.location)
                 if obj is not None and point is not None:
                     oid = int(obj[7:])
                     tileAtPoint = self.objects[oid].get_info(point)
                     if (tileAtPoint is not None) and tileAtPoint.color >= 0:
                         table = self.game.get_object_by_name("TableCenter")
+                        assert isinstance(table, Table)
                         select, tocenter = self.objects[oid].grab_color(
                             tileAtPoint.color,
                         )
@@ -2410,7 +2345,7 @@ class Player(MultipartObject):
                 floorLine = self.get_object_by_name("FloorLine")
                 board = self.get_object_by_name("Board")
                 if cursor.is_pressed():  # Mouse down?
-                    obj, point = self.getWhereTouches(cursor.location)
+                    obj, point = self.get_intersection(cursor.location)
                     if (
                         obj is not None and point is not None
                     ):  # Something pressed
@@ -2568,7 +2503,7 @@ class Button(Text):
 
     def render(self, surface: pygame.surface.Surface) -> None:
         if not self.hidden:
-            text_rect = self.getRect()
+            text_rect = self.get_rect()
             ##            if PYGAME_VERSION < 201:
             ##                pygame.draw.rect(surface, self.backcolor, text_rect)
             ##                pygame.draw.rect(surface, BLACK, text_rect, self.borderWidth)

@@ -25,12 +25,13 @@ Perhaps pygame raised an exception while initializing. This little
 messagebox can sure be a lot nicer than a stack trace. ;]
 """
 
+from __future__ import annotations
+
 __title__ = "errorbox"
 
 
 def errorbox(title: str, message: str) -> None:
     """Attempt to error with a gui."""
-    global HANDLERS
     __stdout(title, message)
     for e in HANDLERS:
         try:
@@ -54,7 +55,8 @@ def __wxpython(title: str, message: str) -> None:
     from wxPython.wx import wxApp, wxICON_EXCLAMATION, wxMessageDialog, wxOK
 
     class LameApp(wxApp):
-        def OnInit(self):
+        __slots__ = ()
+        def OnInit(self) -> int:
             return 1
 
     LameApp()
@@ -66,9 +68,11 @@ def __wxpython(title: str, message: str) -> None:
 def __tkinter(title: str, message: str) -> None:
     """Error with tkinter."""
     import tkinter as tk
+    from tkinter import messagebox
 
     tk.Tk().wm_withdraw()
-    tk.messagebox.showerror(title, message)
+    # types: attr-defined error: Module has no attribute "messagebox"
+    messagebox.showerror(title, message)
 
 
 def __pygame(title: str, message: str) -> None:

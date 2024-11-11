@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable
+    from azul.game import Tile
 
 T = TypeVar("T")
 Numeric = TypeVar("Numeric", int, float)
@@ -56,7 +57,7 @@ def gen_random_proper_seq(length: int, **kwargs: float) -> list[str]:
     return randomize(letters)
 
 
-def sort_tiles(tile_object: Any) -> int:
+def sort_tiles(tile_object: Tile) -> int:
     """Key function for sorting tiles."""
     return tile_object.color
 

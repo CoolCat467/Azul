@@ -17,7 +17,7 @@ def load_json(filename: str) -> dict[str, str]:
     """Return json data loaded from filename."""
     with open(filename, encoding="utf-8") as loaded:
         data = json.load(loaded)
-        loaded.close()
+    assert isinstance(data, dict)
     return data
 
 

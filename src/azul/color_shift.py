@@ -10,7 +10,7 @@ __version__ = "0.0.0"
 
 from typing import TYPE_CHECKING
 
-from azul.vector import Vector
+from azul.vector import Vector3
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -24,7 +24,7 @@ def lerp(
     percent: float,
 ) -> tuple[int, ...]:
     """Linear interpolate from color to to_color by percent."""
-    vcolor = Vector.from_iter(color)
+    vcolor = Vector3.from_iter(color)
     if len(vcolor) > len(to_color):
         to_color = tuple(to_color) + (0,) * (len(vcolor) - len(to_color))
     elif len(color) < len(to_color):
