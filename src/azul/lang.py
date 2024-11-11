@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
-# Language file handler
-
 """Language file handler."""
+
+from __future__ import annotations
 
 # Programmed by CoolCat467
 
@@ -14,7 +13,7 @@ from functools import cache
 from os.path import exists, join
 
 
-def load_json(filename: str) -> dict:
+def load_json(filename: str) -> dict[str, str]:
     """Return json data loaded from filename."""
     with open(filename, encoding="utf-8") as loaded:
         data = json.load(loaded)
@@ -23,14 +22,9 @@ def load_json(filename: str) -> dict:
 
 
 @cache
-def load_lang(name: str) -> dict | None:
+def load_lang(name: str) -> dict[str, str] | None:
     """Return full data for language with given name."""
     filename = join("lang", f"{name}.json")
     if not exists(filename):
         return None
     return load_json(filename)
-
-
-if __name__ == "__main__":
-    print(f"{__title__}\nProgrammed by {__author__}.")
-##    run()
