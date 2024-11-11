@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
-# Button
-
 """Button."""
+
+from __future__ import annotations
 
 # Programmed by CoolCat467
 
@@ -9,13 +8,20 @@ __title__ = "Button"
 __author__ = "CoolCat467"
 __version__ = "0.0.0"
 
-from collections.abc import Callable
 
-from component import Component
+from typing import TYPE_CHECKING
+
 from pygame import cursors, draw, font, mouse
-from pygame.locals import SRCALPHA  # pylint: disable=no-name-in-module
-from pygame.surface import Surface  # pylint: disable=no-name-in-module
-from vector import Vector
+from pygame.locals import (
+    SRCALPHA,
+)
+from pygame.surface import Surface
+
+from azul.component import Component
+from azul.vector import Vector
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class BoxOutlineComponent(Component):
@@ -24,6 +30,7 @@ class BoxOutlineComponent(Component):
     __slots__ = ("outline", "color", "border_radius", "border_width")
 
     def __init__(self):
+        """Initialize box outline component."""
         super().__init__("box_outline")
 
         self.outline = (0, 0, 0)
@@ -67,7 +74,8 @@ class LabelComponent(Component):
 
     __slots__ = ("__text", "text_color", "font")
 
-    def __init__(self):
+    def __init__(self, font_path: str, text_size: int) -> None:
+        """Initialize label component."""
         super().__init__("label")
 
         self.__text = ""
@@ -122,15 +130,16 @@ class TextBox(Component):
         self,
         font_path: str,
         text_size: int,
-        initial_text,
+        initial_text: str,
         *groups,
-        submit_response: Callable | None = None,
+        submit_response: Callable[str, None] | None = None,
         text_color: tuple = (0, 0, 0),
         outline: tuple = (0, 0, 0),
         button_color: tuple = (0xFF, 0xFF, 0xFF),
         border_radius: int = 5,
         border_width: int = 3,
-    ):
+    ) -> None:
+        """Initialize textbox component."""
         self.__flash = True
         self.initial_text = "<" + initial_text + ">"
         super().__init__(
@@ -189,7 +198,7 @@ class TextBox(Component):
         )
         draw.rect(self.image, self.text_color, pos)
 
-    async def change_focus(self, new_focus: bool) -> None:
+    def change_focus(self, new_focus: bool) -> None:
         """Change focus state."""
         if new_focus == self.focused:
             return
@@ -206,27 +215,24 @@ class TextBox(Component):
             text = self.text if self.text != self.initial_text else ""
             if self.submit_response is None:
                 return
-            if iscoroutine(self.submit_response):
-                await self.submit_response(text)
-                return
             self.submit_response(text)
 
     async def on_click(self, from_top: int) -> str:
         """On button pressed handler."""
         if from_top > 0:
             return
-        await self.change_focus(True)
+        self.change_focus(True)
 
     async def on_event(self, event) -> None:
         """Handle events."""
         if not mouse.get_focused():
-            return await self.change_focus(False)
+            return self.change_focus(False)
         if event.type == "MouseButtonDown":
             if event["button"] == 1:
-                return await self.change_focus(False)
+                return self.change_focus(False)
             if event["button"] == 3 and self.rect.collidepoint(event["pos"]):
                 self.text = self.initial_text
-                return await self.change_focus(False)
+                return self.change_focus(False)
         if self.focused:
             if self.text == self.initial_text:
                 self.text = ""  #' '*len(self.initial_text)
@@ -246,7 +252,7 @@ class TextBox(Component):
                 ##                    pass
 
                 if event["unicode"] == "\r":
-                    return await self.change_focus(False)
+                    return self.change_focus(False)
                 return None
             return None
         ##            if event.type == 'MouseMotion':
@@ -255,7 +261,3 @@ class TextBox(Component):
             self.text = self.initial_text
             return None
         return None
-
-
-if __name__ == "__main__":
-    print(f"{__title__}\nProgrammed by {__author__}.")

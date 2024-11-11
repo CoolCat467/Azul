@@ -1,19 +1,17 @@
-#!/usr/bin/env python3
-# Azul Client
-
 """Azul Client."""
 
-# Programmed by CoolCat467
+from __future__ import annotations
 
+# Programmed by CoolCat467
 # Hide the pygame prompt
 import os
-from collections.abc import Iterator
 from os import path
 
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "True"
 del os
 
 import contextlib
+from typing import TYPE_CHECKING
 
 import conf
 import lang
@@ -21,10 +19,15 @@ import objects
 import pygame
 import sprite
 import trio
-from component import Component, ComponentManager, Event
-from pygame.locals import *
-from statemachine import AsyncState, AsyncStateMachine
-from vector import Vector2
+from pygame.locals import K_ESCAPE, KEYUP, QUIT, RESIZABLE, WINDOWRESIZED
+from pygame.rect import Rect
+
+from azul.component import Component, ComponentManager, Event
+from azul.statemachine import AsyncState, AsyncStateMachine
+from azul.vector import Vector2
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 __title__ = "Azul Client"
 __author__ = "CoolCat467"
@@ -40,7 +43,7 @@ VSYNC = True
 class AzulState(AsyncState):
     """Azul Client Asynchronous base class."""
 
-    machine: "AzulClient"
+    machine: AzulClient
     __slots__ = ("id", "manager")
 
     def __init__(self, name: str) -> None:
@@ -373,41 +376,41 @@ async def async_run() -> None:
 
 
 class Tracer(trio.abc.Instrument):
-    def before_run(self):
+    def before_run(self) -> None:
         print("!!! run started")
 
-    def _print_with_task(self, msg, task):
+    def _print_with_task(self, msg: str, task):
         # repr(task) is perhaps more useful than task.name in general,
         # but in context of a tutorial the extra noise is unhelpful.
         print(f"{msg}: {task.name}")
 
-    def task_spawned(self, task):
+    def task_spawned(self, task) -> None:
         self._print_with_task("### new task spawned", task)
 
-    def task_scheduled(self, task):
+    def task_scheduled(self, task) -> None:
         self._print_with_task("### task scheduled", task)
 
-    def before_task_step(self, task):
+    def before_task_step(self, task) -> None:
         self._print_with_task(">>> about to run one step of task", task)
 
-    def after_task_step(self, task):
+    def after_task_step(self, task) -> None:
         self._print_with_task("<<< task step finished", task)
 
-    def task_exited(self, task):
+    def task_exited(self, task) -> None:
         self._print_with_task("### task exited", task)
 
-    def before_io_wait(self, timeout):
+    def before_io_wait(self, timeout) -> None:
         if timeout:
             print(f"### waiting for I/O for up to {timeout} seconds")
         else:
             print("### doing a quick check for I/O")
         self._sleep_time = trio.current_time()
 
-    def after_io_wait(self, timeout):
+    def after_io_wait(self, timeout) -> None:
         duration = trio.current_time() - self._sleep_time
         print(f"### finished I/O check (took {duration} seconds)")
 
-    def after_run(self):
+    def after_run(self) -> None:
         print("!!! run finished")
 
 
