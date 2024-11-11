@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# TITLE DESCRIPTION
-
 """Room."""
 
 # Programmed by CoolCat467
@@ -18,9 +15,11 @@ class Unloaded(AsyncState):
     __slots__ = ()
 
     def __init__(self):
+        """Unloaded state init."""
         super().__init__("unloaded")
 
     async def check_conditions(self) -> None:
+        """Print machine size."""
         print(self.machine.size)
 
 
@@ -30,10 +29,12 @@ class Lobby(AsyncState):
     __slots__ = ()
 
     def __init__(self):
+        """Loby state init."""
         super().__init__("lobby")
         self.machine.host = None
 
     async def check_conditions(self) -> None:
+        """Print machine size."""
         print(self.machine.size)
 
 
@@ -45,6 +46,7 @@ class BaseRoom(StateTimer):
     min_delay = 0
 
     def __init__(self, server, name: str):
+        """Room init."""
         super().__init__(server, name, 0)
 
         self.size = 4
@@ -55,6 +57,7 @@ class BaseRoom(StateTimer):
         self.add_state(Lobby())
 
     async def initialize_state(self) -> None:
+        """Set state to lobby."""
         await self.set_state("lobby")
 
     def add_client(self, client) -> None:
@@ -68,6 +71,7 @@ class Room(BaseRoom):
     __slots__ = ()
 
     def __init__(self, server):
+        """Room init."""
         super().__init__(server, "room")
 
 
@@ -78,6 +82,7 @@ class Liminal(BaseRoom):
     gear_type = "liminal_room"
 
     def __init__(self, server):
+        """Liminal room init."""
         super().__init__(server, "limital")
 
 

@@ -25,7 +25,7 @@ def load_json(filename: str) -> dict:
 @cache
 def load_lang(name: str) -> dict | None:
     """Return full data for language with given name."""
-    filename = join("lang", name + ".json")
+    filename = join("lang", f"{name}.json")
     if not exists(filename):
         return None
     return load_json(filename)

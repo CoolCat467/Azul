@@ -56,7 +56,7 @@ if globals().get("__file__") is None:
     import importlib
 
     __file__ = str(
-        Path(importlib.import_module("checkers.data").__path__[0]).parent
+        Path(importlib.import_module("azul.data").__path__[0]).parent
         / "game.py",
     )
 
