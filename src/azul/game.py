@@ -450,7 +450,7 @@ class Font:
 class ObjectHandler:
     """ObjectHandler class, meant to be used for other classes."""
 
-##    __slots__ = ("objects", "next_id", "cache")
+    ##    __slots__ = ("objects", "next_id", "cache")
 
     def __init__(self) -> None:
         self.objects = {}
@@ -1114,7 +1114,7 @@ class Grid(TileRenderer):
         return False
 
     @gsc_bound_index()
-    def get_tile(self, xy: tuple[int, int], replace: int=-6) -> Tile | None:
+    def get_tile(self, xy: tuple[int, int], replace: int = -6) -> Tile | None:
         """Return a Tile Object from a given position in the grid if permitted. Return None on failure."""
         x, y = xy
         tile_copy = self.data[x, y]
@@ -1247,7 +1247,9 @@ class Board(Grid):
     def canPlaceTileColorAtPoint(self, position, tile):
         """Return True if tile's color is valid at given position."""
         column, row = position
-        colors = set(self.get_colorsInColumn(column) + self.get_colorsInRow(row))
+        colors = set(
+            self.get_colorsInColumn(column) + self.get_colorsInRow(row),
+        )
         return tile.color not in colors
 
     def get_rowsToTile(self):
@@ -1516,7 +1518,9 @@ class Row(TileRenderer):
         numCorrect = self.get_placeable() > 0
 
         board = self.player.get_object_by_name("Board")
-        colorNotPresent = tile.color not in board.get_colorsInRow(self.size - 1)
+        colorNotPresent = tile.color not in board.get_colorsInRow(
+            self.size - 1,
+        )
 
         return placeable and colorCorrect and numCorrect and colorNotPresent
 
