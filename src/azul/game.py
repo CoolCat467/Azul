@@ -348,7 +348,7 @@ class Font:
 
     def __init__(
         self,
-        font_name: str,
+        font_name: str | Path,
         fontsize: int = 20,
         color: tuple[int, int, int] = (0, 0, 0),
         cx: bool = True,
@@ -888,6 +888,7 @@ class TileRenderer(Object):
 class Cursor(TileRenderer):
     """Cursor Object."""
 
+    __slots__ = ("holding_number_one", "tiles")
     greyshift = GREYSHIFT
     Render_Priority = "last"
 
@@ -1042,12 +1043,14 @@ def gsc_bound_index(
 class Grid(TileRenderer):
     """Grid object, used for boards and parts of other objects."""
 
+    __slots__ = ("size", "data")
+
     def __init__(
         self,
         size: tuple[int, int],
         game: Game,
         tile_seperation: int | None = None,
-        background: tuple[int, int, int] = TILEDEFAULT,
+        background: tuple[int, int, int] | None = TILEDEFAULT,
     ) -> None:
         """Grid Objects require a size and game at least."""
         super().__init__("Grid", game, tile_seperation, background)
@@ -1127,6 +1130,7 @@ class Grid(TileRenderer):
         return colors == [empty_color]
 
     def __del__(self) -> None:
+        """Delete data."""
         super().__del__()
         del self.data
 
@@ -1134,12 +1138,12 @@ class Grid(TileRenderer):
 class Board(Grid):
     """Represents the board in the Game."""
 
-    size = (5, 5)
+    __slots__ = ("player", "variant_play", "additions", "wall_tileing")
     bcolor = ORANGE
 
     def __init__(self, player: Player, variant_play: bool = False) -> None:
         """Requires a player object."""
-        super().__init__(self.size, player.game, background=self.bcolor)
+        super().__init__((5, 5), player.game, background=self.bcolor)
         self.name = "Board"
         self.player = player
 
@@ -1463,15 +1467,6 @@ class Row(TileRenderer):
     def __repr__(self) -> str:
         return "Row(%r, %i, ...)" % (self.game, self.size)
 
-    @classmethod
-    def from_list(cls, player, iterable):
-        """Return a new Row Object from a given player and an iterable of tiles."""
-        lst = deque(iterable)
-        obj = cls(player, len(lst))
-        obj.color = None
-        obj.tiles = lst
-        return obj
-
     def update_image(self) -> None:
         """Update self.image."""
         self.clear_image((self.size, 1))
@@ -1491,15 +1486,15 @@ class Row(TileRenderer):
         """Return the number of tiles in self that are not fake tiles, like grey ones."""
         return len([tile for tile in self.tiles if tile.color >= 0])
 
-    def get_placeable(self):
+    def get_placeable(self) -> int:
         """Return the number of tiles permitted to be placed on self."""
         return self.size - self.get_placed()
 
-    def is_full(self):
+    def is_full(self) -> bool:
         """Return True if this row is full."""
         return self.get_placed() == self.size
 
-    def get_info(self, location):
+    def get_info(self, location: int) -> Tile | None:
         """Return tile at location without deleting it. Return None on invalid location."""
         index = self.size - 1 - location
         if index < 0 or index > len(self.tiles):
@@ -1511,15 +1506,20 @@ class Row(TileRenderer):
         placeable = (tile.color == self.color) or (
             self.color < 0 and tile.color >= 0
         )
-        colorCorrect = tile.color >= 0 and tile.color < 5
-        numCorrect = self.get_placeable() > 0
+        if not placeable:
+            return False
+        color_correct = tile.color >= 0 and tile.color < 5
+        if not color_correct:
+            return False
+        number_correct = self.get_placeable() > 0
+        if not number_correct:
+            return False
 
         board = self.player.get_object_by_name("Board")
-        colorNotPresent = tile.color not in board.get_colors_in_row(
+        # Is color not present?
+        return tile.color not in board.get_colors_in_row(
             self.size - 1,
         )
-
-        return placeable and colorCorrect and numCorrect and colorNotPresent
 
     def get_tile(self, replace: int = -6) -> Tile:
         """Return the leftmost tile while deleting it from self."""
@@ -1562,19 +1562,23 @@ class Row(TileRenderer):
         else:
             raise ValueError("Not allowed to place tiles.")
 
-    def wall_tile(self, addToDict, empty_color: int = -6) -> None:
+    def wall_tile(
+        self,
+        add_to_table: dict[str, list[Tile] | None],
+        empty_color: int = -6,
+    ) -> None:
         """Move tiles around and into add dictionary for the wall tiling phase of the game. Removes tiles from self."""
-        if "tiles_for_box" not in addToDict:
-            addToDict["tiles_for_box"] = []
+        if "tiles_for_box" not in add_to_table:
+            add_to_table["tiles_for_box"] = []
         if not self.is_full():
-            addToDict[str(self.size)] = None
+            add_to_table[str(self.size)] = None
             return
         self.color = empty_color
-        addToDict[str(self.size)] = self.get_tile()
+        add_to_table[str(self.size)] = self.get_tile()
         for _i in range(self.size - 1):
-            addToDict["tiles_for_box"].append(self.get_tile())
+            add_to_table["tiles_for_box"].append(self.get_tile())
 
-    def set_background(self, color) -> None:
+    def set_background(self, color: tuple[int, int, int] | None) -> None:
         """Set the background color for this row."""
         self.back = color
         self.image_update = True
@@ -1583,12 +1587,13 @@ class Row(TileRenderer):
 class PatternLine(MultipartObject):
     """Represents multiple rows to make the pattern line."""
 
+    __slots__ = ("player", "row_seperation")
     size = (5, 5)
 
-    def __init__(self, player, row_seperation: int = 0) -> None:
+    def __init__(self, player: Player, row_seperation: int = 0) -> None:
         MultipartObject.__init__(self, "PatternLine")
         self.player = player
-        self.rowSep = row_seperation
+        self.row_seperation = row_seperation
 
         for x, _y in zip(
             range(self.size[0]),
@@ -1599,14 +1604,14 @@ class PatternLine(MultipartObject):
 
         self.set_background(None)
 
-        self._lastloc = 0, 0
+        self._lastloc = Vector2(0, 0)
 
-    def set_background(self, color):
+    def set_background(self, color: tuple[int, int, int] | None) -> None:
         """Set the background color for all rows in the pattern line."""
         self.set_attr_all("back", color)
         self.set_attr_all("image_update", True)
 
-    def get_row(self, row: int):
+    def get_row(self, row: int) -> Row:
         """Return given row."""
         return self.get_object(row)
 
@@ -1627,12 +1632,12 @@ class PatternLine(MultipartObject):
         y -= h / 2 - w1
         for rid in self.objects:
             l = last - self.objects[rid].size
-            self.objects[rid].location = x + (l * w1), y + rid * h1
+            self.objects[rid].location = Vector2(x + (l * w1), y + rid * h1)
 
     def get_tile_point(
         self,
         screen_location: tuple[int, int],
-    ) -> tuple[int, int]:
+    ) -> tuple[int, int] | None:
         """Return the xy choordinates of which tile intersects given a point. Returns None if no intersections."""
         for y in range(self.size[1]):
             x = self.get_row(y).get_tile_point(screen_location)
@@ -1644,7 +1649,7 @@ class PatternLine(MultipartObject):
         """Return True if self is full."""
         return all(self.get_row(rid).is_full() for rid in range(self.size[1]))
 
-    def wall_tileing(self):
+    def wall_tileing(self) -> dict:
         """Return a dictionary to be used with wall tiling. Removes tiles from rows."""
         values = {}
         for rid in range(self.size[1]):
@@ -1684,12 +1689,12 @@ class Text(Object):
             True,
         )
         self._cxy = cx, cy
-        self._last = None
+        self._last: str | None = None
 
     def get_image_zero(self) -> tuple[int, int]:
         """Return the screen location of the topleft point of self.image."""
-        x = self.location[0]
-        y = self.location[1]
+        x = int(self.location[0])
+        y = int(self.location[1])
         if self._cxy[0]:
             x -= self.wh[0] // 2
         if self._cxy[1]:
@@ -1697,7 +1702,7 @@ class Text(Object):
         return x, y
 
     def __repr__(self) -> str:
-        return "<Text Object>"
+        return f"<{self.__class__.__name__} Object>"
 
     @staticmethod
     def get_font_height(font: str, size: int) -> int:
@@ -1709,20 +1714,18 @@ class Text(Object):
         text: str | None,
         size: int | None = None,
         color: tuple[int, int, int] | None = None,
-        background: tuple[int, int, int] | str = "set",
+        background: tuple[int, int, int] | None = None,
     ) -> pygame.surface.Surface:
         """Return a surface of given text rendered in FONT."""
-        if background == "set":
-            self.image = self.font.render_nosurf(text, size, color)
-            return self.image
         self.image = self.font.render_nosurf(text, size, color, background)
         return self.image
 
     def get_surface(self) -> pygame.surface.Surface:
         """Return self.image."""
+        assert self.image is not None
         return self.image
 
-    def get_tile_point(self, location):
+    def get_tile_point(self, location: tuple[int, int]) -> None:
         """Set get_tile_point attribute so that errors are not raised."""
         return
 
@@ -1739,8 +1742,8 @@ class FloorLine(Row):
     size = 7
     number_one_color = NUMBERONETILE
 
-    def __init__(self, player) -> None:
-        Row.__init__(self, player, self.size, background=ORANGE)
+    def __init__(self, player: Player) -> None:
+        super().__init__(player, self.size, background=ORANGE)
         self.name = "floor_line"
 
         ##        self.font = Font(FONT, round(self.tile_size*1.2), color=BLACK, cx=False, cy=False)
@@ -1760,7 +1763,7 @@ class FloorLine(Row):
 
     def render(self, surface: pygame.surface.Surface) -> None:
         """Update self.image."""
-        Row.render(self, surface)
+        super().render(surface)
 
         sx, sy = self.location
         if self.wh is None:
@@ -1773,7 +1776,7 @@ class FloorLine(Row):
                 self.tile_seperation + sy - h / 2,
             )
             self.text.update_value(str(self.numbers[x]))
-            self.text.location = xy
+            self.text.location = Vector2(*xy)
             self.text.render(surface)
 
     ##            self.font.render(surface, str(self.numbers[x]), xy)
@@ -1785,18 +1788,19 @@ class FloorLine(Row):
         if tile.color == self.number_one_color:
             self.has_number_one_tile = True
 
-        boxLid = self.player.game.get_object_by_name("BoxLid")
+        box_lid = self.player.game.get_object_by_name("BoxLid")
+        assert isinstance(box_lid, BoxLid)
 
-        def handleEnd(end: Tile) -> None:
+        def handle_end(end: Tile) -> None:
             """Handle the end tile we are replacing. Ensures number one tile is not removed."""
             if not end.color < 0:
                 if end.color == self.number_one_color:
-                    handleEnd(self.tiles.pop())
+                    handle_end(self.tiles.pop())
                     self.tiles.appendleft(end)
                     return
-                boxLid.add_tile(end)
+                box_lid.add_tile(end)
 
-        handleEnd(self.tiles.pop())
+        handle_end(self.tiles.pop())
 
         self.image_update = True
 
@@ -2009,11 +2013,11 @@ class Factories(MultipartObject):
                     # Draw a tile from the bag.
                     drawn.append(self.game.bag.draw_tile())
                 else:  # Otherwise, get the box lid
-                    boxLid = self.game.get_object_by_name("BoxLid")
+                    box_lid = self.game.get_object_by_name("BoxLid")
                     # If the box lid is not empty,
-                    if not boxLid.is_empty():
+                    if not box_lid.is_empty():
                         # Add all the tiles from the box lid to the bag
-                        self.game.bag.add_tiles(boxLid.get_tiles())
+                        self.game.bag.add_tiles(box_lid.get_tiles())
                         # and shake the bag to randomize everything
                         self.game.bag.reset()
                         # Then, grab a tile from the bag like usual.
@@ -2347,10 +2351,10 @@ class Player(MultipartObject):
         pattern_line = self.get_object_by_name("PatternLine")
         self.get_object_by_name("floor_line")
         board = self.get_object_by_name("Board")
-        boxLid = self.game.get_object_by_name("BoxLid")
+        box_lid = self.game.get_object_by_name("BoxLid")
 
         data = pattern_line.wall_tileing()
-        boxLid.add_tiles(data["tiles_for_box"])
+        box_lid.add_tiles(data["tiles_for_box"])
         del data["tiles_for_box"]
 
         board.wall_tiling_mode(data)
@@ -2368,7 +2372,7 @@ class Player(MultipartObject):
         """Do the scoring phase of the game for this player."""
         board = self.get_object_by_name("Board")
         floor_line = self.get_object_by_name("floor_line")
-        boxLid = self.game.get_object_by_name("BoxLid")
+        box_lid = self.game.get_object_by_name("BoxLid")
 
         def saturatescore() -> None:
             if self.score < 0:
@@ -2379,7 +2383,7 @@ class Player(MultipartObject):
         saturatescore()
 
         tiles_for_box, number_one = floor_line.get_tiles()
-        boxLid.add_tiles(tiles_for_box)
+        box_lid.add_tiles(tiles_for_box)
 
         self.update_score()
 
@@ -2411,7 +2415,7 @@ class Player(MultipartObject):
                 self.hidden = False
             if not self.networked:  # We not networked.
                 cursor = self.game.get_object_by_name("Cursor")
-                boxLid = self.game.get_object_by_name("BoxLid")
+                box_lid = self.game.get_object_by_name("BoxLid")
                 pattern_line = self.get_object_by_name("PatternLine")
                 floor_line = self.get_object_by_name("floor_line")
                 board = self.get_object_by_name("Board")
@@ -2446,7 +2450,7 @@ class Player(MultipartObject):
                                     tiles_to_add = cursor.drop()
                                     if floor_line.is_full():  # Floor is full,
                                         # Add tiles to box instead.
-                                        boxLid.add_tiles(tiles_to_add)
+                                        box_lid.add_tiles(tiles_to_add)
                                     elif floor_line.get_placeable() < len(
                                         tiles_to_add,
                                     ):
@@ -2457,7 +2461,7 @@ class Player(MultipartObject):
                                                     tiles_to_add.pop(),
                                                 )
                                             else:
-                                                boxLid.add_tile(
+                                                box_lid.add_tile(
                                                     tiles_to_add.pop(),
                                                 )
                                     else:  # Otherwise add to floor line for all.
@@ -2566,7 +2570,7 @@ class Button(Text):
         text: str,
         size: int | None = None,
         color: tuple[int, int, int] | None = None,
-        background: str = "set",
+        background: tuple[int, int, int] | None = None,
     ) -> None:
         disp = str(text).center(self.minsize)
         super().update_value(f" {disp} ", size, color, background)
@@ -2622,7 +2626,7 @@ class GameState:
 
     def __init__(self, name: str) -> None:
         """Initialize state with a name, set self.game to None to be overwritten later."""
-        self.game = None
+        self.game: Game | None = None
         self.name = name
 
     def __repr__(self) -> str:
@@ -2636,7 +2640,7 @@ class GameState:
 
     def check_state(self) -> str | None:
         """Check state and return new state. None remains in current state."""
-        return
+        return None
 
     def exit_actions(self) -> None:
         """Perform exit actions for this GameState."""
@@ -2653,7 +2657,7 @@ class MenuState(GameState):
         super().__init__(name)
         self.bh = Text.get_font_height(FONT, self.fontsize)
 
-        self.next_state = None
+        self.next_state: str | None = None
 
     def add_button(
         self,
@@ -2668,7 +2672,8 @@ class MenuState(GameState):
         button = Button(self, name, minlen, value, size)
         button.bind_action(action)
         if location is not None:
-            button.location = location
+            button.location = Vector2(*location)
+        assert self.game is not None
         self.game.add_object(button)
         return button.id
 
@@ -2684,8 +2689,9 @@ class MenuState(GameState):
     ) -> int:
         """Add a new Text object to self.game with arguments. Return text id."""
         text = Text(size, color, None, cx, cy, name)
-        text.location = location
+        text.location = Vector2(*location)
         text.update_value(value)
+        assert self.game is not None
         self.game.add_object(text)
         return text.id
 
@@ -2693,6 +2699,7 @@ class MenuState(GameState):
         """Clear all objects, add cursor object, and set up next_state."""
         self.next_state = None
 
+        assert self.game is not None
         self.game.rm_star()
         self.game.add_object(Cursor(self.game))
 
@@ -2757,6 +2764,7 @@ class MenuState(GameState):
         value_function: Callable[[], str],
     ) -> Callable[[], None]:
         """Update text object with text_name's display value."""
+        assert self.game is not None
 
         def updater() -> None:
             """Update text object {text_name}'s value with {value_function}."""
@@ -2800,6 +2808,7 @@ class InitState(GameState):
 
     def entry_actions(self) -> None:
         """Register keyboard handlers."""
+        assert self.game is not None
         self.game.keyboard.add_listener("\x7f", "Delete")
         self.game.keyboard.bind_action("Delete", "screenshot", 5)
 
@@ -2831,20 +2840,20 @@ class TitleScreen(MenuState):
             "ToSettings",
             "New Game",
             self.to_state("Settings"),
-            (sw / 2, sh / 2 - self.bh * 0.5),
+            (sw // 2, sh // 2 - self.bh // 2),
         )
         self.add_button(
             "ToCredits",
             "Credits",
             self.to_state("Credits"),
-            (sw / 2, sh / 2 + self.bh * 3),
+            (sw // 2, sh // 2 + self.bh * 3),
             self.fontsize / 1.5,
         )
         self.add_button(
             "Quit",
             "Quit",
             self.game.raise_close,
-            (sw / 2, sh / 2 + self.bh * 4),
+            (sw // 2, sh // 2 + self.bh * 4),
             self.fontsize / 1.5,
         )
 
@@ -2931,10 +2940,10 @@ class SettingsScreen(MenuState):
                 add_number(i, start + i, cx, cy)
 
         sw, sh = SCREENSIZE
-        cx = sw / 2
-        cy = sh / 2
+        cx = sw // 2
+        cy = sh // 2
 
-        def host_text(x):
+        def host_text(x: object) -> str:
             return f"Host Mode: {x}"
 
         self.add_text(
@@ -2951,6 +2960,7 @@ class SettingsScreen(MenuState):
         )
 
         # TEMPORARY: Hide everything to do with "Host Mode", networked games aren't done yet.
+        assert self.game is not None
         self.game.set_attr_all("hidden", True)
 
         def varient_text(x: object) -> str:
@@ -2989,6 +2999,7 @@ class SettingsScreen(MenuState):
 
     def exit_actions(self) -> None:
         """Start game."""
+        assert self.game is not None
         self.game.start_game(
             self.player_count,
             self.variant_play,
@@ -3007,13 +3018,18 @@ class PhaseFactoryOffer(GameState):
 
     def entry_actions(self) -> None:
         """Advance turn."""
+        assert self.game is not None
         self.game.next_turn()
 
     def check_state(self) -> str | None:
         """If all tiles are gone, go to wall tiling. Otherwise keep waiting for that to happen."""
+        assert self.game is not None
         fact = self.game.get_object_by_name("Factories")
+        assert isinstance(fact, Factories)
         table = self.game.get_object_by_name("TableCenter")
+        assert isinstance(table, TableCenter)
         cursor = self.game.get_object_by_name("Cursor")
+        assert isinstance(cursor, Cursor)
         if (
             fact.is_all_empty()
             and table.is_empty()
@@ -3039,6 +3055,7 @@ class PhaseWallTiling(GameState):
         super().__init__("WallTiling")
 
     def entry_actions(self) -> None:
+        assert self.game is not None
         self.next_starter = None
         self.not_processed = []
 
@@ -3056,6 +3073,7 @@ class PhaseWallTiling(GameState):
         self.game.next_turn()
 
     def do_actions(self) -> None:
+        assert self.game is not None
         if self.not_processed:
             if self.game.player_turn in self.not_processed:
                 player = self.game.get_player(self.game.player_turn)
@@ -3078,12 +3096,15 @@ class PhaseWallTiling(GameState):
                 self.game.next_turn()
 
     def check_state(self) -> str | None:
+        assert self.game is not None
         cursor = self.game.get_object_by_name("Cursor")
+        assert isinstance(cursor, Cursor)
         if not self.not_processed and not cursor.is_holding():
             return "PrepareNext"
         return None
 
     def exit_actions(self) -> None:
+        assert self.game is not None
         # Set up the player that had the number one tile to be the starting player next round.
         self.game.player_turn_over()
         # Goal: make (self.player_turn + 1) % self.players = self.next_starter
@@ -3111,6 +3132,7 @@ class PhasePrepareNext(GameState):
         self.new_round = False
 
     def entry_actions(self) -> None:
+        assert self.game is not None
         players = (
             self.game.get_player(player_id)
             for player_id in range(self.game.players)
@@ -3119,8 +3141,10 @@ class PhasePrepareNext(GameState):
         self.new_round = not any(complete)
 
     def do_actions(self) -> None:
+        assert self.game is not None
         if self.new_round:
             fact = self.game.get_object_by_name("Factories")
+            assert isinstance(fact, Factories)
             # This also handles bag re-filling from box lid.
             fact.play_tiles_from_bag()
 
@@ -3146,10 +3170,12 @@ class EndScreen(MenuState):
 
     def get_winners(self) -> None:
         """Update self.ranking by player scores."""
+        assert self.game is not None
         self.ranking = {}
         scpid = {}
         for player_id in range(self.game.players):
             player = self.game.get_player(player_id)
+            assert isinstance(player, Player)
             player.end_of_game_trigger()
             if player.score not in scpid:
                 scpid[player.score] = [player_id]
@@ -3214,13 +3240,16 @@ class EndScreen(MenuState):
         self.wininf = text[:-1]
 
     def entry_actions(self) -> None:
+        assert self.game is not None
         # Figure out who won the game by points.
         self.get_winners()
         # Hide everything
         table = self.game.get_object_by_name("TableCenter")
+        assert isinstance(table, TableCenter)
         table.hidden = True
 
         fact = self.game.get_object_by_name("Factories")
+        assert isinstance(fact, Factories)
         fact.set_attr_all("hidden", True)
 
         # Add buttons
@@ -3228,14 +3257,14 @@ class EndScreen(MenuState):
             "ReturnTitle",
             "Return to Title",
             self.to_state("Title"),
-            (SCREENSIZE[0] / 2, math.floor(SCREENSIZE[1] * (4 / 5))),
+            (SCREENSIZE[0] // 2, SCREENSIZE[1] * 4 // 5),
         )
         buttontitle = self.game.get_object(bid)
         buttontitle.Render_Priority = "last-1"
         buttontitle.cur_time = 2
 
         # Add score board
-        x = SCREENSIZE[0] / 2
+        x = SCREENSIZE[0] // 2
         y = 10
         for idx, line in enumerate(self.wininf.split("\n")):
             self.add_text(f"Line{idx}", line, (x, y), cx=True, cy=False)
@@ -3297,7 +3326,7 @@ class Game(ObjectHandler):
         self.bag = Bag(TILECOUNT, REGTILECOUNT)
 
         # Cache
-        self.cache = {}
+        self.cache: dict[int, pygame.surface.Surface] = {}
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
@@ -3335,7 +3364,7 @@ class Game(ObjectHandler):
         """Raise a window close event."""
         pygame.event.post(pygame.event.Event(QUIT))
 
-    def add_states(self, states):
+    def add_states(self, states: Iterable[GameState]) -> None:
         """Add game states to self."""
         for state in states:
             if not isinstance(state, GameState):
@@ -3392,10 +3421,12 @@ class Game(ObjectHandler):
         self.process_objects(time_passed)
         self.update_state()
 
-    def get_player(self, player_id: int):
+    def get_player(self, player_id: int) -> Player:
         """Get the player with player id player_id."""
         if self.players:
-            return self.get_object_by_name(f"Player{player_id}")
+            player = self.get_object_by_name(f"Player{player_id}")
+            assert isinstance(player, Player)
+            return player
         raise RuntimeError("No players!")
 
     def player_turn_over(self) -> None:
@@ -3456,15 +3487,18 @@ class Game(ObjectHandler):
             closedeg = truedeg // mdeg * mdeg + 45
             rad = math.radians(closedeg)
 
-            newp.location = round(cx + out * math.sin(rad)), round(
-                cy + out * math.cos(rad),
+            newp.location = Vector2(
+                round(cx + out * math.sin(rad)),
+                round(
+                    cy + out * math.cos(rad),
+                ),
             )
             self.add_object(newp)
         if self.is_host:
             self.next_turn()
 
         factory = Factories(self, self.factories)
-        factory.location = cx, cy
+        factory.location = Vector2(cx, cy)
         self.add_object(factory)
         self.process_objects(0)
 
