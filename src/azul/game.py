@@ -225,7 +225,10 @@ def get_tile_color(
 
 
 @lru_cache
-def get_tile_symbol_and_color(tile_color: int, greyshift: float = GREYSHIFT) -> tuple[str, tuple[int, int, int]] | None:
+def get_tile_symbol_and_color(
+    tile_color: int,
+    greyshift: float = GREYSHIFT,
+) -> tuple[str, tuple[int, int, int]] | None:
     """Return the color a given tile should be."""
     if tile_color < 0:
         if tile_color == -6:
@@ -246,7 +249,7 @@ def add_symbol_to_tile_surf(
     tilecolor: int,
     tilesize: int,
     greyshift: float = GREYSHIFT,
-    font: azul.game.Path = FONT,
+    font: Path = FONT,
 ) -> None:
     symbol, scolor = get_tile_symbol_and_color(tilecolor, greyshift)
     pyfont = pygame.font.Font(font, math.floor(math.sqrt(tilesize**2 * 2)) - 1)
@@ -280,7 +283,7 @@ def get_tile_image(
     tilesize: int,
     greyshift: float = GREYSHIFT,
     outlineSize: float = 0.2,
-    font: azul.game.Path = FONT,
+    font: Path = FONT,
 ) -> pygame.surface.Surface:
     """Return a surface of a given tile."""
     cid = tile.color
@@ -305,7 +308,10 @@ def get_tile_image(
     ##    add_symbol_to_tile_surf(surf, cid, tilesize, greyshift, font)
 
 
-def set_alpha(surface: pygame.surface.Surface, alpha: int) -> pygame.surface.Surface:
+def set_alpha(
+    surface: pygame.surface.Surface,
+    alpha: int,
+) -> pygame.surface.Surface:
     """Return a surface by replacing the alpha channel of it with given alpha value, preserve color."""
     surface = surface.copy().convert_alpha()
     w, h = surface.get_size()
@@ -317,7 +323,17 @@ def set_alpha(surface: pygame.surface.Surface, alpha: int) -> pygame.surface.Sur
 
 
 @lru_cache
-def get_tile_container_image(wh: tuple[int, int], back: pygame.color.Color | int | str | tuple[int, int, int] | tuple[int, int, int, int] | Sequence[int]) -> pygame.surface.Surface:
+def get_tile_container_image(
+    wh: tuple[int, int],
+    back: (
+        pygame.color.Color
+        | int
+        | str
+        | tuple[int, int, int]
+        | tuple[int, int, int, int]
+        | Sequence[int]
+    ),
+) -> pygame.surface.Surface:
     """Return a tile container image from a width and a height and a background color, and use a game's cache to help."""
     image = pygame.surface.Surface(wh)
     image.convert_alpha()
@@ -495,7 +511,11 @@ class ObjectHandler:
             if hasattr(self.objects[oid], attribute)
         )
 
-    def get_object_by_attr(self, attribute: str, value: object) -> tuple[Object, ...]:
+    def get_object_by_attr(
+        self,
+        attribute: str,
+        value: object,
+    ) -> tuple[Object, ...]:
         """Return a tuple of object ids with <attribute> that are equal to <value>."""
         matches = []
         for oid in self.get_objects_with_attr(attribute):
@@ -646,6 +666,7 @@ class Object:
         self.screen_size_last = SCREENSIZE
 
         self.id = 0
+        self.game: Game
 
     def __repr__(self) -> str:
         """Return {self.name}()."""
@@ -671,7 +692,10 @@ class Object:
         """Return True if this Object intersects with a given screen location."""
         return self.get_rect().collidepoint(screen_location)
 
-    def to_image_surface_location(self, screen_location: tuple[int, int]) -> tuple[int, int]:
+    def to_image_surface_location(
+        self,
+        screen_location: tuple[int, int],
+    ) -> tuple[int, int]:
         """Return the location a screen location would be at on the objects image. Can return invalid data."""
         # Get zero zero in image locations
         zx, zy = self.get_image_zero()  # Zero x and y
@@ -728,7 +752,10 @@ class MultipartObject(Object, ObjectHandler):
         """Reset the position of all objects within."""
         raise NotImplementedError
 
-    def get_intersection(self, point: tuple[int, int]) -> tuple[str, tuple[int, int]] | tuple[None, None]:
+    def get_intersection(
+        self,
+        point: tuple[int, int],
+    ) -> tuple[str, tuple[int, int]] | tuple[None, None]:
         """Return where a given point touches in self. Returns (None, None) with no intersections."""
         for oid in self.objects:
             obj = self.objects[oid]
@@ -769,7 +796,6 @@ class Tile(NamedTuple):
     """Represents a Tile."""
 
     color: int
-
 
 
 class TileRenderer(Object):
@@ -829,7 +855,11 @@ class TileRenderer(Object):
         )
         self.image = get_tile_container_image(self.wh, self.back)
 
-    def render_tile(self, tile_object: Tile, tile_location: tuple[int, int]) -> None:
+    def render_tile(
+        self,
+        tile_object: Tile,
+        tile_location: tuple[int, int],
+    ) -> None:
         """Blit the surface of a given tile object onto self.image at given tile location. It is assumed that all tile locations are xy tuples."""
         x, y = tile_location
         surf = get_tile_image(tile_object, self.tile_size, self.greyshift)
@@ -1031,7 +1061,9 @@ class Grid(TileRenderer):
         if not self.point_intersects(screen_location):
             return None
         # Otherwise, find out where screen point is in image locations
-        bx, by = self.to_image_surface_location(screen_location)  # board x and y
+        bx, by = self.to_image_surface_location(
+            screen_location,
+        )  # board x and y
         # Finally, return the full divides (no decimals) of xy location by self.tile_full.
         return int(bx // self.tile_full), int(by // self.tile_full)
 
@@ -1872,7 +1904,12 @@ class Factories(MultipartObject):
 
     teach = 4
 
-    def __init__(self, game: Game, factories: int, size: int | Literal["Auto"]="Auto") -> None:
+    def __init__(
+        self,
+        game: Game,
+        factories: int,
+        size: int | Literal["Auto"] = "Auto",
+    ) -> None:
         """Requires a number of factories."""
         super().__init__("Factories")
 
@@ -3406,15 +3443,16 @@ class Keyboard:
         self.target.keyboard = self
         self.target.is_pressed = self.is_pressed
 
-        self.keys = {}  # Map of keyboard events to names
-        self.actions = {}  # Map of keyboard event names to functions
-        self.time = (
-            {}
-        )  # Map of names to time until function should be called again
-        self.delay = (
-            {}
-        )  # Map of names to duration timer waits for function recalls
-        self.active = {}  # Map of names to boolian of pressed or not
+        # Map of keyboard events to names
+        self.keys: dict[int, str] = {}
+        # Map of keyboard event names to functions
+        self.actions: dict[str, Callable[[], None]] = {}
+        # Map of names to time until function should be called again
+        self.time: dict[str, float] = {}
+        # Map of names to duration timer waits for function recalls
+        self.delay: dict[str, float | None] = {}
+        # Map of names to boolian of pressed or not
+        self.active: dict[str, bool] = {}
 
         if kwargs:
             for name in kwargs:
@@ -3435,7 +3473,7 @@ class Keyboard:
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.target!r})"
 
-    def is_pressed(self, key) -> bool:
+    def is_pressed(self, key: int) -> bool:
         """Return True if <key> is pressed."""
         return self.active.get(key, False)
 
@@ -3447,7 +3485,10 @@ class Keyboard:
         self.delay[name] = None  # name to function recall delay
         self.active[name] = False  # name to boolian of pressed
 
-    def get_function_from_target(self, function_name: str):
+    def get_function_from_target(
+        self,
+        function_name: str,
+    ) -> Callable[[], None]:
         """Return function with name function_name from self.target."""
         if hasattr(self.target, function_name):
             return getattr(self.target, function_name)
@@ -3509,7 +3550,7 @@ def network_shutdown() -> None:
 
 
 def run() -> None:
-    global game
+    ##    global game
     global SCREENSIZE
     # Set up the screen
     screen = pygame.display.set_mode(SCREENSIZE, RESIZABLE, 16)

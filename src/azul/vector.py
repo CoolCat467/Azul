@@ -144,12 +144,19 @@ class BaseVector:
         """Return result of floor division of self components by rhs scalar."""
         return self.from_iter(c // scalar for c in self)
 
-    def __round__(
+    def rounded(
         self: Self,
         ndigits: int | None = None,
     ) -> Self:
         """Return result of rounding self components to given number of digits."""
         return self.from_iter(round(c, ndigits) for c in self)
+
+    def __round__(
+        self: Self,
+        ndigits: int | None = None,
+    ) -> Self:
+        """Return result of rounding self components to given number of digits."""
+        return self.rounded(ndigits)
 
     def __abs__(
         self: Self,

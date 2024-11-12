@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# Config module
-
 """Config module."""
 
 # Programmed by CoolCat467
@@ -13,12 +10,12 @@ __version__ = "0.0.0"
 from configparser import ConfigParser
 
 
-def load_config(config_file: str) -> dict[str, str]:
+def load_config(config_file: str) -> dict[str, dict[str, str]]:
     """Return a config object from config_file."""
     config = ConfigParser()
     config.read((config_file,))
 
-    data = {}
+    data: dict[str, dict[str, str]] = {}
     for section, values in dict(config.items()).items():
         data[section] = dict(values)
 

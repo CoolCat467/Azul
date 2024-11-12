@@ -5,10 +5,11 @@ from __future__ import annotations
 # Programmed by CoolCat467
 import math
 import random
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable
+
     from azul.game import Tile
 
 T = TypeVar("T")

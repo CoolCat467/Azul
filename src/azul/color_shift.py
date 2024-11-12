@@ -8,33 +8,36 @@ __title__ = "Color shift"
 __author__ = "CoolCat467"
 __version__ = "0.0.0"
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from azul.vector import Vector3
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Sequence
 
+    from pygame.color import Color
     from pygame.surface import Surface
 
 
 def lerp(
-    color: Iterable[int],
-    to_color: Iterable[int],
+    color: Sequence[int] | Color,
+    to_color: Sequence[int],
     percent: float,
-) -> tuple[int, ...]:
+) -> tuple[int, int, int]:
     """Linear interpolate from color to to_color by percent."""
-    vcolor = Vector3.from_iter(color)
-    if len(vcolor) > len(to_color):
-        to_color = tuple(to_color) + (0,) * (len(vcolor) - len(to_color))
+    if len(color) > len(to_color):
+        to_color = tuple(to_color) + (0,) * (len(color) - len(to_color))
     elif len(color) < len(to_color):
-        to_color = to_color[: len(vcolor)]
-    return tuple(round(vcolor.lerp(to_color, percent)))
+        to_color = to_color[: len(color)]
+    return cast(
+        "tuple[int, int, int]",
+        tuple(Vector3.from_iter(color).lerp(to_color, percent).rounded()),
+    )
 
 
 def color_shift(
     surface: Surface,
-    to_color: Iterable[int],
+    to_color: Sequence[int],
     percent: float,
 ) -> Surface:
     """Shift colors in pygame surface twards to_color by percent."""

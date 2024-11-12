@@ -54,8 +54,9 @@ def __wxpython(title: str, message: str) -> None:
     """Error with wxPython."""
     from wxPython.wx import wxApp, wxICON_EXCLAMATION, wxMessageDialog, wxOK
 
-    class LameApp(wxApp):
+    class LameApp(wxApp):  # type: ignore[misc]
         __slots__ = ()
+
         def OnInit(self) -> int:
             return 1
 

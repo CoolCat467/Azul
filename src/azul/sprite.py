@@ -578,6 +578,14 @@ class TargetingComponent(Component):
             self.update_heading()  # Fix imprecision
 
 
+class DragEvent(NamedTuple):
+    """Drag event data."""
+
+    pos: tuple[int, int]
+    rel: tuple[int, int]
+    button: int
+
+
 class DragClickEventComponent(Component):
     """Raise drag events when motion and sprite visible.
 
@@ -657,11 +665,11 @@ class DragClickEventComponent(Component):
                     self.raise_event,
                     Event(
                         "drag",
-                        {
-                            "pos": event.data["pos"],
-                            "rel": event.data["rel"],
-                            "button": button,
-                        },
+                        DragEvent(
+                            event.data["pos"],
+                            event.data["rel"],
+                            button,
+                        ),
                     ),
                 )
 

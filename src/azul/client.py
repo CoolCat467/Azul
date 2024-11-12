@@ -11,23 +11,21 @@ os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "True"
 del os
 
 import contextlib
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Final
 
-import conf
-import lang
-import objects
 import pygame
-import sprite
 import trio
 from pygame.locals import K_ESCAPE, KEYUP, QUIT, RESIZABLE, WINDOWRESIZED
 from pygame.rect import Rect
 
+from azul import conf, lang, objects, sprite
 from azul.component import Component, ComponentManager, Event
 from azul.statemachine import AsyncState, AsyncStateMachine
 from azul.vector import Vector2
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Sequence
 
 __title__ = "Azul Client"
 __author__ = "CoolCat467"
@@ -38,6 +36,42 @@ FPS = 30
 ##FPS = 60
 VSYNC = True
 ##PORT = server.PORT
+
+ROOT_FOLDER: Final = Path(__file__).absolute().parent
+DATA_FOLDER: Final = ROOT_FOLDER / "data"
+FONT_FOLDER: Final = ROOT_FOLDER / "fonts"
+
+FONT = FONT_FOLDER / "RuneScape-UF-Regular.ttf"
+
+
+class AzulClient(sprite.GroupProcessor, AsyncStateMachine):
+    """Gear Runner and Layered Dirty Sprite group handler."""
+
+    def __init__(self) -> None:
+        sprite.GroupProcessor.__init__(self)
+        AsyncStateMachine.__init__(self)
+
+        self.add_states(
+            (
+                HaltState(),
+                AzulInitialize(),
+            ),
+        )
+
+    @property
+    def running(self) -> bool:
+        """Boolean of if state machine is running."""
+        return self.active_state is not None
+
+    async def raise_event(self, event: Event[Any]) -> None:
+        """Raise component event in all groups."""
+        if self.active_state is None:
+            return
+        manager = getattr(self.active_state, "manager", None)
+        assert isinstance(manager, ComponentManager | None)
+        if manager is None:
+            return
+        await manager.raise_event(event)
 
 
 class AzulState(AsyncState[AzulClient]):
@@ -108,14 +142,17 @@ class ClickDestinationComponent(Component):
             movement: sprite.MovementComponent = self.get_component("movement")
             movement.speed = 0
 
-    async def click(self, event: Event[dict[str, int]]) -> None:
+    async def click(
+        self,
+        event: Event[sprite.PygameMouseButtonEventData],
+    ) -> None:
         """Toggle selected."""
         if event.data["button"] == 1:
             self.selected = not self.selected
 
             await self.update_selected()
 
-    async def drag(self, event: Event) -> None:
+    async def drag(self, event: Event[None]) -> None:
         """Drag sprite."""
         if not self.selected:
             self.selected = True
@@ -123,7 +160,10 @@ class ClickDestinationComponent(Component):
         movement: sprite.MovementComponent = self.get_component("movement")
         movement.speed = 0
 
-    async def mouse_down(self, event: Event) -> None:
+    async def mouse_down(
+        self,
+        event: Event[sprite.PygameMouseButtonEventData],
+    ) -> None:
         """Target click pos if selected."""
         if not self.selected:
             return
@@ -133,10 +173,13 @@ class ClickDestinationComponent(Component):
             target: sprite.TargetingComponent = self.get_component("targeting")
             target.destination = Vector2.from_iter(event.data["pos"])
 
-    async def move_towards_dest(self, event: Event) -> None:
+    async def move_towards_dest(
+        self,
+        event: Event[sprite.TickEventData],
+    ) -> None:
         """Move closer to destination."""
         target: sprite.TargetingComponent = self.get_component("targeting")
-        target.move_destination_time(event.data["time_passed"])
+        await target.move_destination_time(event.data.time_passed)
 
 
 class MrFloppy(sprite.Sprite):
@@ -189,10 +232,10 @@ class MrFloppy(sprite.Sprite):
 
         self.register_handler("drag", self.drag)
 
+    @staticmethod
     def controller(
-        self,
-        image_identifiers: list[str | int],
-    ) -> Iterator[str | None]:
+        image_identifiers: Sequence[str | int],
+    ) -> Iterator[str | int | None]:
         """Animation controller."""
         cidx = 0
         while True:
@@ -203,13 +246,12 @@ class MrFloppy(sprite.Sprite):
             cidx = (cidx + 1) % count
             yield image_identifiers[cidx]
 
-    async def drag(self, event: Event) -> None:
+    async def drag(self, event: Event[sprite.DragEvent]) -> None:
         """Move by relative from drag."""
-        if event.data["button"] != 1:
+        if event.data.button != 1:
             return
-        sprite_component: sprite.Sprite = self.get_component("sprite")
-        sprite_component.location += event.data["rel"]
-        sprite_component.dirty = 1
+        self.location += event.data.rel
+        self.dirty = 1
 
 
 class FPSCounter(objects.Text):
@@ -218,15 +260,18 @@ class FPSCounter(objects.Text):
     __slots__ = ()
 
     def __init__(self) -> None:
-        font = pygame.font.Font("data/RuneScape-UF-Regular.ttf", 28)
+        font = pygame.font.Font(FONT, 28)
         super().__init__("fps", font)
 
-    async def on_tick(self, event: Event) -> None:
+    async def on_tick(self, event: Event[sprite.TickEventData]) -> None:
         """Update text."""
         ##        self.text = f'FPS: {event.data["fps"]:.2f}'
-        self.text = f'FPS: {event.data["fps"]:.0f}'
+        self.text = f"FPS: {event.data.fps:.0f}"
 
-    async def update_loc(self, event: Event) -> None:
+    async def update_loc(
+        self,
+        event: Event[dict[str, tuple[int, int]]],
+    ) -> None:
         """Move to top left corner."""
         self.location = Vector2.from_iter(event.data["size"]) / 2 + (5, 5)
 
@@ -261,39 +306,11 @@ class AzulInitialize(AzulState):
         self.group_add(floppy)
         self.group_add(FPSCounter())
 
-        await self.machine.raise_event(Event("init"))
+        await self.machine.raise_event(Event("init", None))
 
     async def exit_actions(self) -> None:
         self.machine.remove_group(self.id)
         self.manager.unbind_components()
-
-
-class AzulClient(sprite.GroupProcessor, AsyncStateMachine):
-    """Gear Runner and Layered Dirty Sprite group handler."""
-
-    def __init__(self) -> None:
-        sprite.GroupProcessor.__init__(self)
-        AsyncStateMachine.__init__(self)
-
-        self.add_states(
-            (
-                HaltState(),
-                AzulInitialize(),
-            ),
-        )
-
-    @property
-    def running(self) -> bool:
-        """Boolean of if state machine is running."""
-        return self.active_state is not None
-
-    async def raise_event(self, event: Event) -> None:
-        """Raise component event in all groups."""
-        if self.active_state is None:
-            return
-        if self.active_state.manager is None:
-            return
-        await self.active_state.manager.raise_event(event)
 
 
 def save_crash_img() -> None:
@@ -330,7 +347,7 @@ async def async_run() -> None:
     ).convert()
     client.clear(screen, background)
 
-    client.set_timing_treshold(1000 / FPS)
+    client.set_timing_threshold(1000 / FPS)
 
     await client.set_state("initialize")
 
@@ -359,13 +376,16 @@ async def async_run() -> None:
         await client.raise_event(
             Event(
                 "tick",
-                {"time_passed": time_passed / 1000, "fps": clock.get_fps()},
+                sprite.TickEventData(
+                    time_passed / 1000,
+                    clock.get_fps(),
+                ),
             ),
         )
 
         if resized_window:
             screen.fill((0xFF, 0xFF, 0xFF))
-            rects = [Rect((0, 0), SCREEN_SIZE)]
+            rects = [Rect((0, 0), tuple(SCREEN_SIZE))]
             client.repaint_rect(rects[0])
             rects.extend(client.draw(screen))
         else:
@@ -378,24 +398,24 @@ class Tracer(trio.abc.Instrument):
     def before_run(self) -> None:
         print("!!! run started")
 
-    def _print_with_task(self, msg: str, task) -> None:
+    def _print_with_task(self, msg: str, task: trio.lowlevel.Task) -> None:
         # repr(task) is perhaps more useful than task.name in general,
         # but in context of a tutorial the extra noise is unhelpful.
         print(f"{msg}: {task.name}")
 
-    def task_spawned(self, task) -> None:
+    def task_spawned(self, task: trio.lowlevel.Task) -> None:
         self._print_with_task("### new task spawned", task)
 
-    def task_scheduled(self, task) -> None:
+    def task_scheduled(self, task: trio.lowlevel.Task) -> None:
         self._print_with_task("### task scheduled", task)
 
-    def before_task_step(self, task) -> None:
+    def before_task_step(self, task: trio.lowlevel.Task) -> None:
         self._print_with_task(">>> about to run one step of task", task)
 
-    def after_task_step(self, task) -> None:
+    def after_task_step(self, task: trio.lowlevel.Task) -> None:
         self._print_with_task("<<< task step finished", task)
 
-    def task_exited(self, task) -> None:
+    def task_exited(self, task: trio.lowlevel.Task) -> None:
         self._print_with_task("### task exited", task)
 
     def before_io_wait(self, timeout: float) -> None:

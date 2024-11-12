@@ -25,15 +25,10 @@ __license__ = "GNU General Public License Version 3"
 
 
 from enum import IntEnum, auto
-from typing import TYPE_CHECKING, Final, NamedTuple, TypeAlias
+from typing import Final, NamedTuple, TypeAlias
 
 import trio
 from mypy_extensions import u8
-
-from azul.base_io import StructFormat
-
-if TYPE_CHECKING:
-    from azul.buffer import Buffer
 
 ADVERTISEMENT_IP: Final = "224.0.2.60"
 ADVERTISEMENT_PORT: Final = 4445
