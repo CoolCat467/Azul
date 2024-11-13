@@ -2,19 +2,15 @@
 
 from __future__ import annotations
 
+import contextlib
+
 # Programmed by CoolCat467
 # Hide the pygame prompt
 import os
 from os import path
-
-os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "True"
-del os
-
-import contextlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
-import pygame
 import trio
 from pygame.locals import K_ESCAPE, KEYUP, QUIT, RESIZABLE, WINDOWRESIZED
 from pygame.rect import Rect
@@ -23,6 +19,12 @@ from azul import conf, lang, objects, sprite
 from azul.component import Component, ComponentManager, Event
 from azul.statemachine import AsyncState, AsyncStateMachine
 from azul.vector import Vector2
+
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "True"
+if os.environ["PYGAME_HIDE_SUPPORT_PROMPT"]:
+    import pygame
+del os
+
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
@@ -48,6 +50,7 @@ class AzulClient(sprite.GroupProcessor, AsyncStateMachine):
     """Gear Runner and Layered Dirty Sprite group handler."""
 
     def __init__(self) -> None:
+        """Initialize azul client."""
         sprite.GroupProcessor.__init__(self)
         AsyncStateMachine.__init__(self)
 
@@ -80,6 +83,7 @@ class AzulState(AsyncState[AzulClient]):
     __slots__ = ("id", "manager")
 
     def __init__(self, name: str) -> None:
+        """Initialize azul state."""
         super().__init__(name)
 
         self.id: int = 0
@@ -90,6 +94,7 @@ class HaltState(AzulState):
     """Halt state to set state to None so running becomes False."""
 
     def __init__(self) -> None:
+        """Initialize halt state."""
         super().__init__("Halt")
 
     async def check_conditions(self) -> None:
@@ -104,6 +109,7 @@ class ClickDestinationComponent(Component):
     outline = pygame.color.Color(255, 220, 0)
 
     def __init__(self) -> None:
+        """Initialize click destination component."""
         super().__init__("click_dest")
 
         self.selected = False
@@ -122,6 +128,7 @@ class ClickDestinationComponent(Component):
         )
 
     async def test(self, event: Event[object]) -> None:
+        """Print out event data."""
         print(f"{event = }")
 
     async def cache_outline(self, _: Event[None]) -> None:
@@ -188,6 +195,7 @@ class MrFloppy(sprite.Sprite):
     __slots__ = ()
 
     def __init__(self) -> None:
+        """Initialize mr floppy sprite."""
         super().__init__("MrFloppy")
 
         self.add_components(
@@ -260,6 +268,7 @@ class FPSCounter(objects.Text):
     __slots__ = ()
 
     def __init__(self) -> None:
+        """Initialize fps counter."""
         font = pygame.font.Font(FONT, 28)
         super().__init__("fps", font)
 
@@ -276,6 +285,7 @@ class FPSCounter(objects.Text):
         self.location = Vector2.from_iter(event.data["size"]) / 2 + (5, 5)
 
     def bind_handlers(self) -> None:
+        """Register event handlers."""
         super().bind_handlers()
         self.register_handlers(
             {
@@ -291,15 +301,18 @@ class AzulInitialize(AzulState):
     __slots__ = ()
 
     def __init__(self) -> None:
+        """Initialize state."""
         super().__init__("initialize")
 
     def group_add(self, new_sprite: sprite.Sprite) -> None:
+        """Add new sprite to group."""
         group = self.machine.get_group(self.id)
         assert group is not None, "Expected group from new group id"
         group.add(new_sprite)
         self.manager.add_component(new_sprite)
 
     async def entry_actions(self) -> None:
+        """Create group and add mr floppy."""
         self.id = self.machine.new_group("test")
         floppy = MrFloppy()
         print(floppy)
@@ -309,6 +322,7 @@ class AzulInitialize(AzulState):
         await self.machine.raise_event(Event("init", None))
 
     async def exit_actions(self) -> None:
+        """Remove group and unbind components."""
         self.machine.remove_group(self.id)
         self.manager.unbind_components()
 
@@ -328,8 +342,8 @@ async def async_run() -> None:
     """Run client."""
     global SCREEN_SIZE
     ##    global client
-    CONFIG = conf.load_config(path.join("conf", "main.conf"))
-    lang.load_lang(CONFIG["Language"]["lang_name"])
+    config = conf.load_config(path.join("conf", "main.conf"))
+    lang.load_lang(config["Language"]["lang_name"])
 
     screen = pygame.display.set_mode(
         tuple(SCREEN_SIZE),
@@ -395,30 +409,42 @@ async def async_run() -> None:
 
 
 class Tracer(trio.abc.Instrument):
+    """Tracer instrument."""
+
+    __slots__ = ()
+
     def before_run(self) -> None:
+        """Before run."""
         print("!!! run started")
 
     def _print_with_task(self, msg: str, task: trio.lowlevel.Task) -> None:
+        """Print message with task name."""
         # repr(task) is perhaps more useful than task.name in general,
         # but in context of a tutorial the extra noise is unhelpful.
         print(f"{msg}: {task.name}")
 
     def task_spawned(self, task: trio.lowlevel.Task) -> None:
+        """Task spawned."""
         self._print_with_task("### new task spawned", task)
 
     def task_scheduled(self, task: trio.lowlevel.Task) -> None:
+        """Task scheduled."""
         self._print_with_task("### task scheduled", task)
 
     def before_task_step(self, task: trio.lowlevel.Task) -> None:
+        """Before task step."""
         self._print_with_task(">>> about to run one step of task", task)
 
     def after_task_step(self, task: trio.lowlevel.Task) -> None:
+        """After task step."""
         self._print_with_task("<<< task step finished", task)
 
     def task_exited(self, task: trio.lowlevel.Task) -> None:
+        """Task exited."""
         self._print_with_task("### task exited", task)
 
     def before_io_wait(self, timeout: float) -> None:
+        """Before IO wait."""
         if timeout:
             print(f"### waiting for I/O for up to {timeout} seconds")
         else:
@@ -426,10 +452,12 @@ class Tracer(trio.abc.Instrument):
         self._sleep_time = trio.current_time()
 
     def after_io_wait(self, timeout: float) -> None:
+        """After IO wait."""
         duration = trio.current_time() - self._sleep_time
         print(f"### finished I/O check (took {duration} seconds)")
 
     def after_run(self) -> None:
+        """After run."""
         print("!!! run finished")
 
 

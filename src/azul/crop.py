@@ -1,11 +1,8 @@
-#!/usr/bin/env python3
-# Crop functions - Functions to crop Surfaces
-
-"""Crop functions."""
+"""Crop functions - Functions to crop Surfaces."""
 
 # Programmed by CoolCat467
 
-__title__ = "TITLE"
+__title__ = "Crop Functions"
 __author__ = "CoolCat467"
 __version__ = "0.0.0"
 

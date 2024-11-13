@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """errorbox, by Pete Shinners.
 
 Tries multiple python GUI libraries to display an error box
@@ -33,9 +31,9 @@ __title__ = "errorbox"
 def errorbox(title: str, message: str) -> None:
     """Attempt to error with a gui."""
     __stdout(title, message)
-    for e in HANDLERS:
+    for handler in HANDLERS:
         try:
-            e(title, message)
+            handler(title, message)
             break
         except (ImportError, NameError):
             pass
@@ -57,7 +55,7 @@ def __wxpython(title: str, message: str) -> None:
     class LameApp(wxApp):  # type: ignore[misc]
         __slots__ = ()
 
-        def OnInit(self) -> int:
+        def OnInit(self) -> int:  # noqa: N802
             return 1
 
     LameApp()
@@ -105,7 +103,7 @@ def __pygame(title: str, message: str) -> None:
             pos[1] += font.get_height()
 
         pygame.display.flip()
-        while 1:
+        while True:
             e = pygame.event.wait()
             if (
                 e.type == pygame.QUIT
@@ -116,8 +114,8 @@ def __pygame(title: str, message: str) -> None:
             ):
                 break
         pygame.quit()
-    except pygame.error:
-        raise ImportError
+    except pygame.error as exc:
+        raise ImportError from exc
 
 
 def __stdout(title: str, message: str) -> None:
@@ -126,7 +124,7 @@ def __stdout(title: str, message: str) -> None:
     print(text)
 
 
-HANDLERS = __pyqt4, __tkinter, __wxpython, __pygame
+HANDLERS = __pyqt4, __tkinter, __wxpython, __pygame, __stdout
 
 
 # test the error box
