@@ -2349,9 +2349,11 @@ class Player(MultipartObject):
         """Do the wall tiling phase of the game for this player."""
         self.is_wall_tileing = True
         pattern_line = self.get_object_by_name("PatternLine")
-        self.get_object_by_name("floor_line")
+        assert isinstance(pattern_line, PatternLine)
         board = self.get_object_by_name("Board")
+        assert isinstance(board, Board)
         box_lid = self.game.get_object_by_name("BoxLid")
+        assert isinstance(box_lid, BoxLid)
 
         data = pattern_line.wall_tileing()
         box_lid.add_tiles(data["tiles_for_box"])
@@ -2409,121 +2411,134 @@ class Player(MultipartObject):
 
     def process(self, time_passed: float) -> None:
         """Process Player."""
-        if self.is_turn:  # Is our turn?
-            if self.hidden and self.is_wall_tileing and self.varient_play:
-                # If hidden, not anymore. Our turn.
-                self.hidden = False
-            if not self.networked:  # We not networked.
-                cursor = self.game.get_object_by_name("Cursor")
-                box_lid = self.game.get_object_by_name("BoxLid")
-                pattern_line = self.get_object_by_name("PatternLine")
-                floor_line = self.get_object_by_name("floor_line")
-                board = self.get_object_by_name("Board")
-                if cursor.is_pressed():  # Mouse down?
-                    obj, point = self.get_intersection(cursor.location)
-                    if (
-                        obj is not None and point is not None
-                    ):  # Something pressed
-                        if cursor.is_holding():  # Cursor holding tiles
-                            move_made = False
-                            if not self.is_wall_tileing:  # Is wall tiling:
-                                if obj == "PatternLine":
-                                    pos, row_number = point
-                                    row = pattern_line.get_row(row_number)
-                                    if not row.is_full():
-                                        info = row.get_info(pos)
-                                        if info is not None and info.color < 0:
-                                            color, held = (
-                                                cursor.get_held_info()
-                                            )
-                                            todrop = min(
-                                                pos + 1,
-                                                row.get_placeable(),
-                                            )
-                                            tiles = cursor.drop(todrop)
-                                            if row.can_place_tiles(tiles):
-                                                row.place_tiles(tiles)
-                                                move_made = True
-                                            else:
-                                                cursor.force_hold(tiles)
-                                elif obj == "floor_line":
-                                    tiles_to_add = cursor.drop()
-                                    if floor_line.is_full():  # Floor is full,
-                                        # Add tiles to box instead.
-                                        box_lid.add_tiles(tiles_to_add)
-                                    elif floor_line.get_placeable() < len(
-                                        tiles_to_add,
-                                    ):
-                                        # Add tiles to floor line and then to box
-                                        while len(tiles_to_add) > 0:
-                                            if floor_line.get_placeable() > 0:
-                                                floor_line.place_tile(
-                                                    tiles_to_add.pop(),
-                                                )
-                                            else:
-                                                box_lid.add_tile(
-                                                    tiles_to_add.pop(),
-                                                )
-                                    else:  # Otherwise add to floor line for all.
-                                        floor_line.place_tiles(tiles_to_add)
-                                    move_made = True
-                            elif (
-                                not self.just_held
-                            ):  # Cursor holding and wall tiling
-                                if obj == "Board":
-                                    at_point = board.get_info(point)
-                                    if at_point.color == -6:
-                                        column, row = point
-                                        cursor_tile = cursor.drop(1)[0]
-                                        board_tile = (
-                                            board.get_tile_for_cursor_by_row(
-                                                row,
-                                            )
-                                        )
-                                        if board_tile is not None:
-                                            if (
-                                                cursor_tile.color
-                                                == board_tile.color
-                                            ):
-                                                if board.wall_tile_from_point(
-                                                    point,
-                                                ):
-                                                    self.just_dropped = True
-                                                    pattern_line.get_row(
-                                                        row,
-                                                    ).set_background(None)
+        if not self.is_turn:  # Is our turn?
+            self.set_attr_all("hidden", self.hidden)
+            super().process(time_passed)
+            return
+        if self.hidden and self.is_wall_tileing and self.varient_play:
+            # If hidden, not anymore. Our turn.
+            self.hidden = False
+        if self.networked:  # We are networked.
+            self.set_attr_all("hidden", self.hidden)
+            super().process(time_passed)
+            return
 
-                            if move_made:
-                                if not self.is_wall_tileing:
-                                    if cursor.holding_number_one:
-                                        floor_line.place_tile(
-                                            cursor.drop_one_tile(),
-                                        )
-                                    if cursor.get_held_count(True) == 0:
-                                        self.game.next_turn()
-                        else:  # Mouse down, something pressed, and not holding anything
-                            if (
-                                self.is_wall_tileing
-                            ):  # Wall tiling, pressed, not holding
-                                if obj == "Board":
-                                    if not self.just_dropped:
-                                        column_number, row_number = point
-                                        tile = (
-                                            board.get_tile_for_cursor_by_row(
-                                                row_number,
-                                            )
-                                        )
-                                        if tile is not None:
-                                            cursor.drag([tile])
-                                            self.just_held = True
-                else:  # Mouse up
-                    if self.just_held:
-                        self.just_held = False
-                    if self.just_dropped:
-                        self.just_dropped = False
+        cursor = self.game.get_object_by_name("Cursor")
+        assert isinstance(cursor, Cursor)
+        box_lid = self.game.get_object_by_name("BoxLid")
+        assert isinstance(box_lid, BoxLid)
+        pattern_line = self.get_object_by_name("PatternLine")
+        assert isinstance(pattern_line, PatternLine)
+        floor_line = self.get_object_by_name("floor_line")
+        assert isinstance(floor_line, FloorLine)
+        board = self.get_object_by_name("Board")
+        assert isinstance(board, Board)
+
+        if not cursor.is_pressed():
+            # Mouse up
+            if self.just_held:
+                self.just_held = False
+            if self.just_dropped:
+                self.just_dropped = False
+            self.set_attr_all("hidden", self.hidden)
+            super().process(time_passed)
+            return
+
+        # Mouse down
+        obj, point = self.get_intersection(cursor.location)
+        if obj is None or point is None:
             if self.is_wall_tileing and self.done_wall_tileing():
                 self.next_round()
                 self.game.next_turn()
+            self.set_attr_all("hidden", self.hidden)
+            super().process(time_passed)
+            return
+        # Something pressed
+        if cursor.is_holding():  # Cursor holding tiles
+            move_made = False
+            if not self.is_wall_tileing:  # Is wall tiling:
+                if obj == "PatternLine":
+                    pos, row_number = point
+                    row = pattern_line.get_row(row_number)
+                    if not row.is_full():
+                        info = row.get_info(pos)
+                        if info is not None and info.color < 0:
+                            color, held = cursor.get_held_info()
+                            todrop = min(
+                                pos + 1,
+                                row.get_placeable(),
+                            )
+                            tiles = cursor.drop(todrop)
+                            if row.can_place_tiles(tiles):
+                                row.place_tiles(tiles)
+                                move_made = True
+                            else:
+                                cursor.force_hold(tiles)
+                elif obj == "floor_line":
+                    tiles_to_add = cursor.drop()
+                    if floor_line.is_full():
+                        # Floor is full,
+                        # Add tiles to box instead.
+                        box_lid.add_tiles(tiles_to_add)
+                    elif floor_line.get_placeable() < len(
+                        tiles_to_add,
+                    ):
+                        # Floor is not full but cannot fit all in floor line.
+                        # Add tiles to floor line and then to box
+                        while len(tiles_to_add) > 0:
+                            if floor_line.get_placeable() > 0:
+                                floor_line.place_tile(
+                                    tiles_to_add.pop(),
+                                )
+                            else:
+                                box_lid.add_tile(
+                                    tiles_to_add.pop(),
+                                )
+                    else:
+                        # Otherwise add to floor line for all.
+                        floor_line.place_tiles(tiles_to_add)
+                    move_made = True
+            elif (
+                not self.just_held
+                and obj == "Board"
+                and board.get_info(point).color == -6
+            ):
+                # Cursor holding and wall tiling
+                column, row = point
+                cursor_tile = cursor.drop(1)[0]
+                board_tile = board.get_tile_for_cursor_by_row(
+                    row,
+                )
+                if (
+                    board_tile is not None
+                    and cursor_tile.color == board_tile.color
+                    and board.wall_tile_from_point(point)
+                ):
+                    self.just_dropped = True
+                    pattern_line.get_row(
+                        row,
+                    ).set_background(None)
+
+            if move_made and not self.is_wall_tileing:
+                if cursor.holding_number_one:
+                    floor_line.place_tile(
+                        cursor.drop_one_tile(),
+                    )
+                if cursor.get_held_count(True) == 0:
+                    self.game.next_turn()
+        elif self.is_wall_tileing and obj == "Board" and not self.just_dropped:
+            # Mouse down, something pressed, and not holding anything
+            # Wall tiling, pressed, not holding
+            column_number, row_number = point
+            tile = board.get_tile_for_cursor_by_row(
+                row_number,
+            )
+            if tile is not None:
+                cursor.drag([tile])
+                self.just_held = True
+        if self.is_wall_tileing and self.done_wall_tileing():
+            self.next_round()
+            self.game.next_turn()
         self.set_attr_all("hidden", self.hidden)
         super().process(time_passed)
 
@@ -3291,7 +3306,8 @@ class Game(ObjectHandler):
     def __init__(self) -> None:
         """Initialize game."""
         super().__init__()
-        self.keyboard = None  # Gets overwritten by Keyboard object
+        # Gets overwritten by Keyboard object
+        self.keyboard: Keyboard | None = None
 
         self.states: dict[str, GameState] = {}
         self.active_state: GameState | None = None
@@ -3517,6 +3533,8 @@ class Game(ObjectHandler):
 class Keyboard:
     """Keyboard object, handles keyboard input."""
 
+    __slots__ = ("target", "keys", "actions", "time", "delay", "active")
+
     def __init__(self, target: Game, **kwargs) -> None:
         self.target = target
         self.target.keyboard = self
@@ -3531,7 +3549,7 @@ class Keyboard:
         # Map of names to duration timer waits for function recalls
         self.delay: dict[str, float | None] = {}
         # Map of names to boolian of pressed or not
-        self.active: dict[int | str, bool] = {}
+        self.active: dict[str, bool] = {}
 
         if kwargs:
             for name in kwargs:
