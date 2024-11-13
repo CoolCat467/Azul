@@ -54,7 +54,7 @@ from azul.tools import (
     saturate,
     sort_tiles,
 )
-from azul.Vector2 import Vector2
+from azul.vector import Vector2
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Iterable, Sequence
