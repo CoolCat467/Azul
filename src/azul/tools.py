@@ -63,13 +63,13 @@ def sort_tiles(tile_object: Tile) -> int:
     return tile_object.color
 
 
-##def getCacheSignatureTile(tile, tilesize, greyshift, outlineSize):
-##    """Return the string a tile and it's configuration information would use to identify itself in the tile cache."""
-##    safeFloat = lambda x: round(x*100)
-##    # types: error: Call to untyped function (unknown) in typed context
-##    data = tile.color, safeFloat(tilesize), safeFloat(greyshift), safeFloat(outlineSize)
-##    # types:           ^
-##    return ''.join((str(i) for i in data))
+# def getCacheSignatureTile(tile, tilesize, greyshift, outlineSize):
+# """Return the string a tile and it's configuration information would use to identify itself in the tile cache."""
+# safeFloat = lambda x: round(x*100)
+# # types: error: Call to untyped function (unknown) in typed context
+# data = tile.color, safeFloat(tilesize), safeFloat(greyshift), safeFloat(outlineSize)
+# # types:           ^
+# return ''.join((str(i) for i in data))
 
 
 def floor_line_subtract_generator(seed: int = 1) -> Generator[int, None, None]:

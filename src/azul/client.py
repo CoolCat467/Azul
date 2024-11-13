@@ -35,9 +35,9 @@ __version__ = "2.0.0"
 
 SCREEN_SIZE = Vector2(800, 600)
 FPS = 30
-##FPS = 60
+# FPS = 60
 VSYNC = True
-##PORT = server.PORT
+# PORT = server.PORT
 
 ROOT_FOLDER: Final = Path(__file__).absolute().parent
 DATA_FOLDER: Final = ROOT_FOLDER / "data"
@@ -222,7 +222,7 @@ class MrFloppy(sprite.Sprite):
         image.add_images(
             {
                 0: floppy,
-                ##            '1': pygame.transform.flip(floppy, False, True)
+                # '1': pygame.transform.flip(floppy, False, True)
                 1: pygame.transform.rotate(floppy, 270),
                 2: pygame.transform.flip(floppy, True, True),
                 3: pygame.transform.rotate(floppy, 90),
@@ -274,7 +274,7 @@ class FPSCounter(objects.Text):
 
     async def on_tick(self, event: Event[sprite.TickEventData]) -> None:
         """Update text."""
-        ##        self.text = f'FPS: {event.data["fps"]:.2f}'
+        # self.text = f'FPS: {event.data["fps"]:.2f}'
         self.text = f"FPS: {event.data.fps:.0f}"
 
     async def update_loc(
@@ -330,8 +330,8 @@ class AzulInitialize(AzulState):
 def save_crash_img() -> None:
     """Save the last frame before the game crashed."""
     surface = pygame.display.get_surface().copy()
-    ##    strTime = '-'.join(time.asctime().split(' '))
-    ##    filename = f'Crash_at_{strTime}.png'
+    # strTime = '-'.join(time.asctime().split(' '))
+    # filename = f'Crash_at_{strTime}.png'
     filename = "screenshot.png"
 
     pygame.image.save(surface, path.join("screenshots", filename))
@@ -341,7 +341,7 @@ def save_crash_img() -> None:
 async def async_run() -> None:
     """Run client."""
     global SCREEN_SIZE
-    ##    global client
+    # global client
     config = conf.load_config(path.join("conf", "main.conf"))
     lang.load_lang(config["Language"]["lang_name"])
 
@@ -381,7 +381,7 @@ async def async_run() -> None:
                     SCREEN_SIZE = Vector2(event.x, event.y)
                     resized_window = True
                 sprite_event = sprite.convert_pygame_event(event)
-                ##                print(sprite_event)
+                # print(sprite_event)
                 nursery.start_soon(client.raise_event, sprite_event)
         await client.think()
 
@@ -466,7 +466,7 @@ def run() -> None:
     trio.run(async_run)  # , instruments=[Tracer()])
 
 
-##    save_crash_img()
+# save_crash_img()
 
 if __name__ == "__main__":
     print(f"{__title__} v{__version__}\nProgrammed by {__author__}.\n")

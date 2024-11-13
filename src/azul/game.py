@@ -259,15 +259,15 @@ def add_symbol_to_tile_surf(
 
     symbolsurf = pyfont.render(symbol, True, scolor)
     symbolsurf = auto_crop_clear(symbolsurf)
-    ##    symbolsurf = pygame.transform.scale(symbolsurf, (tilesize, tilesize))
+    # symbolsurf = pygame.transform.scale(symbolsurf, (tilesize, tilesize))
 
-    ##    sw, sh = symbolsurf.get_size()
+    # sw, sh = symbolsurf.get_size()
     ##
-    ##    w, h = surf.get_size()
+    # w, h = surf.get_size()
     ##
-    ##    x = w/2 - sw/2
-    ##    y = h/2 - sh/2
-    ##    b = (round(x), round(y))
+    # x = w/2 - sw/2
+    # y = h/2 - sh/2
+    # b = (round(x), round(y))
 
     sw, sh = symbolsurf.get_rect().center
     w, h = surf.get_rect().center
@@ -277,7 +277,7 @@ def add_symbol_to_tile_surf(
     surf.blit(symbolsurf, (int(x), int(y)))
 
 
-##    surf.blit(symbolsurf, (0, 0))
+# surf.blit(symbolsurf, (0, 0))
 
 
 @lru_cache
@@ -474,7 +474,7 @@ class Font:
 class ObjectHandler:
     """ObjectHandler class, meant to be used for other classes."""
 
-    ##    __slots__ = ("objects", "next_id", "cache")
+    # __slots__ = ("objects", "next_id", "cache")
 
     def __init__(self) -> None:
         """Initialize object handler."""
@@ -636,16 +636,16 @@ class Object:
     """Object object."""
 
     __slots__ = (
-        "name",
+        "Render_Priority",
+        "game",
+        "hidden",
+        "id",
         "image",
         "location",
-        "wh",
-        "hidden",
         "location_mode_on_resize",
-        "id",
+        "name",
         "screen_size_last",
-        "game",
-        "Render_Priority",
+        "wh",
     )
 
     def __init__(self, name: str) -> None:
@@ -719,7 +719,7 @@ class Object:
         x, y = self.get_image_zero()
         surface.blit(self.image, (int(x), int(y)))
 
-    ##        pygame.draw.rect(surface, MAGENTA, self.get_rect(), 1)
+    # pygame.draw.rect(surface, MAGENTA, self.get_rect(), 1)
 
     def __del__(self) -> None:
         """Delete self.image."""
@@ -808,7 +808,7 @@ class Tile(NamedTuple):
 class TileRenderer(Object):
     """Base class for all objects that need to render tiles."""
 
-    __slots__ = ("tile_seperation", "tile_full", "back", "image_update")
+    __slots__ = ("back", "image_update", "tile_full", "tile_seperation")
     greyshift = GREYSHIFT
     tile_size = TILESIZE
 
@@ -1051,7 +1051,7 @@ def gsc_bound_index(
 class Grid(TileRenderer):
     """Grid object, used for boards and parts of other objects."""
 
-    __slots__ = ("size", "data")
+    __slots__ = ("data", "size")
 
     def __init__(
         self,
@@ -1146,7 +1146,7 @@ class Grid(TileRenderer):
 class Board(Grid):
     """Represents the board in the Game."""
 
-    __slots__ = ("player", "variant_play", "additions", "wall_tiling")
+    __slots__ = ("additions", "player", "variant_play", "wall_tiling")
     bcolor = ORANGE
 
     def __init__(self, player: Player, variant_play: bool = False) -> None:
@@ -1175,9 +1175,9 @@ class Board(Grid):
                         (self.size[1] - y + x) % REGTILECOUNT + 1
                     )
 
-    ##                print(self.data[y, x], end=' ')
-    ##            print()
-    ##        print('-'*10)
+    # print(self.data[y, x], end=' ')
+    # print()
+    # print('-'*10)
 
     def get_row(self, index: int) -> Generator[Tile, None, None]:
         """Return a row from self. Does not delete data from internal grid."""
@@ -1460,7 +1460,7 @@ class Board(Grid):
 class Row(TileRenderer):
     """Represents one of the five rows each player has."""
 
-    __slots__ = ("player", "size", "color", "tiles")
+    __slots__ = ("color", "player", "size", "tiles")
     greyshift = GREYSHIFT
 
     def __init__(
@@ -1696,7 +1696,7 @@ class PatternLine(MultipartObject):
 class Text(Object):
     """Text object, used to render text with a given font."""
 
-    __slots__ = ("font", "_cxy", "_last")
+    __slots__ = ("_cxy", "_last", "font")
 
     def __init__(
         self,
@@ -1779,7 +1779,7 @@ class FloorLine(Row):
         super().__init__(player, self.size, background=ORANGE)
         self.name = "floor_line"
 
-        ##        self.font = Font(FONT, round(self.tile_size*1.2), color=BLACK, cx=False, cy=False)
+        # self.font = Font(FONT, round(self.tile_size*1.2), color=BLACK, cx=False, cy=False)
         self.text = Text(
             round(self.tile_size * 1.2),
             BLACK,
@@ -1812,7 +1812,7 @@ class FloorLine(Row):
             self.text.location = Vector2(*xy)
             self.text.render(surface)
 
-    ##            self.font.render(surface, str(self.numbers[x]), xy)
+    # self.font.render(surface, str(self.numbers[x]), xy)
 
     def place_tile(self, tile: Tile) -> None:
         """Place a given Tile Object on self if permitted."""
@@ -2205,10 +2205,10 @@ class Bag:
     """Represents the bag full of tiles."""
 
     __slots__ = (
-        "tile_count",
-        "tile_types",
-        "tile_names",
         "percent_each",
+        "tile_count",
+        "tile_names",
+        "tile_types",
         "tiles",
     )
 
@@ -2226,10 +2226,7 @@ class Bag:
         self.tiles = deque(
             gen_random_proper_seq(
                 self.tile_count,
-                **{
-                    tile_name: self.percent_each
-                    for tile_name in self.tile_names
-                },
+                **dict.fromkeys(self.tile_names, self.percent_each),
             ),
         )
 
@@ -2284,7 +2281,7 @@ class Bag:
         else:
             # S311 Standard pseudo-random generators are not suitable for cryptographic purposes
             index = random.randint(range_[0], range_[1])  # noqa: S311
-        ##        self.tiles.insert(random.randint(0, len(self.tiles)-1), self.get_name(int(tile_object.color)))
+        # self.tiles.insert(random.randint(0, len(self.tiles)-1), self.get_name(int(tile_object.color)))
         self.tiles.insert(index, name)
         del tile_object
 
@@ -2376,7 +2373,7 @@ class Player(MultipartObject):
         """Update the scorebox for this player."""
         score_box = self.get_object_by_name("Text")
         assert isinstance(score_box, Text)
-        score_box.update_value(f"Player {self.player_id+1}: {self.score}")
+        score_box.update_value(f"Player {self.player_id + 1}: {self.score}")
 
     def trigger_turn_now(self) -> None:
         """Handle start of turn."""
@@ -2705,10 +2702,10 @@ class Button(Text):
         """Render button."""
         if not self.hidden:
             text_rect = self.get_rect()
-            ##            if PYGAME_VERSION < 201:
-            ##                pygame.draw.rect(surface, self.backcolor, text_rect)
-            ##                pygame.draw.rect(surface, BLACK, text_rect, self.borderWidth)
-            ##            else:
+            # if PYGAME_VERSION < 201:
+            # pygame.draw.rect(surface, self.backcolor, text_rect)
+            # pygame.draw.rect(surface, BLACK, text_rect, self.borderWidth)
+            # else:
             pygame.draw.rect(
                 surface,
                 self.backcolor,
@@ -3189,7 +3186,7 @@ class PhaseFactoryOfferNetworked(PhaseFactoryOffer):
 class PhaseWallTiling(GameState):
     """Wall tiling game phase."""
 
-    ##    __slots__ = ()
+    # __slots__ = ()
     def __init__(self) -> None:
         """Initialize will tiling phase."""
         super().__init__("WallTiling")
@@ -3434,7 +3431,7 @@ class EndScreen(MenuState):
         y = 10
         for idx, line in enumerate(self.wininf.split("\n")):
             self.add_text(f"Line{idx}", line, (x, y), cx=True, cy=False)
-            ##            self.game.get_object(bid).Render_Priority = f'last{-(2+idx)}'
+            # self.game.get_object(bid).Render_Priority = f'last{-(2+idx)}'
             button = self.game.get_object(bid)
             button.Render_Priority = "last-2"
             y += self.bh
@@ -3690,7 +3687,7 @@ class Game(ObjectHandler):
 class Keyboard:
     """Keyboard object, handles keyboard input."""
 
-    __slots__ = ("target", "keys", "actions", "time", "delay", "active")
+    __slots__ = ("actions", "active", "delay", "keys", "target", "time")
 
     def __init__(
         self,
@@ -3812,12 +3809,12 @@ def network_shutdown() -> None:
 
 def run() -> None:
     """Run program."""
-    ##    global game
+    # global game
     global SCREENSIZE
     # Set up the screen
     screen = pygame.display.set_mode(SCREENSIZE, RESIZABLE, 16)
     pygame.display.set_caption(f"{__title__} {__version__}")
-    ##    pygame.display.set_icon(pygame.image.load('icon.png'))
+    # pygame.display.set_icon(pygame.image.load('icon.png'))
     pygame.display.set_icon(get_tile_image(Tile(5), 32))
 
     # Set up the FPS clock
@@ -3832,8 +3829,8 @@ def run() -> None:
     pygame.mixer.music.set_endevent(music_end)
 
     # Load and start playing the music
-    ##    pygame.mixer.music.load('sound/')
-    ##    pygame.mixer.music.play()
+    # pygame.mixer.music.load('sound/')
+    # pygame.mixer.music.play()
 
     running = True
 
@@ -3880,9 +3877,9 @@ def save_crash_img() -> None:
     if not os.path.exists("Screenshots"):
         os.mkdir("Screenshots")
 
-    ##    surface.lock()
+    # surface.lock()
     pygame.image.save(surface, os.path.join("Screenshots", filename), filename)
-    ##    surface.unlock()
+    # surface.unlock()
     del surface
 
     savepath = os.path.join(os.getcwd(), "Screenshots")
@@ -3905,26 +3902,26 @@ def cli_run() -> None:
                 "This can occur when not all required modules of SDL, which pygame utilizes, are installed.",
             )
         run()
-    ##    except BaseException as ex:
-    ##        reraise = True#False
+    # except BaseException as ex:
+    # reraise = True#False
     ##
-    ####        print('Debug: Activating Post motem.')
-    ####        import pdb
-    ####        pdb.post_mortem()
+    # print('Debug: Activating Post motem.')
+    # import pdb
+    # pdb.post_mortem()
     ##
-    ##        try:
-    ##            save_crash_img()
-    ##        except BaseException as svex:
-    ##            print(f'Could not save crash screenshot: {", ".join(svex.args)}')
-    ##        try:
-    ##            import errorbox
-    ##        except ImportError:
-    ##            reraise = True
-    ##            print(f'A {type(ex).__name__} Error Has Occored: {", ".join(ex.args)}')
-    ##        else:
-    ##            errorbox.errorbox('Error', f'A {type(ex).__name__} Error Has Occored: {", ".join(ex.args)}')
-    ##        if reraise:
-    ##            raise
+    # try:
+    # save_crash_img()
+    # except BaseException as svex:
+    # print(f'Could not save crash screenshot: {", ".join(svex.args)}')
+    # try:
+    # import errorbox
+    # except ImportError:
+    # reraise = True
+    # print(f'A {type(ex).__name__} Error Has Occored: {", ".join(ex.args)}')
+    # else:
+    # errorbox.errorbox('Error', f'A {type(ex).__name__} Error Has Occored: {", ".join(ex.args)}')
+    # if reraise:
+    # raise
     finally:
         pygame.quit()
         network_shutdown()

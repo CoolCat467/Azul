@@ -19,11 +19,11 @@ def load_config(config_file: str) -> dict[str, dict[str, str]]:
     for section, values in dict(config.items()).items():
         data[section] = dict(values)
 
-    ##    config.clear()
-    ##    config.update(data)
+    # config.clear()
+    # config.update(data)
     ##
-    ##    with open(config_file, mode='w', encoding='utf-8') as conf_file:
-    ##        config.write(conf_file)
+    # with open(config_file, mode='w', encoding='utf-8') as conf_file:
+    # config.write(conf_file)
 
     return data
 

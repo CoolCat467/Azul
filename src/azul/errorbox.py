@@ -108,9 +108,12 @@ def __pygame(title: str, message: str) -> None:
             if (
                 e.type == pygame.QUIT
                 or e.type == pygame.MOUSEBUTTONDOWN
-                or pygame.KEYDOWN
-                and hasattr(e, "key")
-                and e.key in (pygame.K_ESCAPE, pygame.K_SPACE, pygame.K_RETURN)
+                or (
+                    pygame.KEYDOWN
+                    and hasattr(e, "key")
+                    and e.key
+                    in (pygame.K_ESCAPE, pygame.K_SPACE, pygame.K_RETURN)
+                )
             ):
                 break
         pygame.quit()
