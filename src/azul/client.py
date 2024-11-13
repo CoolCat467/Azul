@@ -7,6 +7,7 @@ import contextlib
 # Programmed by CoolCat467
 # Hide the pygame prompt
 import os
+import sys
 from os import path
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
@@ -472,15 +473,15 @@ if __name__ == "__main__":
     print(f"{__title__} v{__version__}\nProgrammed by {__author__}.\n")
 
     # Make sure the game will display correctly on high DPI monitors on Windows.
-    import platform
-
-    if platform.system() == "Windows":
-        from ctypes import windll  # type: ignore
+    if sys.platform == "win32":
+        # Exists on windows but not on linux or macos
+        # Windows raises attr-defined
+        # others say unused-ignore
+        from ctypes import windll  # type: ignore[attr-defined,unused-ignore]
 
         with contextlib.suppress(AttributeError):
             windll.user32.SetProcessDPIAware()
         del windll
-    del platform
 
     try:
         pygame.init()
