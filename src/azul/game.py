@@ -1,4 +1,4 @@
-"""Azul board game clone, now on the computer!"""
+"""Azul board game clone, now on the computer."""
 
 # Programmed by CoolCat467
 
@@ -175,9 +175,11 @@ def outline_rectangle(
 
 def auto_crop_clear(
     surface: pygame.surface.Surface,
-    clear: pygame.color.Color = pygame.color.Color(0, 0, 0, 0),
+    clear: pygame.color.Color | None = None,
 ) -> pygame.surface.Surface:
     """Remove unneccicary pixels from image."""
+    if clear is None:
+        clear = pygame.color.Color(0, 0, 0, 0)
     surface = surface.convert_alpha()
     w, h = surface.get_size()
     surface.lock()
@@ -251,6 +253,7 @@ def add_symbol_to_tile_surf(
     greyshift: float = GREYSHIFT,
     font: Path = FONT,
 ) -> None:
+    """Add symbol to tile surface."""
     symbol, scolor = get_tile_symbol_and_color(tilecolor, greyshift)
     pyfont = pygame.font.Font(font, math.floor(math.sqrt(tilesize**2 * 2)) - 1)
 
@@ -282,7 +285,7 @@ def get_tile_image(
     tile: Tile,
     tilesize: int,
     greyshift: float = GREYSHIFT,
-    outlineSize: float = 0.2,
+    outline_size: float = 0.2,
     font: Path = FONT,
 ) -> pygame.surface.Surface:
     """Return a surface of a given tile."""
@@ -297,15 +300,16 @@ def get_tile_image(
         surf = outline_rectangle(
             make_square_surf(color, tilesize),
             outline,
-            outlineSize,
+            outline_size,
         )
         # Add tile symbol
         add_symbol_to_tile_surf(surf, cid, tilesize, greyshift, font)
 
         return surf
-    return make_square_surf(color, tilesize)
+    surf = make_square_surf(color, tilesize)
     # Add tile symbol
-    ##    add_symbol_to_tile_surf(surf, cid, tilesize, greyshift, font)
+    add_symbol_to_tile_surf(surf, cid, tilesize, greyshift, font)
+    return surf
 
 
 def set_alpha(
@@ -357,6 +361,7 @@ class Font:
         background: tuple[int, int, int] | None = None,
         do_cache: bool = True,
     ) -> None:
+        """Initialize font."""
         self.font = font_name
         self.size = int(fontsize)
         self.color = color
@@ -369,7 +374,8 @@ class Font:
         self._change_font()
 
     def __repr__(self) -> str:
-        return "Font(%r, %i, %r, %r, %r, %r, %r, %r)" % (
+        """Return representation of self."""
+        return f"{self.__class__.__name__}(%r, %i, %r, %r, %r, %r, %r, %r)" % (
             self.font,
             self.size,
             self.color,
@@ -471,6 +477,7 @@ class ObjectHandler:
     ##    __slots__ = ("objects", "next_id", "cache")
 
     def __init__(self) -> None:
+        """Initialize object handler."""
         self.objects: dict[int, Object] = {}
         self.next_id = 0
         self.cache: dict[str, int] = {}
@@ -496,10 +503,10 @@ class ObjectHandler:
             self.rm_object(self.objects[oid])
         self.next_id = 0
 
-    def get_object(self, objectId: int) -> Object | None:
+    def get_object(self, object_id: int) -> Object | None:
         """Return the object associated with object id given. Return None if object not found."""
-        if objectId in self.objects:
-            return self.objects[objectId]
+        if object_id in self.objects:
+            return self.objects[object_id]
         return None
 
     def get_objects_with_attr(self, attribute: str) -> tuple[int, ...]:
@@ -638,10 +645,11 @@ class Object:
         "id",
         "screen_size_last",
         "game",
+        "Render_Priority",
     )
 
     def __init__(self, name: str) -> None:
-        """Sets self.name to name, and other values for rendering.
+        """Set self.name to name, and other values for rendering.
 
         Defines the following attributes:
          self.name
@@ -667,10 +675,10 @@ class Object:
         self.game: Game
 
     def __repr__(self) -> str:
-        """Return {self.name}()."""
+        """Return representation of self."""
         return f"{self.__class__.__name__}()"
 
-    def getImageZero_noFix(self) -> tuple[float, float]:
+    def get_image_zreo_no_fix(self) -> tuple[float, float]:
         """Return the screen location of the topleft point of self.image."""
         return (
             self.location[0] - self.wh[0] / 2,
@@ -679,7 +687,7 @@ class Object:
 
     def get_image_zero(self) -> tuple[int, int]:
         """Return the screen location of the topleft point of self.image fixed to integer values."""
-        x, y = self.getImageZero_noFix()
+        x, y = self.get_image_zreo_no_fix()
         return int(x), int(y)
 
     def get_rect(self) -> Rect:
@@ -718,7 +726,7 @@ class Object:
         del self.image
 
     def screen_size_update(self) -> None:
-        """Function called when screensize is changed."""
+        """Handle screensize is changes."""
         nx, ny = self.location
 
         if self.location_mode_on_resize == "Scale":
@@ -752,7 +760,7 @@ class MultipartObject(Object, ObjectHandler):
 
     def get_intersection(
         self,
-        point: tuple[int, int],
+        point: tuple[int, int] | Vector2,
     ) -> tuple[str, tuple[int, int]] | tuple[None, None]:
         """Return where a given point touches in self. Returns (None, None) with no intersections."""
         for oid in self.objects:
@@ -786,6 +794,7 @@ class MultipartObject(Object, ObjectHandler):
         ObjectHandler.render_objects(self, surface)
 
     def __del__(self) -> None:
+        """Delete data."""
         Object.__del__(self)
         ObjectHandler.__del__(self)
 
@@ -875,7 +884,7 @@ class TileRenderer(Object):
         )
 
     def update_image(self) -> None:
-        """Called when processing image changes, directed by self.image_update being True."""
+        """Process image changes, directed by self.image_update being True."""
         raise NotImplementedError
 
     def process(self, time_passed: float) -> None:
@@ -925,7 +934,7 @@ class Cursor(TileRenderer):
         self,
         count_number_one_tile: bool = False,
     ) -> tuple[Tile | None, int]:
-        """Returns color of tiles are and number of tiles held."""
+        """Return color of tiles are and number of tiles held."""
         if not self.is_holding(count_number_one_tile):
             return None, 0
         return self.tiles[0], self.get_held_count(count_number_one_tile)
@@ -981,10 +990,9 @@ class Cursor(TileRenderer):
 
             tiles = []
             for tile in (self.tiles.popleft() for i in range(number)):
-                if tile.color == NUMBERONETILE:
-                    if not allow_number_one_tile:
-                        self.tiles.append(tile)
-                        continue
+                if tile.color == NUMBERONETILE and not allow_number_one_tile:
+                    self.tiles.append(tile)
+                    continue
                 tiles.append(tile)
             self.image_update = True
 
@@ -1027,7 +1035,7 @@ def gsc_bound_index(
             index: tuple[int, int],
             *args: Unpack[P],
         ) -> RT | T:
-            """Wrapper function that makes sure a position tuple (x, y) is valid."""
+            """Ensure a index position tuple is valid."""
             x, y = index
             if x < 0 or x >= self.size[0]:
                 return bounds_failure_return
@@ -1138,22 +1146,25 @@ class Grid(TileRenderer):
 class Board(Grid):
     """Represents the board in the Game."""
 
-    __slots__ = ("player", "variant_play", "additions", "wall_tileing")
+    __slots__ = ("player", "variant_play", "additions", "wall_tiling")
     bcolor = ORANGE
 
     def __init__(self, player: Player, variant_play: bool = False) -> None:
-        """Requires a player object."""
+        """Initialize player's board."""
         super().__init__((5, 5), player.game, background=self.bcolor)
         self.name = "Board"
         self.player = player
 
         self.variant_play = variant_play
-        self.additions = {}
+        self.additions: dict[int, Tile] = {}
 
-        self.wall_tileing = False
+        self.wall_tiling = False
 
     def __repr__(self) -> str:
-        return f"Board({self.player!r}, {self.variant_play})"
+        """Return representation of self."""
+        return (
+            f"{self.__class__.__name__}({self.player!r}, {self.variant_play})"
+        )
 
     def set_colors(self, keep_read: bool = True) -> None:
         """Reset tile colors."""
@@ -1206,9 +1217,9 @@ class Board(Grid):
         ccolors = Counter(column_colors)
         return sorted(ccolors.keys())
 
-    def is_wall_tileing(self) -> bool:
+    def is_wall_tiling(self) -> bool:
         """Return True if in Wall Tiling Mode."""
-        return self.wall_tileing
+        return self.wall_tiling
 
     def get_tile_for_cursor_by_row(self, row: int) -> Tile | None:
         """Return A COPY OF tile the mouse should hold. Returns None on failure."""
@@ -1234,9 +1245,10 @@ class Board(Grid):
     def get_rows_to_tile_map(self) -> dict[int, int]:
         """Return a dictionary of row numbers and row color to be wall tiled."""
         rows = {}
-        for row in self.additions:
-            if isinstance(self.additions[row], Tile):
-                rows[row] = self.additions[row].color
+        for row, tile in self.additions.items():
+            if not isinstance(tile, Tile):
+                continue
+            rows[row] = tile.color
         return rows
 
     def calculate_valid_locations_for_tile_row(
@@ -1245,6 +1257,7 @@ class Board(Grid):
     ) -> tuple[int, ...]:
         """Return the valid drop columns of the additions tile for a given row."""
         valid = []
+        # ??? Why overwriting row?
         if row in self.additions:
             tile = self.additions[row]
             if isinstance(tile, Tile):
@@ -1279,20 +1292,22 @@ class Board(Grid):
         assert at_point is not None
         if at_point.color <= 0 and row in self.additions:
             tile = self.additions[row]
-            if tile is not None:
-                if self.can_place_tile_color_at_point(position, tile):
-                    self.place_tile(position, tile)
-                    self.additions[row] = column
-                    # Update invalid placements after new placement
-                    self.remove_invalid_additions()
-                    success = True
+            if tile is not None and self.can_place_tile_color_at_point(
+                position,
+                tile,
+            ):
+                self.place_tile(position, tile)
+                self.additions[row] = column
+                # Update invalid placements after new placement
+                self.remove_invalid_additions()
+                success = True
         if not self.get_rows_to_tile_map():
-            self.wall_tileing = False
+            self.wall_tiling = False
         return success
 
     def wall_tiling_mode(self, moved_table: dict[int, Tile]) -> None:
         """Set self into Wall Tiling Mode. Finishes automatically if not in variant play mode."""
-        self.wall_tileing = True
+        self.wall_tiling = True
         for key, value in moved_table.items():
             key = int(key) - 1
             if key in self.additions:
@@ -1319,7 +1334,7 @@ class Board(Grid):
                         )
                 else:
                     raise RuntimeError(f"{row} not in moved_table!")
-            self.wall_tileing = False
+            self.wall_tiling = False
         else:
             # Invalid additions can only happen in variant play mode.
             self.remove_invalid_additions()
@@ -1353,12 +1368,12 @@ class Board(Grid):
             pt = try_range(range(v + 1, size))
             return nt + pt
 
-        # Combine two lists by zipping together and returning list object.
         def comb(one: Iterable[T], two: Iterable[RT]) -> list[tuple[T, RT]]:
+            """Combine two lists by zipping together and returning list object."""
             return list(zip(one, two, strict=False))
 
-        # Return all of the self.get_info points for each value in lst.
         def get_all(lst: list[tuple[int, int]]) -> Generator[Tile, None, None]:
+            """Return all of the self.get_info points for each value in lst."""
             for pos in lst:
                 tile = self.get_info(pos)
                 assert tile is not None
@@ -1372,7 +1387,10 @@ class Board(Grid):
         return list(get_all(row_touches)), list(get_all(column_touches))
 
     def score_additions(self) -> int:
-        """Using self.additions, which is set in self.wall_tiling_mode(), return the number of points the additions scored."""
+        """Return the number of points the additions scored.
+
+        Uses self.additions, which is set in self.wall_tiling_mode()
+        """
         score = 0
         for x, y in ((self.additions[y], y) for y in range(self.size[1])):
             if x is not None:
@@ -1452,6 +1470,7 @@ class Row(TileRenderer):
         tile_seperation: int | None = None,
         background: tuple[int, int, int] | None = None,
     ) -> None:
+        """Initialize row."""
         super().__init__(
             "Row",
             player.game,
@@ -1465,7 +1484,11 @@ class Row(TileRenderer):
         self.tiles = deque([Tile(self.color)] * self.size)
 
     def __repr__(self) -> str:
-        return "Row(%r, %i, ...)" % (self.game, self.size)
+        """Return representation of self."""
+        return f"{self.__class__.__name__}(%r, %i, ...)" % (
+            self.game,
+            self.size,
+        )
 
     def update_image(self) -> None:
         """Update self.image."""
@@ -1516,6 +1539,7 @@ class Row(TileRenderer):
             return False
 
         board = self.player.get_object_by_name("Board")
+        assert isinstance(board, Board)
         # Is color not present?
         return tile.color not in board.get_colors_in_row(
             self.size - 1,
@@ -1564,7 +1588,7 @@ class Row(TileRenderer):
 
     def wall_tile(
         self,
-        add_to_table: dict[str, list[Tile] | None],
+        add_to_table: dict[str, list[Tile] | Tile | None],
         empty_color: int = -6,
     ) -> None:
         """Move tiles around and into add dictionary for the wall tiling phase of the game. Removes tiles from self."""
@@ -1575,8 +1599,10 @@ class Row(TileRenderer):
             return
         self.color = empty_color
         add_to_table[str(self.size)] = self.get_tile()
+        for_box = add_to_table["tiles_for_box"]
+        assert isinstance(for_box, list)
         for _i in range(self.size - 1):
-            add_to_table["tiles_for_box"].append(self.get_tile())
+            for_box.append(self.get_tile())
 
     def set_background(self, color: tuple[int, int, int] | None) -> None:
         """Set the background color for this row."""
@@ -1591,7 +1617,8 @@ class PatternLine(MultipartObject):
     size = (5, 5)
 
     def __init__(self, player: Player, row_seperation: int = 0) -> None:
-        MultipartObject.__init__(self, "PatternLine")
+        """Initialize pattern line."""
+        super().__init__("PatternLine")
         self.player = player
         self.row_seperation = row_seperation
 
@@ -1613,7 +1640,9 @@ class PatternLine(MultipartObject):
 
     def get_row(self, row: int) -> Row:
         """Return given row."""
-        return self.get_object(row)
+        object_ = self.get_object(row)
+        assert isinstance(object_, Row)
+        return object_
 
     def reset_position(self) -> None:
         """Reset Locations of Rows according to self.location."""
@@ -1624,15 +1653,16 @@ class PatternLine(MultipartObject):
                 "Image Dimensions for Row Object (row.wh) are None!",
             )
         h1 = self.get_row(0).tile_full
-        h = last * h1
+        h = int(last * h1)
         self.wh = w, h
         w1 = h1 / 2
 
         x, y = self.location
         y -= h / 2 - w1
         for rid in self.objects:
-            l = last - self.objects[rid].size
-            self.objects[rid].location = Vector2(x + (l * w1), y + rid * h1)
+            row = self.get_row(rid)
+            diff = last - row.size
+            row.location = Vector2(x + (diff * w1), y + rid * h1)
 
     def get_tile_point(
         self,
@@ -1649,9 +1679,9 @@ class PatternLine(MultipartObject):
         """Return True if self is full."""
         return all(self.get_row(rid).is_full() for rid in range(self.size[1]))
 
-    def wall_tileing(self) -> dict:
+    def wall_tiling(self) -> dict[str, list[Tile] | Tile | None]:
         """Return a dictionary to be used with wall tiling. Removes tiles from rows."""
-        values = {}
+        values: dict[str, list[Tile] | Tile | None] = {}
         for rid in range(self.size[1]):
             self.get_row(rid).wall_tile(values)
         return values
@@ -1677,6 +1707,7 @@ class Text(Object):
         cy: bool = True,
         name: str = "",
     ) -> None:
+        """Initialize text."""
         super().__init__(f"Text{name}")
         self.font = Font(
             FONT,
@@ -1702,10 +1733,11 @@ class Text(Object):
         return x, y
 
     def __repr__(self) -> str:
+        """Return representation of self."""
         return f"<{self.__class__.__name__} Object>"
 
     @staticmethod
-    def get_font_height(font: str, size: int) -> int:
+    def get_font_height(font: str | Path, size: int) -> int:
         """Return the height of font at fontsize size."""
         return pygame.font.Font(font, size).get_height()
 
@@ -1743,6 +1775,7 @@ class FloorLine(Row):
     number_one_color = NUMBERONETILE
 
     def __init__(self, player: Player) -> None:
+        """Initialize floor line."""
         super().__init__(player, self.size, background=ORANGE)
         self.name = "floor_line"
 
@@ -1759,6 +1792,7 @@ class FloorLine(Row):
         self.numbers = [next(gen) for i in range(self.size)]
 
     def __repr__(self) -> str:
+        """Return representation of self."""
         return f"{self.__class__.__name__}({self.player!r})"
 
     def render(self, surface: pygame.surface.Surface) -> None:
@@ -1766,8 +1800,7 @@ class FloorLine(Row):
         super().render(surface)
 
         sx, sy = self.location
-        if self.wh is None:
-            return
+        assert self.wh is not None, "Should be impossible."
         w, h = self.wh
         for x in range(self.size):
             xy = round(
@@ -1810,11 +1843,10 @@ class FloorLine(Row):
         for x in range(self.size):
             if self.tiles[x].color >= 0:
                 running_total += self.numbers[x]
-            elif x < self.size - 1:
-                if self.tiles[x + 1].color >= 0:
-                    raise RuntimeError(
-                        "Player is likely cheating! Invalid placement of floor_line tiles!",
-                    )
+            elif x < self.size - 1 and self.tiles[x + 1].color >= 0:
+                raise RuntimeError(
+                    "Player is likely cheating! Invalid placement of floor_line tiles!",
+                )
         return running_total
 
     def get_tiles(
@@ -1847,7 +1879,7 @@ class Factory(Grid):
     size = (2, 2)
     color = WHITE
     outline = BLUE
-    outSize = 0.1
+    out_size = 0.1
 
     def __init__(self, game: Game, factory_id: int) -> None:
         """Initialize factory."""
@@ -1860,9 +1892,11 @@ class Factory(Grid):
         )
 
     def __repr__(self) -> str:
-        return "Factory(%r, %i)" % (self.game, self.number)
+        """Return representation of self."""
+        return f"{self.__class__.__name__}(%r, %i)" % (self.game, self.number)
 
     def add_circle(self, surface: pygame.surface.Surface) -> None:
+        """Add circle to self.image."""
         if f"FactoryCircle{self.radius}" not in self.game.cache:
             rad = math.ceil(self.radius)
             surf = set_alpha(pygame.surface.Surface((2 * rad, 2 * rad)), 1)
@@ -1871,7 +1905,7 @@ class Factory(Grid):
                 surf,
                 self.color,
                 (rad, rad),
-                math.ceil(rad * (1 - self.outSize)),
+                math.ceil(rad * (1 - self.out_size)),
             )
             self.game.cache[f"FactoryCircle{self.radius}"] = surf
         surf = self.game.cache[f"FactoryCircle{self.radius}"].copy()
@@ -1916,7 +1950,7 @@ class Factory(Grid):
                 for x in range(self.size[0])
                 for y in range(self.size[1])
             )
-            if tile.color != -6
+            if tile is not None and tile.color != -6
         ]
 
     def grab_color(self, color: int) -> tuple[list[Tile], list[Tile]]:
@@ -1933,7 +1967,7 @@ class Factory(Grid):
     def process(self, time_passed: float) -> None:
         """Process self."""
         if self.image_update:
-            self.radius = self.tile_full * self.size[0] * self.size[1] / 3 + 3
+            self.radius = self.tile_full * self.size[0] * self.size[1] // 3 + 3
         super().process(time_passed)
 
 
@@ -1948,7 +1982,7 @@ class Factories(MultipartObject):
         factories: int,
         size: int | None = None,
     ) -> None:
-        """Requires a number of factories."""
+        """Initialize factories."""
         super().__init__("Factories")
 
         self.game = game
@@ -1958,8 +1992,10 @@ class Factories(MultipartObject):
             self.add_object(Factory(self.game, i))
 
         if size is None:
-            self.objects[0].process(0)
-            rad = self.objects[0].radius
+            factory = self.objects[0]
+            assert isinstance(factory, Factory)
+            factory.process(0)
+            rad = factory.radius
             self.size = rad * 5
         else:
             self.size = size
@@ -1968,38 +2004,50 @@ class Factories(MultipartObject):
         self.play_tiles_from_bag()
 
     def __repr__(self) -> str:
-        return "Factories(%r, %i, ...)" % (self.game, self.count)
+        """Return representation of self."""
+        return f"{self.__class__.__name__}(%r, %i, ...)" % (
+            self.game,
+            self.count,
+        )
 
     def reset_position(self) -> None:
         """Reset the position of all factories within."""
         degrees = 360 / self.count
         for i in range(self.count):
-            rot = math.radians(degrees * i)
-            self.objects[i].location = (
-                math.sin(rot) * self.size + self.location[0],
-                math.cos(rot) * self.size + self.location[1],
+            radians = math.radians(degrees * i)
+            self.objects[i].location = Vector2(
+                math.sin(radians) * self.size + self.location[0],
+                math.cos(radians) * self.size + self.location[1],
             )
 
     def process(self, time_passed: float) -> None:
         """Process factories. Does not react to cursor if hidden."""
         super().process(time_passed)
-        if not self.hidden:
-            cursor = self.game.get_object_by_name("Cursor")
-            assert isinstance(cursor, Cursor)
-            if cursor.is_pressed() and not cursor.is_holding():
-                obj, point = self.get_intersection(cursor.location)
-                if obj is not None and point is not None:
-                    oid = int(obj[7:])
-                    tileAtPoint = self.objects[oid].get_info(point)
-                    if (tileAtPoint is not None) and tileAtPoint.color >= 0:
-                        table = self.game.get_object_by_name("TableCenter")
-                        assert isinstance(table, TableCenter)
-                        select, tocenter = self.objects[oid].grab_color(
-                            tileAtPoint.color,
-                        )
-                        if tocenter:
-                            table.add_tiles(tocenter)
-                        cursor.drag(select)
+        if self.hidden:
+            return
+        cursor = self.game.get_object_by_name("Cursor")
+        assert isinstance(cursor, Cursor)
+        if not cursor.is_pressed() or cursor.is_holding():
+            return
+        obj, point = self.get_intersection(cursor.location)
+        if obj is None or point is None:
+            return
+        oid = int(obj[7:])
+
+        factory = self.objects[oid]
+        assert isinstance(factory, Factory)
+
+        tile_at_point = factory.get_info(point)
+        if tile_at_point is None or tile_at_point.color < 0:
+            return
+        table = self.game.get_object_by_name("TableCenter")
+        assert isinstance(table, TableCenter)
+        select, tocenter = factory.grab_color(
+            tile_at_point.color,
+        )
+        if tocenter:
+            table.add_tiles(tocenter)
+        cursor.drag(select)
 
     def play_tiles_from_bag(self, empty_color: int = -6) -> None:
         """Divy up tiles to each factory from the bag."""
@@ -2014,6 +2062,7 @@ class Factories(MultipartObject):
                     drawn.append(self.game.bag.draw_tile())
                 else:  # Otherwise, get the box lid
                     box_lid = self.game.get_object_by_name("BoxLid")
+                    assert isinstance(box_lid, BoxLid)
                     # If the box lid is not empty,
                     if not box_lid.is_empty():
                         # Add all the tiles from the box lid to the bag
@@ -2029,11 +2078,18 @@ class Factories(MultipartObject):
                         # displays are properly filled."
                         drawn.append(Tile(empty_color))
             # Place drawn tiles on factory
-            self.objects[fid].fill(drawn)
+            factory = self.objects[fid]
+            assert isinstance(factory, Factory)
+            factory.fill(drawn)
 
     def is_all_empty(self) -> bool:
         """Return True if all factories are empty."""
-        return all(self.objects[fid].is_empty() for fid in range(self.count))
+        for fid in range(self.count):
+            factory = self.objects[fid]
+            assert isinstance(factory, Factory)
+            if not factory.is_empty():
+                return False
+        return True
 
 
 class TableCenter(Grid):
@@ -2043,8 +2099,8 @@ class TableCenter(Grid):
     first_tile_color = NUMBERONETILE
 
     def __init__(self, game: Game, has_number_one_tile: bool = True) -> None:
-        """Requires a game object handler to exist in."""
-        Grid.__init__(self, self.size, game, background=None)
+        """Initialize center of table."""
+        super().__init__(self.size, game, background=None)
         self.game = game
         self.name = "TableCenter"
 
@@ -2055,7 +2111,8 @@ class TableCenter(Grid):
         self.next_position = (0, 0)
 
     def __repr__(self) -> str:
-        return f"TableCenter({self.game!r})"
+        """Return representation of self."""
+        return f"{self.__class__.__name__}({self.game!r})"
 
     def add_number_one_tile(self) -> None:
         """Add the number one tile to the internal grid."""
@@ -2088,15 +2145,17 @@ class TableCenter(Grid):
         for y in range(self.size[1]):
             for x in range(self.size[0]):
                 if self.number_one_tile_exists:
-                    if self.get_info((x, y)).color == self.first_tile_color:
+                    tile = self.get_info((x, y))
+                    assert tile is not None
+                    if tile.color == self.first_tile_color:
                         continue
                 at = self.get_tile((x, y), replace)
 
                 if at is not None:
                     full.append(at)
-        sortedTiles = sorted(full, key=sort_tiles)
+        sorted_tiles = sorted(full, key=sort_tiles)
         self.next_position = (0, 0)
-        self.add_tiles(sortedTiles, False)
+        self.add_tiles(sorted_tiles, False)
 
     def pull_tiles(self, tile_color: int, replace: int = -6) -> list[Tile]:
         """Remove all of the tiles of tile_color from the Table Center Grid."""
@@ -2104,31 +2163,41 @@ class TableCenter(Grid):
         for y in range(self.size[1]):
             for x in range(self.size[0]):
                 info_tile = self.get_info((x, y))
+                assert info_tile is not None
                 if info_tile.color == tile_color:
                     to_pull.append((x, y))
-                elif self.number_one_tile_exists:
-                    if info_tile.color == self.first_tile_color:
-                        to_pull.append((x, y))
-                        self.number_one_tile_exists = False
-        tiles = [self.get_tile(pos, replace) for pos in to_pull]
+                elif (
+                    self.number_one_tile_exists
+                    and info_tile.color == self.first_tile_color
+                ):
+                    to_pull.append((x, y))
+                    self.number_one_tile_exists = False
+        tiles = []
+        for pos in to_pull:
+            tile = self.get_tile(pos, replace)
+            assert tile is not None
+            tiles.append(tile)
         self.reorder_tiles(replace)
         return tiles
 
     def process(self, time_passed: float) -> None:
         """Process factories."""
-        if not self.hidden:
-            cursor = self.game.get_object_by_name("Cursor")
-            if (
-                cursor.is_pressed()
-                and not cursor.is_holding()
-                and not self.is_empty()
-            ):
-                if self.point_intersects(cursor.location):
-                    point = self.get_tile_point(cursor.location)
-                    # Shouldn't return none anymore since we have point_intersects now.
-                    colorAtPoint = self.get_info(point).color
-                    if colorAtPoint >= 0 and colorAtPoint < 5:
-                        cursor.drag(self.pull_tiles(colorAtPoint))
+        if self.hidden:
+            super().process(time_passed)
+            return
+        cursor = self.game.get_object_by_name("Cursor")
+        assert isinstance(cursor, Cursor)
+        if (
+            cursor.is_pressed()
+            and not cursor.is_holding()
+            and not self.is_empty()
+            and self.point_intersects(cursor.location)
+        ):
+            point = self.get_tile_point(cursor.location)
+            # Shouldn't return none anymore since we have point_intersects now.
+            color_at_point = self.get_info(point).color
+            if color_at_point >= 0 and color_at_point < 5:
+                cursor.drag(self.pull_tiles(color_at_point))
         super().process(time_passed)
 
 
@@ -2144,6 +2213,7 @@ class Bag:
     )
 
     def __init__(self, tile_count: int = 100, tile_types: int = 5) -> None:
+        """Initialize bag of tiles."""
         self.tile_count = int(tile_count)
         self.tile_types = int(tile_types)
         self.tile_names = [chr(65 + i) for i in range(self.tile_types)]
@@ -2164,19 +2234,23 @@ class Bag:
         )
 
     def __repr__(self) -> str:
-        return "Bag(%i, %i)" % (self.tile_count, self.tile_types)
+        """Return representation of self."""
+        return f"{self.__class__.__name__}(%i, %i)" % (
+            self.tile_count,
+            self.tile_types,
+        )
 
     def reset(self) -> None:
         """Randomize all the tiles in the bag."""
         self.tiles = deque(randomize(self.tiles))
 
-    def get_color(self, tile_name):
+    def get_color(self, tile_name: str) -> int:
         """Return the color of a named tile."""
         if tile_name not in self.tile_names:
             raise ValueError(f"Tile Name {tile_name} Not Found!")
         return self.tile_names.index(tile_name)
 
-    def get_tile(self, tile_name) -> Tile:
+    def get_tile(self, tile_name: str) -> Tile:
         """Return a Tile Object from a tile name."""
         return Tile(self.get_color(tile_name))
 
@@ -2188,7 +2262,7 @@ class Bag:
         """Return True if no tiles are currently held."""
         return self.get_count() == 0
 
-    def draw_tile(self):
+    def draw_tile(self) -> Tile | None:
         """Return a random Tile Object from the bag. Return None if no tiles to draw."""
         if not self.is_empty():
             return self.get_tile(self.tiles.pop())
@@ -2204,11 +2278,12 @@ class Bag:
     def add_tile(self, tile_object: Tile) -> None:
         """Add a Tile Object to the bag."""
         name = self.get_name(int(tile_object.color))
-        rnge = (0, len(self.tiles) - 1)
-        if rnge[1] - rnge[0] <= 1:
+        range_ = (0, len(self.tiles) - 1)
+        if range_[1] - range_[0] <= 1:
             index = 0
         else:
-            index = random.randint(rnge[0], rnge[1])
+            # S311 Standard pseudo-random generators are not suitable for cryptographic purposes
+            index = random.randint(range_[0], range_[1])  # noqa: S311
         ##        self.tiles.insert(random.randint(0, len(self.tiles)-1), self.get_name(int(tile_object.color)))
         self.tiles.insert(index, name)
         del tile_object
@@ -2223,21 +2298,23 @@ class BoxLid(Object):
     """BoxLid Object, represents the box lid were tiles go before being added to the bag again."""
 
     def __init__(self, game: Game) -> None:
-        Object.__init__(self, "BoxLid")
+        """Initialize box lid."""
+        super().__init__("BoxLid")
         self.game = game
-        self.tiles = deque()
+        self.tiles: deque[Tile] = deque()
 
     def __repr__(self) -> str:
-        return f"BoxLid({self.game!r})"
+        """Return representation of self."""
+        return f"{self.__class__.__name__}({self.game!r})"
 
     def add_tile(self, tile: Tile) -> None:
         """Add a tile to self."""
         if tile.color >= 0 and tile.color < 5:
             self.tiles.append(tile)
-        else:
-            raise Warning(
-                f"BoxLid.add_tile tried to add an invalid tile to self ({tile.color}). Be careful, bad things might be trying to happen.",
-            )
+            return
+        raise ValueError(
+            f"BoxLid.add_tile tried to add an invalid tile to self ({tile.color = }).",
+        )
 
     def add_tiles(self, tiles: Iterable[Tile]) -> None:
         """Add multiple tiles to self."""
@@ -2262,9 +2339,9 @@ class Player(MultipartObject):
         player_id: int,
         networked: bool = False,
         varient_play: bool = False,
-    ):
-        """Requires a player Id and can be told to be controlled by the network or be in variant play mode."""
-        MultipartObject.__init__(self, "Player%i" % player_id)
+    ) -> None:
+        """Initialize player."""
+        super().__init__(f"Player{player_id}")
 
         self.game = game
         self.player_id = player_id
@@ -2278,16 +2355,17 @@ class Player(MultipartObject):
 
         self.score = 0
         self.is_turn = False
-        self.is_wall_tileing = False
+        self.is_wall_tiling = False
         self.just_held = False
         self.just_dropped = False
 
         self.update_score()
 
-        self._lastloc = 0, 0
+        self._lastloc = Vector2(0, 0)
 
     def __repr__(self) -> str:
-        return "Player(%r, %i, %s, %s)" % (
+        """Return representation of self."""
+        return f"{self.__class__.__name__}(%r, %i, %s, %s)" % (
             self.game,
             self.player_id,
             self.networked,
@@ -2297,14 +2375,17 @@ class Player(MultipartObject):
     def update_score(self) -> None:
         """Update the scorebox for this player."""
         score_box = self.get_object_by_name("Text")
+        assert isinstance(score_box, Text)
         score_box.update_value(f"Player {self.player_id+1}: {self.score}")
 
     def trigger_turn_now(self) -> None:
-        """It is this player's turn now."""
+        """Handle start of turn."""
         if not self.is_turn:
             pattern_line = self.get_object_by_name("PatternLine")
-            if self.is_wall_tileing:
+            assert isinstance(pattern_line, PatternLine)
+            if self.is_wall_tiling:
                 board = self.get_object_by_name("Board")
+                assert isinstance(board, Board)
                 rows = board.get_rows_to_tile_map()
                 for rowpos in rows:
                     pattern_line.get_row(rowpos).set_background(
@@ -2315,14 +2396,19 @@ class Player(MultipartObject):
         self.is_turn = True
 
     def end_of_turn(self) -> None:
-        """It is no longer this player's turn."""
+        """Handle end of turn."""
         if self.is_turn:
             pattern_line = self.get_object_by_name("PatternLine")
+            assert isinstance(pattern_line, PatternLine)
             pattern_line.set_background(None)
         self.is_turn = False
 
     def end_of_game_trigger(self) -> None:
-        """Function called by end state when game is over; Hide pattern lines and floor line."""
+        """Handle end of game.
+
+        Called by end state when game is over
+        Hide pattern lines and floor line.
+        """
         pattern = self.get_object_by_name("PatternLine")
         floor = self.get_object_by_name("floor_line")
 
@@ -2333,21 +2419,31 @@ class Player(MultipartObject):
         """Reset positions of all parts of self based off self.location."""
         x, y = self.location
 
-        bw, bh = self.get_object_by_name("Board").wh
-        self.get_object_by_name("Board").location = x + bw / 2, y
-        lw = self.get_object_by_name("PatternLine").wh[0] / 2
-        self.get_object_by_name("PatternLine").location = x - lw, y
-        self.get_object_by_name("floor_line").wh[0]
-        self.get_object_by_name("floor_line").location = x - lw * (
-            2 / 3
-        ) + TILESIZE / 3.75, y + bh * (2 / 3)
-        self.get_object_by_name("Text").location = x - (bw / 3), y - (
-            bh * (2 / 3)
+        board = self.get_object_by_name("Board")
+        assert isinstance(board, Board)
+        bw, bh = board.wh
+        board.location = Vector2(x + bw // 2, y)
+
+        pattern_line = self.get_object_by_name("PatternLine")
+        assert isinstance(pattern_line, PatternLine)
+        lw = pattern_line.wh[0] // 2
+        pattern_line.location = x - lw, y
+
+        floor_line = self.get_object_by_name("floor_line")
+        assert isinstance(floor_line, FloorLine)
+        floor_line.wh[0]
+        floor_line.location = Vector2(
+            int(x - lw * (2 / 3) + TILESIZE / 3.75),
+            int(y + bh * (2 / 3)),
         )
 
-    def wall_tileing(self) -> None:
+        text = self.get_object_by_name("Text")
+        assert isinstance(text, Text)
+        text.location = Vector2(x - (bw // 3), y - (bh * 2 // 3))
+
+    def wall_tiling(self) -> None:
         """Do the wall tiling phase of the game for this player."""
-        self.is_wall_tileing = True
+        self.is_wall_tiling = True
         pattern_line = self.get_object_by_name("PatternLine")
         assert isinstance(pattern_line, PatternLine)
         board = self.get_object_by_name("Board")
@@ -2355,26 +2451,30 @@ class Player(MultipartObject):
         box_lid = self.game.get_object_by_name("BoxLid")
         assert isinstance(box_lid, BoxLid)
 
-        data = pattern_line.wall_tileing()
+        data = pattern_line.wall_tiling()
         box_lid.add_tiles(data["tiles_for_box"])
         del data["tiles_for_box"]
 
         board.wall_tiling_mode(data)
 
-    def done_wall_tileing(self) -> bool:
+    def done_wall_tiling(self) -> bool:
         """Return True if internal Board is done wall tiling."""
         board = self.get_object_by_name("Board")
-        return not board.is_wall_tileing()
+        assert isinstance(board, Board)
+        return not board.is_wall_tiling()
 
     def next_round(self) -> None:
-        """Called when player is done wall tiling."""
-        self.is_wall_tileing = False
+        """Handle end of wall tiling."""
+        self.is_wall_tiling = False
 
-    def score_phase(self):
-        """Do the scoring phase of the game for this player."""
+    def score_phase(self) -> Tile | None:
+        """Do the scoring phase of the game for this player. Return number one tile or None."""
         board = self.get_object_by_name("Board")
         floor_line = self.get_object_by_name("floor_line")
         box_lid = self.game.get_object_by_name("BoxLid")
+        assert isinstance(board, Board)
+        assert isinstance(floor_line, FloorLine)
+        assert isinstance(box_lid, BoxLid)
 
         def saturatescore() -> None:
             if self.score < 0:
@@ -2394,6 +2494,7 @@ class Player(MultipartObject):
     def end_of_game_scoring(self) -> None:
         """Update final score with additional end of game points."""
         board = self.get_object_by_name("Board")
+        assert isinstance(board, Board)
 
         self.score += board.end_of_game_scoreing()
 
@@ -2402,11 +2503,15 @@ class Player(MultipartObject):
     def has_horzontal_line(self) -> bool:
         """Return True if this player has a horizontal line on their game board filled."""
         board = self.get_object_by_name("Board")
+        assert isinstance(board, Board)
+
         return board.has_filled_row()
 
     def get_horizontal_lines(self) -> int:
         """Return the number of filled horizontal lines this player has on their game board."""
         board = self.get_object_by_name("Board")
+        assert isinstance(board, Board)
+
         return board.get_filled_rows()
 
     def process(self, time_passed: float) -> None:
@@ -2415,7 +2520,7 @@ class Player(MultipartObject):
             self.set_attr_all("hidden", self.hidden)
             super().process(time_passed)
             return
-        if self.hidden and self.is_wall_tileing and self.varient_play:
+        if self.hidden and self.is_wall_tiling and self.varient_play:
             # If hidden, not anymore. Our turn.
             self.hidden = False
         if self.networked:  # We are networked.
@@ -2447,7 +2552,7 @@ class Player(MultipartObject):
         # Mouse down
         obj, point = self.get_intersection(cursor.location)
         if obj is None or point is None:
-            if self.is_wall_tileing and self.done_wall_tileing():
+            if self.is_wall_tiling and self.done_wall_tiling():
                 self.next_round()
                 self.game.next_turn()
             self.set_attr_all("hidden", self.hidden)
@@ -2456,7 +2561,7 @@ class Player(MultipartObject):
         # Something pressed
         if cursor.is_holding():  # Cursor holding tiles
             move_made = False
-            if not self.is_wall_tileing:  # Is wall tiling:
+            if not self.is_wall_tiling:  # Is wall tiling:
                 if obj == "PatternLine":
                     pos, row_number = point
                     row = pattern_line.get_row(row_number)
@@ -2501,13 +2606,14 @@ class Player(MultipartObject):
             elif (
                 not self.just_held
                 and obj == "Board"
+                and board.get_info(point) is not None
                 and board.get_info(point).color == -6
             ):
                 # Cursor holding and wall tiling
-                column, row = point
+                column, row_id = point
                 cursor_tile = cursor.drop(1)[0]
                 board_tile = board.get_tile_for_cursor_by_row(
-                    row,
+                    row_id,
                 )
                 if (
                     board_tile is not None
@@ -2516,17 +2622,17 @@ class Player(MultipartObject):
                 ):
                     self.just_dropped = True
                     pattern_line.get_row(
-                        row,
+                        row_id,
                     ).set_background(None)
 
-            if move_made and not self.is_wall_tileing:
+            if move_made and not self.is_wall_tiling:
                 if cursor.holding_number_one:
-                    floor_line.place_tile(
-                        cursor.drop_one_tile(),
-                    )
+                    one_tile = cursor.drop_one_tile()
+                    assert one_tile is not None
+                    floor_line.place_tile(one_tile)
                 if cursor.get_held_count(True) == 0:
                     self.game.next_turn()
-        elif self.is_wall_tileing and obj == "Board" and not self.just_dropped:
+        elif self.is_wall_tiling and obj == "Board" and not self.just_dropped:
             # Mouse down, something pressed, and not holding anything
             # Wall tiling, pressed, not holding
             column_number, row_number = point
@@ -2536,7 +2642,7 @@ class Player(MultipartObject):
             if tile is not None:
                 cursor.drag([tile])
                 self.just_held = True
-        if self.is_wall_tileing and self.done_wall_tileing():
+        if self.is_wall_tiling and self.done_wall_tiling():
             self.next_round()
             self.game.next_turn()
         self.set_attr_all("hidden", self.hidden)
@@ -2557,6 +2663,7 @@ class Button(Text):
         initial_value: str = "",
         font_size: int = BUTTONFONTSIZE,
     ) -> None:
+        """Initialize button."""
         super().__init__(font_size, self.textcolor, background=None)
         self.name = f"Button{name}"
         self.state = state
@@ -2568,12 +2675,14 @@ class Button(Text):
 
         self.action = lambda: None
         self.delay = 0.6
-        self.cur_time = 1
+        self.cur_time = 1.0
 
     def __repr__(self) -> str:
+        """Return representation of self."""
         return f"Button({self.name[6:]}, {self.state}, {self.minsize}, {self.font.last_text}, {self.font.pyfont})"
 
     def get_height(self) -> int:
+        """Return font height."""
         return self.font.get_height()
 
     def bind_action(self, function: Callable[[], None]) -> None:
@@ -2582,16 +2691,18 @@ class Button(Text):
 
     def update_value(
         self,
-        text: str,
+        text: str | None,
         size: int | None = None,
         color: tuple[int, int, int] | None = None,
         background: tuple[int, int, int] | None = None,
     ) -> None:
-        disp = str(text).center(self.minsize)
+        """Update button text."""
+        disp = str(text or "").center(self.minsize)
         super().update_value(f" {disp} ", size, color, background)
         self.font.last_text = disp
 
     def render(self, surface: pygame.surface.Surface) -> None:
+        """Render button."""
         if not self.hidden:
             text_rect = self.get_rect()
             ##            if PYGAME_VERSION < 201:
@@ -2615,20 +2726,22 @@ class Button(Text):
 
     def is_pressed(self) -> bool:
         """Return True if this button is pressed."""
+        assert self.state.game is not None
         cursor = self.state.game.get_object_by_name("Cursor")
-        if not self.hidden and cursor.is_pressed():
-            if self.point_intersects(cursor.location):
-                return True
-        return False
+        assert isinstance(cursor, Cursor)
+        return (
+            not self.hidden
+            and cursor.is_pressed()
+            and self.point_intersects(cursor.location)
+        )
 
     def process(self, time_passed: float) -> None:
         """Call self.action one time when pressed, then wait self.delay to call again."""
         if self.cur_time > 0:
             self.cur_time = max(self.cur_time - time_passed, 0)
-        else:
-            if self.is_pressed():
-                self.action()
-                self.cur_time = self.delay
+        elif self.is_pressed():
+            self.action()
+            self.cur_time = self.delay
         if self.font.last_text != self._last:
             self.textSize = self.font.pyfont.size(f" {self.font.last_text} ")
         super().process(time_passed)
@@ -2645,6 +2758,7 @@ class GameState:
         self.name = name
 
     def __repr__(self) -> str:
+        """Return representation of self."""
         return f"<{self.__class__.__name__} {self.name}>"
 
     def entry_actions(self) -> None:
@@ -2678,7 +2792,7 @@ class MenuState(GameState):
         self,
         name: str,
         value: str,
-        action,
+        action: Callable[[], None],
         location: tuple[int, int] | None = None,
         size: int = fontsize,
         minlen: int = button_minimum,
@@ -2761,7 +2875,7 @@ class MenuState(GameState):
         """Return a wrapper for a function that will call update_function after function."""
 
         def update_wrapper(function: Callable[[], None]) -> Callable[[], None]:
-            """Wrapper for any function that could require a screen update."""
+            """Wrap anything that might require a screen update."""
 
             @wraps(function)
             def function_with_update() -> None:
@@ -2779,11 +2893,12 @@ class MenuState(GameState):
         value_function: Callable[[], str],
     ) -> Callable[[], None]:
         """Update text object with text_name's display value."""
-        assert self.game is not None
 
         def updater() -> None:
             """Update text object {text_name}'s value with {value_function}."""
+            assert self.game is not None
             text = self.game.get_object_by_name(f"Text{text_name}")
+            assert isinstance(text, Text)
             text.update_value(value_function())
 
         return updater
@@ -2792,11 +2907,11 @@ class MenuState(GameState):
         self,
         textname: str,
         boolattr: str,
-        textfunc,
+        textfunc: Callable[[bool], str],
     ) -> Callable[[], None]:
         """Return function that will toggle the value of text object <textname>, toggling attribute <boolattr>, and setting text value with textfunc."""
 
-        def valfunc():
+        def valfunc() -> str:
             """Return the new value for the text object. Gets called AFTER value is toggled."""
             return textfunc(getattr(self, boolattr))
 
@@ -2824,6 +2939,7 @@ class InitState(GameState):
     def entry_actions(self) -> None:
         """Register keyboard handlers."""
         assert self.game is not None
+        assert self.game.keyboard is not None
         self.game.keyboard.add_listener("\x7f", "Delete")
         self.game.keyboard.bind_action("Delete", "screenshot", 5)
 
@@ -2862,14 +2978,15 @@ class TitleScreen(MenuState):
             "Credits",
             self.to_state("Credits"),
             (sw // 2, sh // 2 + self.bh * 3),
-            self.fontsize / 1.5,
+            int(self.fontsize / 1.5),
         )
+        assert self.game is not None
         self.add_button(
             "Quit",
             "Quit",
             self.game.raise_close,
             (sw // 2, sh // 2 + self.bh * 4),
-            self.fontsize / 1.5,
+            int(self.fontsize / 1.5),
         )
 
 
@@ -2909,6 +3026,7 @@ class SettingsScreen(MenuState):
             cx: bool,
             cy: bool,
         ) -> None:
+            """Add numbers."""
             count = end - start + 1
             evencount = count % 2 == 0
             mid = count // 2
@@ -2916,9 +3034,8 @@ class SettingsScreen(MenuState):
             def add_number(
                 number: int,
                 display: str | int,
-                cx: bool,
-                cy: bool,
             ) -> None:
+                """Add number."""
                 if evencount:
                     if number < mid:
                         x = number - start - 0.5
@@ -2946,13 +3063,13 @@ class SettingsScreen(MenuState):
                     f"SetCount{number}",
                     str(display),
                     set_player_count,
-                    (cx + (width_each * x), cy),
-                    size=self.fontsize / 1.5,
+                    (int(cx + (width_each * x)), int(cy)),
+                    size=int(self.fontsize / 1.5),
                     minlen=3,
                 )
 
             for i in range(count):
-                add_number(i, start + i, cx, cy)
+                add_number(i, start + i)
 
         sw, sh = SCREENSIZE
         cx = sw // 2
@@ -2971,7 +3088,7 @@ class SettingsScreen(MenuState):
             "Toggle",
             self.toggle_button_state("Host", "host_mode", host_text),
             (cx, cy - self.bh * 2),
-            size=self.fontsize / 1.5,
+            size=int(self.fontsize / 1.5),
         )
 
         # TEMPORARY: Hide everything to do with "Host Mode", networked games aren't done yet.
@@ -2991,7 +3108,7 @@ class SettingsScreen(MenuState):
             "Toggle",
             self.toggle_button_state("Variant", "variant_play", varient_text),
             (cx, cy),
-            size=self.fontsize / 1.5,
+            size=int(self.fontsize / 1.5),
         )
 
         self.add_text(
@@ -2999,7 +3116,7 @@ class SettingsScreen(MenuState):
             f"Players: {self.player_count}",
             (cx, cy + self.bh),
         )
-        add_numbers(2, 4, 70, cx, cy + self.bh * 2)
+        add_numbers(2, 4, 70, int(cx), int(cy + self.bh * 2))
 
         var_to_state = self.var_dependant_to_state(
             FactoryOffer=("host_mode", True),
@@ -3029,6 +3146,7 @@ class PhaseFactoryOffer(GameState):
     __slots__ = ()
 
     def __init__(self) -> None:
+        """Initialize factory offer phase."""
         super().__init__("FactoryOffer")
 
     def entry_actions(self) -> None:
@@ -3055,23 +3173,31 @@ class PhaseFactoryOffer(GameState):
 
 
 class PhaseFactoryOfferNetworked(PhaseFactoryOffer):
+    """Factory offer phase but networked."""
+
     __slots__ = ()
 
     def __init__(self) -> None:
+        """Initialize factory offer networked."""
         GameState.__init__(self, "FactoryOfferNetworked")
 
     def check_state(self) -> str:
+        """Go to networked wall tiling."""
         return "WallTilingNetworked"
 
 
 class PhaseWallTiling(GameState):
+    """Wall tiling game phase."""
+
     ##    __slots__ = ()
     def __init__(self) -> None:
+        """Initialize will tiling phase."""
         super().__init__("WallTiling")
 
     def entry_actions(self) -> None:
+        """Start wall tiling."""
         assert self.game is not None
-        self.next_starter = None
+        self.next_starter: int = 0
         self.not_processed = []
 
         self.game.player_turn_over()
@@ -3080,7 +3206,7 @@ class PhaseWallTiling(GameState):
         for player_id in range(self.game.players):
             # Activate wall tiling mode.
             player = self.game.get_player(player_id)
-            player.wall_tileing()
+            player.wall_tiling()
             # Add that player's player_id to the list of not-processed players.
             self.not_processed.append(player.player_id)
 
@@ -3088,20 +3214,22 @@ class PhaseWallTiling(GameState):
         self.game.next_turn()
 
     def do_actions(self) -> None:
+        """Do game actions."""
         assert self.game is not None
         if self.not_processed:
             if self.game.player_turn in self.not_processed:
                 player = self.game.get_player(self.game.player_turn)
-                if player.done_wall_tileing():
+                if player.done_wall_tiling():
                     # Once player is done wall tiling, score their moves.
-                    number_one = (
-                        player.score_phase()
-                    )  # Also gets if they had the number one tile.
+                    # Also gets if they had the number one tile.
+                    number_one = player.score_phase()
+
                     if number_one:
                         # If player had the number one tile, remember that.
                         self.next_starter = self.game.player_turn
                         # Then, add the number one tile back to the table center.
                         table = self.game.get_object_by_name("TableCenter")
+                        assert isinstance(table, TableCenter)
                         table.add_number_one_tile()
                     # After calculating their score, delete player from un-processed list
                     self.not_processed.remove(self.game.player_turn)
@@ -3111,6 +3239,7 @@ class PhaseWallTiling(GameState):
                 self.game.next_turn()
 
     def check_state(self) -> str | None:
+        """Go to next state if ready."""
         assert self.game is not None
         cursor = self.game.get_object_by_name("Cursor")
         assert isinstance(cursor, Cursor)
@@ -3119,6 +3248,7 @@ class PhaseWallTiling(GameState):
         return None
 
     def exit_actions(self) -> None:
+        """Update who's turn it is."""
         assert self.game is not None
         # Set up the player that had the number one tile to be the starting player next round.
         self.game.player_turn_over()
@@ -3130,23 +3260,31 @@ class PhaseWallTiling(GameState):
 
 
 class PhaseWallTilingNetworked(PhaseWallTiling):
+    """Wall tiling networked state."""
+
     __slots__ = ()
 
     def __init__(self) -> None:
+        """Initialize will tiling networked."""
         GameState.__init__(self, "WallTilingNetworked")
 
     def check_state(self) -> str:
+        """Go to networked next prepare."""
         return "PrepareNextNetworked"
 
 
 class PhasePrepareNext(GameState):
+    """Prepare next phase of game."""
+
     __slots__ = ("new_round",)
 
     def __init__(self) -> None:
+        """Initialize prepare next state."""
         super().__init__("PrepareNext")
         self.new_round = False
 
     def entry_actions(self) -> None:
+        """Find out if game continues."""
         assert self.game is not None
         players = (
             self.game.get_player(player_id)
@@ -3156,6 +3294,7 @@ class PhasePrepareNext(GameState):
         self.new_round = not any(complete)
 
     def do_actions(self) -> None:
+        """Perform actions of state."""
         assert self.game is not None
         if self.new_round:
             fact = self.game.get_object_by_name("Factories")
@@ -3164,29 +3303,39 @@ class PhasePrepareNext(GameState):
             fact.play_tiles_from_bag()
 
     def check_state(self) -> str:
+        """Go to factory offer if new round else end screen."""
         if self.new_round:
             return "FactoryOffer"
         return "End"
 
 
 class PhasePrepareNextNetworked(PhasePrepareNext):
+    """Prepare for next, networked."""
+
+    __slots__ = ()
+
     def __init__(self) -> None:
+        """Initialize prepare for next stage."""
         GameState.__init__(self, "PrepareNextNetworked")
 
     def check_state(self) -> str:
+        """Go to networked end."""
         return "EndNetworked"
 
 
 class EndScreen(MenuState):
+    """End screen state."""
+
     def __init__(self) -> None:
+        """Initialize end screen."""
         super().__init__("End")
-        self.ranking = {}
+        self.ranking: dict[int, list[int]] = {}
         self.wininf = ""
 
     def get_winners(self) -> None:
         """Update self.ranking by player scores."""
         assert self.game is not None
-        self.ranking = {}
+        self.ranking.clear()
         scpid = {}
         for player_id in range(self.game.players):
             player = self.game.get_player(player_id)
@@ -3255,6 +3404,7 @@ class EndScreen(MenuState):
         self.wininf = text[:-1]
 
     def entry_actions(self) -> None:
+        """Set up end screen."""
         assert self.game is not None
         # Figure out who won the game by points.
         self.get_winners()
@@ -3275,6 +3425,7 @@ class EndScreen(MenuState):
             (SCREENSIZE[0] // 2, SCREENSIZE[1] * 4 // 5),
         )
         buttontitle = self.game.get_object(bid)
+        assert isinstance(buttontitle, Button)
         buttontitle.Render_Priority = "last-1"
         buttontitle.cur_time = 2
 
@@ -3284,17 +3435,22 @@ class EndScreen(MenuState):
         for idx, line in enumerate(self.wininf.split("\n")):
             self.add_text(f"Line{idx}", line, (x, y), cx=True, cy=False)
             ##            self.game.get_object(bid).Render_Priority = f'last{-(2+idx)}'
-            self.game.get_object(bid).Render_Priority = "last-2"
+            button = self.game.get_object(bid)
+            button.Render_Priority = "last-2"
             y += self.bh
 
 
 class EndScreenNetworked(EndScreen):
+    """Networked end screen."""
+
     def __init__(self) -> None:
+        """Initialize end screen."""
         MenuState.__init__(self, "EndNetworked")
         self.ranking = {}
         self.wininf = ""
 
     def check_state(self) -> str:
+        """Go to title."""
         return "Title"
 
 
@@ -3345,11 +3501,8 @@ class Game(ObjectHandler):
         self.cache: dict[int, pygame.surface.Surface] = {}
 
     def __repr__(self) -> str:
+        """Return representation of self."""
         return f"{self.__class__.__name__}()"
-
-    def is_pressed(self, key: str | int) -> bool:
-        """Return if key pressed."""
-        return False
 
     def debug(self) -> None:
         """Debug."""
@@ -3486,7 +3639,11 @@ class Game(ObjectHandler):
 
         if self.is_host:
             self.bag.reset()
-            self.player_turn = random.randint(-1, self.players - 1)
+            # S311 Standard pseudo-random generators are not suitable for cryptographic purposes
+            self.player_turn = random.randint(  # noqa: S311
+                -1,
+                self.players - 1,
+            )
         else:
             raise NotImplementedError()
 
@@ -3535,13 +3692,17 @@ class Keyboard:
 
     __slots__ = ("target", "keys", "actions", "time", "delay", "active")
 
-    def __init__(self, target: Game, **kwargs) -> None:
+    def __init__(
+        self,
+        target: Game,
+        **kwargs: tuple[str, str] | tuple[str, str, float | None],
+    ) -> None:
+        """Initialize keyboard."""
         self.target = target
         self.target.keyboard = self
-        self.target.is_pressed = self.is_pressed
 
         # Map of keyboard events to names
-        self.keys: dict[int | str, str] = {}
+        self.keys: dict[str, str] = {}
         # Map of keyboard event names to functions
         self.actions: dict[str, Callable[[], None]] = {}
         # Map of names to time until function should be called again
@@ -3551,30 +3712,30 @@ class Keyboard:
         # Map of names to boolian of pressed or not
         self.active: dict[str, bool] = {}
 
-        if kwargs:
-            for name in kwargs:
-                if not hasattr(kwargs[name], "__iter__"):
-                    raise ValueError(
-                        "Keyword arguments must be given as name=[key, self.target.function_name, delay]",
-                    )
-                if len(kwargs[name]) == 2:
-                    key, function_name = kwargs[name]
-                    delay = None
-                elif len(kwargs[name]) == 3:
-                    key, function_name, delay = kwargs[name]
-                else:
-                    raise ValueError
-                self.add_listener(key, name)
-                self.bind_action(name, function_name)
+        for name in kwargs:
+            if not hasattr(kwargs[name], "__iter__"):
+                raise ValueError(
+                    "Keyword arguments must be given as name=[key, self.target.function_name, delay]",
+                )
+            if len(kwargs[name]) == 2:
+                key, function_name = kwargs[name]
+                delay = None
+            elif len(kwargs[name]) == 3:
+                key, function_name, delay = kwargs[name]
+            else:
+                raise ValueError
+            self.add_listener(key, name)
+            self.bind_action(name, function_name)
 
     def __repr__(self) -> str:
+        """Return representation of self."""
         return f"{self.__class__.__name__}({self.target!r})"
 
-    def is_pressed(self, key: str | int) -> bool:
+    def is_pressed(self, key: str) -> bool:
         """Return True if <key> is pressed."""
         return self.active.get(key, False)
 
-    def add_listener(self, key: int, name: str) -> None:
+    def add_listener(self, key: str, name: str) -> None:
         """Listen for key down events with event.key == key argument and when that happens set self.actions[name] to true."""
         self.keys[key] = name  # key to name
         self.actions[name] = lambda: None  # name to function
@@ -3646,10 +3807,11 @@ class Keyboard:
 
 
 def network_shutdown() -> None:
-    pass
+    """Handle network shutdown."""
 
 
 def run() -> None:
+    """Run program."""
     ##    global game
     global SCREENSIZE
     # Set up the screen
