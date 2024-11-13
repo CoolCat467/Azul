@@ -28,22 +28,27 @@ import math
 import operator
 import os
 import random
+import traceback
 import time
 from collections import Counter, deque
 from functools import lru_cache, wraps
 from pathlib import Path
+import trio
 from typing import TYPE_CHECKING, Final, NamedTuple, TypeVar, cast
 
 import pygame
+from pygame.color import Color
 from numpy import array, int8
 from pygame.locals import (
     KEYDOWN,
     KEYUP,
+    K_ESCAPE,
     QUIT,
     RESIZABLE,
     SRCALPHA,
     USEREVENT,
     VIDEORESIZE,
+    WINDOWRESIZED,
 )
 from pygame.rect import Rect
 
@@ -56,9 +61,22 @@ from azul.tools import (
     sort_tiles,
 )
 from azul.vector import Vector2
+from azul import sprite
+from azul import objects
+from azul.component import Component, Event, ExternalRaiseManager, ComponentManager
+from azul import errorbox
+from azul.async_clock import Clock
+from azul.server import GameServer
+from azul.sound import SoundData, play_sound as base_play_sound
+from azul import element_list
+from azul.client import GameClient, read_advertisements
+from azul.statemachine import AsyncState
+from azul.network_shared import DEFAULT_PORT, find_ip
+from enum import IntEnum, auto
+import sys
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator, Iterable, Sequence
+    from collections.abc import Callable, Generator, Iterable, Sequence, Awaitable
 
     from typing_extensions import TypeVarTuple, Unpack
 
@@ -67,7 +85,8 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 RT = TypeVar("RT")
 
-SCREENSIZE = (650, 600)
+SCREEN_SIZE = (650, 600)
+VSYNC = True
 
 FPS: Final = 48
 
@@ -111,7 +130,20 @@ TILESYMBOLS = (
     ("&", ORANGE),
     ("1", BLUE),
 )
-NUMBERONETILE = 5
+class Tiles(IntEnum):
+    blank = -6
+    fake_cyan = -5
+    fake_black = -4
+    fake_red = -3
+    fake_yellow = -2
+    fake_blue = -1
+    blue = 0
+    yellow = auto()
+    red = auto()
+    black = auto()
+    cyan = auto()
+    one = auto()
+
 TILESIZE = 15
 
 # Colors
@@ -119,14 +151,29 @@ BACKGROUND = (0, 192, 16)
 TILEDEFAULT = ORANGE
 SCORECOLOR = BLACK
 PATSELECTCOLOR = DARKGREEN
-BUTTONTEXTCOLOR = DARKCYAN
+BUTTON_TEXT_COLOR = DARKCYAN
+BUTTON_TEXT_OUTLINE = BLACK
 BUTTONBACKCOLOR = WHITE
 GREYSHIFT = 0.75  # 0.65
 
 # Font
-FONT: Final = FONT_FOLDER / "RuneScape-UF-Regular.ttf"
+FONT: Final = FONT_FOLDER / "VeraSerif.ttf"#"RuneScape-UF-Regular.ttf"
 SCOREFONTSIZE = 30
 BUTTONFONTSIZE = 60
+
+SOUND_LOOKUP: Final = {
+    "delete_piece": "pop.mp3",
+    "piece_move": "slide.mp3",
+    "piece_update": "ding.mp3",
+    "game_won": "newthingget.ogg",
+    "button_click": "select.mp3",
+    "tick": "tick.mp3",
+}
+SOUND_DATA: Final = {
+    "delete_piece": SoundData(
+        volume=50,
+    ),
+}
 
 
 @lru_cache
@@ -146,6 +193,21 @@ def make_square_surf(
     surf = pygame.Surface((s, s))
     surf.fill(color)
     return surf
+
+
+def play_sound(
+    sound_name: str,
+) -> tuple[pygame.mixer.Sound, int | float]:
+    """Play sound effect."""
+    sound_filename = SOUND_LOOKUP.get(sound_name)
+    if sound_filename is None:
+        raise RuntimeError(f"Error: Sound with ID `{sound_name}` not found.")
+    sound_data = SOUND_DATA.get(sound_name, SoundData())
+
+    return base_play_sound(
+        DATA_FOLDER / sound_filename,
+        sound_data,
+    )
 
 
 def outline_rectangle(
@@ -264,6 +326,7 @@ def add_symbol_to_tile_surf(
         symbolsurf,
         (width * scale_factor, height * scale_factor),
     )
+
     # symbolsurf = pygame.transform.scale(symbolsurf, (tilesize, tilesize))
 
     # sw, sh = symbolsurf.get_size()
@@ -287,18 +350,17 @@ def add_symbol_to_tile_surf(
 
 @lru_cache
 def get_tile_image(
-    tile: Tile,
+    tile_color: int,
     tilesize: int,
     greyshift: float = GREYSHIFT,
     outline_size: float = 0.2,
 ) -> pygame.surface.Surface:
     """Return a surface of a given tile."""
-    cid = tile.color
-    if cid < 5:
-        color = get_tile_color(cid, greyshift)
+    if tile_color < 5:
+        color = get_tile_color(tile_color, greyshift)
 
-    elif cid >= 5:
-        color_data = tile_colors[cid]
+    elif tile_color >= 5:
+        color_data = tile_colors[tile_color]
         assert len(color_data) == 2
         color, outline = color_data
         surf = outline_rectangle(
@@ -307,12 +369,12 @@ def get_tile_image(
             outline_size,
         )
         # Add tile symbol
-        add_symbol_to_tile_surf(surf, cid, tilesize, greyshift)
+        add_symbol_to_tile_surf(surf, tile_color, tilesize, greyshift)
 
         return surf
     surf = make_square_surf(color, tilesize)
     # Add tile symbol
-    add_symbol_to_tile_surf(surf, cid, tilesize, greyshift)
+    add_symbol_to_tile_surf(surf, tile_color, tilesize, greyshift)
     return surf
 
 
@@ -350,129 +412,6 @@ def get_tile_container_image(
         image.fill((0, 0, 0, 0))
     return image
 
-
-class Font:
-    """Font object, simplify using text."""
-
-    def __init__(
-        self,
-        font_name: str | Path,
-        fontsize: int = 20,
-        color: tuple[int, int, int] = (0, 0, 0),
-        cx: bool = True,
-        cy: bool = True,
-        antialias: bool = False,
-        background: tuple[int, int, int] | None = None,
-        do_cache: bool = True,
-    ) -> None:
-        """Initialize font."""
-        self.font = font_name
-        self.size = int(fontsize)
-        self.color = color
-        self.center = [cx, cy]
-        self.antialias = bool(antialias)
-        self.background = background
-        self.do_cache = bool(do_cache)
-        self.cache: pygame.surface.Surface | None = None
-        self.last_text: str | None = None
-        self._change_font()
-
-    def __repr__(self) -> str:
-        """Return representation of self."""
-        return f"{self.__class__.__name__}(%r, %i, %r, %r, %r, %r, %r, %r)" % (
-            self.font,
-            self.size,
-            self.color,
-            self.center[0],
-            self.center[1],
-            self.antialias,
-            self.background,
-            self.do_cache,
-        )
-
-    def _change_font(self) -> None:
-        """Set self.pyfont to a new pygame.font.Font object from data we have."""
-        self.pyfont = pygame.font.Font(self.font, self.size)
-
-    def _cache(self, surface: pygame.surface.Surface) -> None:
-        """Set self.cache to surface."""
-        self.cache = surface
-
-    def get_height(self) -> int:
-        """Return the height of font."""
-        return self.pyfont.get_height()
-
-    def render_nosurf(
-        self,
-        text: str | None,
-        size: int | None = None,
-        color: tuple[int, int, int] | None = None,
-        background: tuple[int, int, int] | None = None,
-        force_update: bool = False,
-    ) -> pygame.surface.Surface:
-        """Render and return a surface of given text. Use stored data to render, if arguments change internal data and render."""
-        update_cache = (
-            self.cache is None or force_update or text != self.last_text
-        )
-        # Update internal data if new values given
-        if size is not None:
-            self.size = int(size)
-            self._change_font()
-            update_cache = True
-        if color is not None:
-            self.color = color
-            update_cache = True
-        if self.background != background:
-            self.background = background
-            update_cache = True
-
-        if self.do_cache:
-            if update_cache:
-                self.last_text = text
-                surf = self.pyfont.render(
-                    text,
-                    self.antialias,
-                    self.color,
-                    self.background,
-                ).convert_alpha()
-                self._cache(surf.copy())
-            else:
-                assert self.cache is not None
-                surf = self.cache
-        else:
-            # Render the text using the pygame font
-            surf = self.pyfont.render(
-                text,
-                self.antialias,
-                self.color,
-                self.background,
-            ).convert_alpha()
-        return surf
-
-    def render(
-        self,
-        surface: pygame.surface.Surface,
-        text: str,
-        xy: tuple[int, int],
-        size: int | None = None,
-        color: tuple[int, int, int] | None = None,
-        background: tuple[int, int, int] | None = None,
-        force_update: bool = False,
-    ) -> None:
-        """Render given text, use stored data to render, if arguments change internal data and render."""
-        surf = self.render_nosurf(text, size, color, background, force_update)
-
-        if True in self.center:
-            x, y = xy
-            cx, cy = self.center
-            w, h = surf.get_size()
-            if cx:
-                x -= w // 2
-            if cy:
-                y -= h // 2
-            xy = (int(x), int(y))
-
-        surface.blit(surf, xy)
 
 
 class ObjectHandler:
@@ -636,122 +575,8 @@ class ObjectHandler:
         self.rm_star()
 
 
-class Object:
-    """Object object."""
 
-    __slots__ = (
-        "Render_Priority",
-        "game",
-        "hidden",
-        "id",
-        "image",
-        "location",
-        "location_mode_on_resize",
-        "name",
-        "screen_size_last",
-        "wh",
-    )
-
-    def __init__(self, name: str) -> None:
-        """Set self.name to name, and other values for rendering.
-
-        Defines the following attributes:
-         self.name
-         self.image
-         self.location
-         self.wh
-         self.hidden
-         self.location_mode_on_resize
-         self.id
-        """
-        self.name = str(name)
-        self.image: pygame.surface.Surface | None = None
-        self.location = Vector2(
-            round(SCREENSIZE[0] / 2),
-            round(SCREENSIZE[1] / 2),
-        )
-        self.wh = 0, 0
-        self.hidden = False
-        self.location_mode_on_resize = "Scale"
-        self.screen_size_last = SCREENSIZE
-
-        self.id = 0
-        self.game: Game
-        self.Render_Priority: str | int
-
-    def __repr__(self) -> str:
-        """Return representation of self."""
-        return f"{self.__class__.__name__}()"
-
-    def get_image_zreo_no_fix(self) -> tuple[float, float]:
-        """Return the screen location of the topleft point of self.image."""
-        return (
-            self.location[0] - self.wh[0] / 2,
-            self.location[1] - self.wh[1] / 2,
-        )
-
-    def get_image_zero(self) -> tuple[int, int]:
-        """Return the screen location of the topleft point of self.image fixed to integer values."""
-        x, y = self.get_image_zreo_no_fix()
-        return int(x), int(y)
-
-    def get_rect(self) -> Rect:
-        """Return a Rect object representing this Object's area."""
-        return Rect(self.get_image_zero(), self.wh)
-
-    def point_intersects(
-        self,
-        screen_location: tuple[int, int] | Vector2,
-    ) -> bool:
-        """Return True if this Object intersects with a given screen location."""
-        return self.get_rect().collidepoint(tuple(screen_location))
-
-    def to_image_surface_location(
-        self,
-        screen_location: tuple[int, int] | Vector2,
-    ) -> tuple[int, int]:
-        """Return the location a screen location would be at on the objects image. Can return invalid data."""
-        # Get zero zero in image locations
-        zx, zy = self.get_image_zero()  # Zero x and y
-        sx, sy = screen_location  # Screen x and y
-        return (
-            int(sx) - zx,
-            int(sy) - zy,
-        )  # Location with respect to image dimensions
-
-    def process(self, time_passed: float) -> None:
-        """Process Object. Replace when calling this class."""
-
-    def render(self, surface: pygame.surface.Surface) -> None:
-        """Render self.image to surface if self.image is not None. Updates self.wh."""
-        if self.image is None or self.hidden:
-            return
-        self.wh = self.image.get_size()
-        x, y = self.get_image_zero()
-        surface.blit(self.image, (int(x), int(y)))
-
-    # pygame.draw.rect(surface, MAGENTA, self.get_rect(), 1)
-
-    def __del__(self) -> None:
-        """Delete self.image."""
-        del self.image
-
-    def screen_size_update(self) -> None:
-        """Handle screensize is changes."""
-        nx, ny = self.location
-
-        if self.location_mode_on_resize == "Scale":
-            ow, oh = self.screen_size_last
-            nw, nh = SCREENSIZE
-
-            x, y = self.location
-            nx, ny = x * (nw / ow), y * (nh / oh)
-
-        self.location = Vector2(nx, ny)
-        self.screen_size_last = SCREENSIZE
-
-
-class MultipartObject(Object, ObjectHandler):
+class MultipartObject(ObjectHandler):
     """Thing that is both an Object and an ObjectHandler, and is meant to be an Object made up of multiple Objects."""
 
     def __init__(self, name: str):
@@ -759,7 +584,6 @@ class MultipartObject(Object, ObjectHandler):
 
         Also set self._lastloc and self._lasthidden to None
         """
-        Object.__init__(self, name)
         ObjectHandler.__init__(self)
 
         self._lastloc: Vector2 | None = None
@@ -810,54 +634,28 @@ class MultipartObject(Object, ObjectHandler):
         ObjectHandler.__del__(self)
 
 
-class Tile(NamedTuple):
-    """Represents a Tile."""
-
-    color: int
-
-
-class TileRenderer(Object):
+class TileRenderer(sprite.Sprite):
     """Base class for all objects that need to render tiles."""
 
-    __slots__ = ("back", "image_update", "tile_full", "tile_seperation")
+    __slots__ = ("background", "tile_seperation")
     greyshift = GREYSHIFT
     tile_size = TILESIZE
 
     def __init__(
         self,
         name: str,
-        game: Game,
         tile_seperation: int | None = None,
         background: tuple[int, int, int] | None = TILEDEFAULT,
     ) -> None:
-        """Initialize renderer. Needs a game object for its cache and optional tile separation value and background RGB color.
-
-        Defines the following attributes during initialization and uses throughout:
-         self.game
-         self.wh
-         self.tile_seperation
-         self.tile_full
-         self.back
-         and finally, self.image_update
-
-        The following functions are also defined:
-         self.clear_image
-         self.render_tile
-         self.update_image (but not implemented)
-         self.process
-        """
+        """Initialize renderer."""
         super().__init__(name)
-        self.game = game
 
         if tile_seperation is None:
             self.tile_seperation = self.tile_size / 3.75
         else:
             self.tile_seperation = tile_seperation
 
-        self.tile_full = self.tile_size + self.tile_seperation
-        self.back = background
-
-        self.image_update = True
+        self.background = background
 
     def get_rect(self) -> Rect:
         """Return a Rect object representing this row's area."""
@@ -869,17 +667,20 @@ class TileRenderer(Object):
         return Rect(location, wh)
 
     def clear_image(self, tile_dimensions: tuple[int, int]) -> None:
-        """Reset self.image using tile_dimensions tuple and fills with self.back. Also updates self.wh."""
+        """Reset self.image using tile_dimensions tuple and fills with self.background. Also updates self.wh."""
         tw, th = tile_dimensions
-        self.wh = (
-            round(tw * self.tile_full + self.tile_seperation),
-            round(th * self.tile_full + self.tile_seperation),
+        tile_full = self.tile_size + self.tile_seperation
+        self.image = get_tile_container_image(
+            (
+                round(tw * tile_full + self.tile_seperation),
+                round(th * tile_full + self.tile_seperation),
+            ),
+            self.background
         )
-        self.image = get_tile_container_image(self.wh, self.back)
 
-    def render_tile(
+    def blit_tile(
         self,
-        tile_object: Tile,
+        tile_color: int,
         tile_location: tuple[int, int],
     ) -> None:
         """Blit the surface of a given tile object onto self.image at given tile location. It is assumed that all tile locations are xy tuples."""
@@ -894,79 +695,80 @@ class TileRenderer(Object):
             ),
         )
 
-    def update_image(self) -> None:
-        """Process image changes, directed by self.image_update being True."""
-        raise NotImplementedError
+    def to_image_surface_location(
+        self,
+        screen_location: tuple[int, int] | Vector2,
+    ) -> tuple[int, int]:
+        """Return the location a screen location would be at on the objects image. Can return invalid data."""
+        # Get zero zero in image locations
+        zx, zy = self.rect.topleft
+        sx, sy = screen_location  # Screen x and y
+        # Location with respect to image dimensions
+        return (
+            int(sx) - zx,
+            int(sy) - zy,
+        )
 
-    def process(self, time_passed: float) -> None:
-        """Call self.update_image() if self.image_update is True, then set self.update_image to False."""
-        if self.image_update:
-            self.update_image()
-            self.image_update = False
+##    def screen_size_update(self) -> None:
+##        """Handle screensize is changes."""
+##        nx, ny = self.location
+##
+##        if self.location_mode_on_resize == "Scale":
+##            ow, oh = self.screen_size_last
+##            nw, nh = SCREEN_SIZE
+##
+##            x, y = self.location
+##            nx, ny = x * (nw / ow), y * (nh / oh)
+##
+##        self.location = Vector2(nx, ny)
+##        self.screen_size_last = SCREEN_SIZE
 
 
 class Cursor(TileRenderer):
     """Cursor Object."""
 
-    __slots__ = ("holding_number_one", "tiles")
+    __slots__ = ("tiles",)
     greyshift = GREYSHIFT
-    Render_Priority = "last"
 
-    def __init__(self, game: Game) -> None:
+    def __init__(self) -> None:
         """Initialize cursor with a game it belongs to."""
-        super().__init__("Cursor", game, background=None)
+        super().__init__("Cursor", background=None)
 
-        self.holding_number_one = False
-        self.tiles: deque[Tile] = deque()
+        self.tiles: list[int] = []
 
     def update_image(self) -> None:
         """Update self.image."""
         self.clear_image((len(self.tiles), 1))
 
         for x in range(len(self.tiles)):
-            self.render_tile(self.tiles[x], (x, 0))
+            self.blit_tile(self.tiles[x], (x, 0))
+        self.dirty = 1
 
-    def is_pressed(self) -> bool:
-        """Return True if the right mouse button is pressed."""
-        return bool(pygame.mouse.get_pressed()[0])
+    def get_held_count(self) -> int:
+        """Return the number of held tiles."""
+        return len(self.tiles)
 
-    def get_held_count(self, count_number_one: bool = False) -> int:
-        """Return the number of held tiles, can be discounting number one tile."""
-        length = len(self.tiles)
-        if self.holding_number_one and not count_number_one:
-            return length - 1
-        return length
-
-    def is_holding(self, count_number_one: bool = False) -> bool:
+    def is_holding(self) -> bool:
         """Return True if the mouse is dragging something."""
-        return self.get_held_count(count_number_one) > 0
+        return len(self.tiles) > 0
 
     def get_held_info(
         self,
-        count_number_one_tile: bool = False,
-    ) -> tuple[Tile | None, int]:
-        """Return color of tiles are and number of tiles held."""
-        if not self.is_holding(count_number_one_tile):
-            return None, 0
-        return self.tiles[0], self.get_held_count(count_number_one_tile)
+    ) -> tuple[int, ...]:
+        """Return tuple of currently held tiles."""
+        return tuple(self.tiles)
 
     def process(self, time_passed: float) -> None:
         """Process cursor."""
         x, y = pygame.mouse.get_pos()
-        x = saturate(x, 0, SCREENSIZE[0])
-        y = saturate(y, 0, SCREENSIZE[1])
-        self.location = Vector2(x, y)
-        if self.image_update:
-            if len(self.tiles):
-                self.update_image()
-            else:
-                self.image = None
-            self.image_update = False
+        x = saturate(x, 0, SCREEN_SIZE[0])
+        y = saturate(y, 0, SCREEN_SIZE[1])
+        self.location = (x, y)
 
     def force_hold(self, tiles: Iterable[Tile]) -> None:
         """Pretty much it's drag but with no constraints."""
         for tile in tiles:
-            if tile.color == NUMBERONETILE:
+            if tile.color == Tiles.one:
                 self.holding_number_one = True
                 self.tiles.append(tile)
             else:
@@ -976,7 +778,7 @@ class Cursor(TileRenderer):
     def drag(self, tiles: Iterable[Tile]) -> None:
         """Drag one or more tiles, as long as it's a list."""
         for tile in tiles:
-            if tile is not None and tile.color == NUMBERONETILE:
+            if tile is not None and tile.color == Tiles.one:
                 self.holding_number_one = True
                 self.tiles.append(tile)
             else:
@@ -1001,13 +803,13 @@ class Cursor(TileRenderer):
 
             tiles = []
             for tile in (self.tiles.popleft() for i in range(number)):
-                if tile.color == NUMBERONETILE and not allow_number_one_tile:
+                if tile.color == Tiles.one and not allow_number_one_tile:
                     self.tiles.append(tile)
                     continue
                 tiles.append(tile)
             self.image_update = True
 
-            self.holding_number_one = NUMBERONETILE in {
+            self.holding_number_one = Tiles.one in {
                 tile.color for tile in self.tiles
             }
             return tiles
@@ -1087,7 +889,7 @@ class Grid(TileRenderer):
 
         for y in range(self.size[1]):
             for x in range(self.size[0]):
-                self.render_tile(Tile(self.data[y, x]), (x, y))
+                self.blit_tile(Tile(self.data[y, x]), (x, y))
 
     def get_tile_point(
         self,
@@ -1095,7 +897,7 @@ class Grid(TileRenderer):
     ) -> tuple[int, int] | None:
         """Return the xy choordinates of which tile intersects given a point. Returns None if no intersections."""
         # Can't get tile if screen location doesn't intersect our hitbox!
-        if not self.point_intersects(screen_location):
+        if not self.is_selected(screen_location):
             return None
         # Otherwise, find out where screen point is in image locations
         # board x and y
@@ -1509,13 +1311,13 @@ class Row(TileRenderer):
         self.clear_image((self.size, 1))
 
         for x in range(len(self.tiles)):
-            self.render_tile(self.tiles[x], (x, 0))
+            self.blit_tile(self.tiles[x], (x, 0))
 
     def get_tile_point(self, screen_location: tuple[int, int]) -> int | None:
         """Return the xy choordinates of which tile intersects given a point. Returns None if no intersections."""
         # `Grid.get_tile_point` inlined
         # Can't get tile if screen location doesn't intersect our hitbox!
-        if not self.point_intersects(screen_location):
+        if not self.is_selected(screen_location):
             return None
         # Otherwise, find out where screen point is in image locations
         # board x and y
@@ -1625,7 +1427,7 @@ class Row(TileRenderer):
 
     def set_background(self, color: tuple[int, int, int] | None) -> None:
         """Set the background color for this row."""
-        self.back = color
+        self.background = color
         self.image_update = True
 
 
@@ -1712,86 +1514,11 @@ class PatternLine(MultipartObject):
         super().process(time_passed)
 
 
-class Text(Object):
-    """Text object, used to render text with a given font."""
-
-    __slots__ = ("_cxy", "_last", "font")
-
-    def __init__(
-        self,
-        font_size: int,
-        color: tuple[int, int, int],
-        background: tuple[int, int, int] | None = None,
-        cx: bool = True,
-        cy: bool = True,
-        name: str = "",
-    ) -> None:
-        """Initialize text."""
-        super().__init__(f"Text{name}")
-        self.font = Font(
-            FONT,
-            font_size,
-            color,
-            cx,
-            cy,
-            True,
-            background,
-            True,
-        )
-        self._cxy = cx, cy
-        self._last: str | None = None
-
-    def get_image_zero(self) -> tuple[int, int]:
-        """Return the screen location of the topleft point of self.image."""
-        x = int(self.location[0])
-        y = int(self.location[1])
-        if self._cxy[0]:
-            x -= self.wh[0] // 2
-        if self._cxy[1]:
-            y -= self.wh[1] // 2
-        return x, y
-
-    def __repr__(self) -> str:
-        """Return representation of self."""
-        return f"<{self.__class__.__name__} Object>"
-
-    @staticmethod
-    def get_font_height(font: str | Path, size: int) -> int:
-        """Return the height of font at fontsize size."""
-        return pygame.font.Font(font, size).get_height()
-
-    def update_value(
-        self,
-        text: str | None,
-        size: int | None = None,
-        color: tuple[int, int, int] | None = None,
-        background: tuple[int, int, int] | None = None,
-    ) -> pygame.surface.Surface:
-        """Return a surface of given text rendered in FONT."""
-        self.image = self.font.render_nosurf(text, size, color, background)
-        return self.image
-
-    def get_surface(self) -> pygame.surface.Surface:
-        """Return self.image."""
-        assert self.image is not None
-        return self.image
-
-    def get_tile_point(self, location: tuple[int, int]) -> None:
-        """Set get_tile_point attribute so that errors are not raised."""
-        return
-
-    def process(self, time_passed: float) -> None:
-        """Process text."""
-        if self.font.last_text != self._last:
-            self.update_value(self.font.last_text)
-            self._last = self.font.last_text
-
-
 class FloorLine(Row):
     """Represents a player's floor line."""
 
     size = 7
-    number_one_color = NUMBERONETILE
+    number_one_color = Tiles.one
 
     def __init__(self, player: Player) -> None:
         """Initialize floor line."""
@@ -1918,7 +1645,8 @@ class Factory(Grid):
         """Add circle to self.image."""
         # if f"FactoryCircle{self.radius}" not in self.game.cache:
         rad = math.ceil(self.radius)
-        surf = set_alpha(pygame.surface.Surface((2 * rad, 2 * rad)), 1)
+        surf = pygame.surface.Surface((2 * rad, 2 * rad), SRCALPHA)
+##        surf = set_alpha(, 1)
         pygame.draw.circle(surf, self.outline, (rad, rad), rad)
         pygame.draw.circle(
             surf,
@@ -2120,7 +1848,7 @@ class TableCenter(Grid):
     """Object that represents the center of the table."""
 
     size = (6, 6)
-    first_tile_color = NUMBERONETILE
+    first_tile_color = Tiles.one
 
     def __init__(self, game: Game, has_number_one_tile: bool = True) -> None:
         """Initialize center of table."""
@@ -2215,10 +1943,10 @@ class TableCenter(Grid):
             cursor.is_pressed()
             and not cursor.is_holding()
             and not self.is_empty()
-            and self.point_intersects(cursor.location)
+            and self.is_selected(cursor.location)
         ):
             point = self.get_tile_point(cursor.location)
-            # Shouldn't return none anymore since we have point_intersects now.
+            # Shouldn't return none anymore since we have is_selected now.
             assert point is not None
             tile = self.get_info(point)
             assert isinstance(tile, Tile)
@@ -2228,7 +1956,7 @@ class TableCenter(Grid):
         super().process(time_passed)
 
 
-class Bag:
+class Bag(Component):
     """Represents the bag full of tiles."""
 
     __slots__ = (
@@ -2241,6 +1969,7 @@ class Bag:
 
     def __init__(self, tile_count: int = 100, tile_types: int = 5) -> None:
         """Initialize bag of tiles."""
+        super().__init__("bag")
         self.tile_count = int(tile_count)
         self.tile_types = int(tile_types)
         self.tile_names = [chr(65 + i) for i in range(self.tile_types)]
@@ -2318,18 +2047,17 @@ class Bag:
             self.add_tile(tile_object)
 
 
-class BoxLid(Object):
+class BoxLid(Component):
     """BoxLid Object, represents the box lid were tiles go before being added to the bag again."""
 
-    def __init__(self, game: Game) -> None:
+    def __init__(self) -> None:
         """Initialize box lid."""
         super().__init__("BoxLid")
-        self.game = game
         self.tiles: deque[Tile] = deque()
 
     def __repr__(self) -> str:
         """Return representation of self."""
-        return f"{self.__class__.__name__}({self.game!r})"
+        return f"{self.__class__.__name__}()"
 
     def add_tile(self, tile: Tile) -> None:
         """Add a tile to self."""
@@ -2680,132 +2408,100 @@ class Player(MultipartObject):
         super().process(time_passed)
 
 
-class Button(Text):
-    """Button Object."""
+class HaltState(AsyncState["AzulClient"]):
+    """Halt state to set state to None so running becomes False."""
 
-    textcolor = BUTTONTEXTCOLOR
-    backcolor = BUTTONBACKCOLOR
+    __slots__ = ()
+
+    def __init__(self) -> None:
+        """Initialize Halt State."""
+        super().__init__("Halt")
+
+    async def check_conditions(self) -> None:
+        """Set active state to None."""
+        assert self.machine is not None
+        await self.machine.set_state(None)
+
+
+class GameState(AsyncState["AzulClient"]):
+    """Checkers Game Asynchronous State base class."""
+
+    __slots__ = ("id", "manager")
+
+    def __init__(self, name: str) -> None:
+        """Initialize Game State."""
+        super().__init__(name)
+
+        self.id: int = 0
+        self.manager = ComponentManager(self.name)
+
+    def add_actions(self) -> None:
+        """Add internal component manager to state machine's component manager."""
+        assert self.machine is not None
+        self.machine.manager.add_component(self.manager)
+
+    def group_add(self, new_sprite: sprite.Sprite) -> None:
+        """Add new sprite to state machine's group."""
+        assert self.machine is not None
+        group = self.machine.get_group(self.id)
+        assert group is not None, "Expected group from new group id"
+        group.add(new_sprite)
+        self.manager.add_component(new_sprite)
+
+    async def exit_actions(self) -> None:
+        """Remove group and unbind all components."""
+        assert self.machine is not None
+        self.machine.remove_group(self.id)
+        self.manager.unbind_components()
+        self.id = 0
+
+    def change_state(
+        self,
+        new_state: str | None,
+    ) -> Callable[[Event[Any]], Awaitable[None]]:
+        """Return an async function that will change state to `new_state`."""
+
+        async def set_state(*args: object, **kwargs: object) -> None:
+            play_sound("button_click")
+            await self.machine.set_state(new_state)
+
+        return set_state
+
+
+class KwargOutlineText(objects.OutlinedText):
+    """Outlined Text with attributes settable via keyword arguments."""
+
+    __slots__ = ()
 
     def __init__(
         self,
-        state: MenuState,
         name: str,
-        minimum_size: int = 10,
-        initial_value: str = "",
-        font_size: int = BUTTONFONTSIZE,
+        font: pygame.font.Font,
+        **kwargs: object,
     ) -> None:
-        """Initialize button."""
-        super().__init__(font_size, self.textcolor, background=None)
-        self.name = f"Button{name}"
-        self.state = state
+        """Initialize attributes via keyword arguments."""
+        super().__init__(name, font)
 
-        self.minsize = int(minimum_size)
-        self.update_value(initial_value)
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
-        self.borderWidth = math.floor(font_size / 12)  # 5
 
-        self.delay = 0.6
-        self.cur_time = 1.0
+class KwargButton(objects.Button):
+    """Button with attributes settable via keyword arguments."""
 
-        self.action: Callable[[], None] = lambda: None
+    __slots__ = ()
 
-    def __repr__(self) -> str:
-        """Return representation of self."""
-        return f"Button({self.name[6:]}, {self.state}, {self.minsize}, {self.font.last_text}, {self.font.pyfont})"
-
-    def get_height(self) -> int:
-        """Return font height."""
-        return self.font.get_height()
-
-    def bind_action(self, function: Callable[[], None]) -> None:
-        """When self is pressed, call given function exactly once. Function takes no arguments."""
-        self.action = function
-
-    def update_value(
+    def __init__(
         self,
-        text: str | None,
-        size: int | None = None,
-        color: tuple[int, int, int] | None = None,
-        background: tuple[int, int, int] | None = None,
-    ) -> pygame.surface.Surface:
-        """Update button text."""
-        disp = str(text or "").center(self.minsize)
-        surface = super().update_value(f" {disp} ", size, color, background)
-        self.font.last_text = disp
-        return surface
+        name: str,
+        font: pygame.font.Font,
+        **kwargs: object,
+    ) -> None:
+        """Initialize attributes via keyword arguments."""
+        super().__init__(name, font)
 
-    def render(self, surface: pygame.surface.Surface) -> None:
-        """Render button."""
-        if not self.hidden:
-            text_rect = self.get_rect()
-            # if PYGAME_VERSION < 201:
-            # pygame.draw.rect(surface, self.backcolor, text_rect)
-            # pygame.draw.rect(surface, BLACK, text_rect, self.borderWidth)
-            # else:
-            pygame.draw.rect(
-                surface,
-                self.backcolor,
-                text_rect,
-                border_radius=20,
-            )
-            pygame.draw.rect(
-                surface,
-                BLACK,
-                text_rect,
-                width=self.borderWidth,
-                border_radius=20,
-            )
-        super().render(surface)
-
-    def is_pressed(self) -> bool:
-        """Return True if this button is pressed."""
-        assert self.state.game is not None
-        cursor = self.state.game.get_object_by_name("Cursor")
-        assert isinstance(cursor, Cursor)
-        return (
-            not self.hidden
-            and cursor.is_pressed()
-            and self.point_intersects(cursor.location)
-        )
-
-    def process(self, time_passed: float) -> None:
-        """Call self.action one time when pressed, then wait self.delay to call again."""
-        if self.cur_time > 0:
-            self.cur_time = max(self.cur_time - time_passed, 0)
-        elif self.is_pressed():
-            self.action()
-            self.cur_time = self.delay
-        if self.font.last_text != self._last:
-            self.textSize = self.font.pyfont.size(f" {self.font.last_text} ")
-        super().process(time_passed)
-
-
-class GameState:
-    """Base class for all game states."""
-
-    __slots__ = ("game", "name")
-
-    def __init__(self, name: str) -> None:
-        """Initialize state with a name, set self.game to None to be overwritten later."""
-        self.game: Game | None = None
-        self.name = name
-
-    def __repr__(self) -> str:
-        """Return representation of self."""
-        return f"<{self.__class__.__name__} {self.name}>"
-
-    def entry_actions(self) -> None:
-        """Perform entry actions for this GameState."""
-
-    def do_actions(self) -> None:
-        """Perform actions for this GameState."""
-
-    def check_state(self) -> str | None:
-        """Check state and return new state. None remains in current state."""
-        return None
-
-    def exit_actions(self) -> None:
-        """Perform exit actions for this GameState."""
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 
 class MenuState(GameState):
@@ -2817,9 +2513,6 @@ class MenuState(GameState):
     def __init__(self, name: str) -> None:
         """Initialize GameState and set up self.bh."""
         super().__init__(name)
-        self.bh = Text.get_font_height(FONT, self.fontsize)
-
-        self.next_state: str | None = None
 
     def add_button(
         self,
@@ -2830,53 +2523,50 @@ class MenuState(GameState):
         size: int = fontsize,
         minlen: int = button_minimum,
     ) -> int:
-        """Add a new Button object to self.game with arguments. Return button id."""
-        button = Button(self, name, minlen, value, size)
-        button.bind_action(action)
-        if location is not None:
-            button.location = Vector2(*location)
-        assert self.game is not None
-        self.game.add_object(button)
-        return button.id
+        """Add a new Button object to group"""
+        button = KwargButton(
+            name,
+            font=pygame.font.Font(FONT, size),
+            visible=True,
+            color=Color(0, 0, 0),
+            text=value,
+            location=location,
+            handle_click=action,
+        )
+        self.group_add(button)
 
     def add_text(
         self,
         name: str,
         value: str,
         location: tuple[int, int],
-        color: tuple[int, int, int] = BUTTONTEXTCOLOR,
-        cx: bool = True,
-        cy: bool = True,
+        color: tuple[int, int, int] = BUTTON_TEXT_COLOR,
         size: int = fontsize,
+        outline: tuple[int, int, int] = BUTTON_TEXT_OUTLINE,
     ) -> int:
         """Add a new Text object to self.game with arguments. Return text id."""
-        text = Text(size, color, None, cx, cy, name)
-        text.location = Vector2(*location)
-        text.update_value(value)
-        assert self.game is not None
-        self.game.add_object(text)
-        return text.id
-
-    def entry_actions(self) -> None:
-        """Clear all objects, add cursor object, and set up next_state."""
-        self.next_state = None
-
-        assert self.game is not None
-        self.game.rm_star()
-        self.game.add_object(Cursor(self.game))
+        text = KwargOutlineText(
+            name,
+            font=pygame.font.Font(FONT, size),
+            visible=True,
+            color=color,
+            text=value,
+            location=location,
+        )
+        self.group_add(text)
 
     def set_var(self, attribute: str, value: object) -> None:
         """Set MenuState.{attribute} to {value}."""
         setattr(self, attribute, value)
 
-    def to_state(self, state_name: str) -> Callable[[], None]:
+    def to_state(self, new_state: str) -> Callable[[], Awaitable[None]]:
         """Return a function that will change game state to state_name."""
 
-        def to_state_name() -> None:
-            """Set MenuState.next_state to {state_name}."""
-            self.next_state = state_name
+        async def set_state(*args: object, **kwargs: object) -> None:
+            play_sound("button_click")
+            await self.machine.set_state(new_state)
 
-        return to_state_name
+        return set_state
 
     def var_dependant_to_state(
         self,
@@ -2955,94 +2645,127 @@ class MenuState(GameState):
 
         return toggle_value
 
-    def check_state(self) -> str | None:
-        """Return self.next_state."""
-        return self.next_state
 
-
-class InitState(GameState):
+class InitializeState(AsyncState["AzulClient"]):
     """Initialize state."""
 
     __slots__ = ()
 
     def __init__(self) -> None:
         """Initialize self."""
-        super().__init__("Init")
+        super().__init__("initialize")
 
-    def entry_actions(self) -> None:
-        """Register keyboard handlers."""
-        assert self.game is not None
-        assert self.game.keyboard is not None
-        self.game.keyboard.add_listener("\x7f", "Delete")
-        self.game.keyboard.bind_action("Delete", "screenshot", 5)
-
-        self.game.keyboard.add_listener("\x1b", "Escape")
-        self.game.keyboard.bind_action("Escape", "raise_close", 5)
-
-        self.game.keyboard.add_listener("0", "Debug")
-        self.game.keyboard.bind_action("Debug", "debug", 5)
-
-    def check_state(self) -> str:
+    async def check_conditions(self) -> str:
         """Go to title state."""
-        return "Title"
+        return "title"
 
 
-class TitleScreen(MenuState):
+class TitleState(MenuState):
     """Game state when the title screen is up."""
 
     __slots__ = ()
 
     def __init__(self) -> None:
         """Initialize title."""
-        super().__init__("Title")
+        super().__init__("title")
 
-    def entry_actions(self) -> None:
+    async def entry_actions(self) -> None:
         """Set up buttons."""
-        super().entry_actions()
-        sw, sh = SCREENSIZE
-        self.add_button(
-            "ToSettings",
-            "New Game",
-            self.to_state("Settings"),
-            (sw // 2, sh // 2 - self.bh // 2),
+        assert self.machine is not None
+        self.id = self.machine.new_group("title")
+
+        button_font = pygame.font.Font(FONT, 28)
+        title_font = pygame.font.Font(FONT, 56)
+
+        title_text = KwargOutlineText(
+            "title_text",
+            title_font,
+            visible=True,
+            color=Color(0, 0, 0),
+            outline=(255, 0, 0),
+            border_width=4,
+            text=__title__.upper(),
         )
-        self.add_button(
-            "ToCredits",
-            "Credits",
-            self.to_state("Credits"),
-            (sw // 2, sh // 2 + self.bh * 3),
-            int(self.fontsize / 1.5),
+        title_text.location = (SCREEN_SIZE[0] // 2, title_text.rect.h)
+        self.group_add(title_text)
+        
+        hosting_button = KwargButton(
+            "hosting_button",
+            button_font,
+            visible=True,
+            color=Color(0, 0, 0),
+            text="Host Networked Game",
+            location=[x // 2 for x in SCREEN_SIZE],
+            handle_click=self.change_state("play_hosting"),
         )
-        assert self.game is not None
-        self.add_button(
-            "Quit",
-            "Quit",
-            self.game.raise_close,
-            (sw // 2, sh // 2 + self.bh * 4),
-            int(self.fontsize / 1.5),
+        self.group_add(hosting_button)
+
+        join_button = KwargButton(
+            "join_button",
+            button_font,
+            visible=True,
+            color=Color(0, 0, 0),
+            text="Join Networked Game",
+            location=hosting_button.location
+            + Vector2(
+                0,
+                hosting_button.rect.h + 10,
+            ),
+            handle_click=self.change_state("play_joining"),
         )
+        self.group_add(join_button)
+
+        internal_button = KwargButton(
+            "internal_hosting",
+            button_font,
+            visible=True,
+            color=Color(0, 0, 0),
+            text="Singleplayer Game",
+            location=hosting_button.location
+            - Vector2(
+                0,
+                hosting_button.rect.h + 10,
+            ),
+            handle_click=self.change_state("play_internal_hosting"),
+        )
+        self.group_add(internal_button)
+
+        quit_button = KwargButton(
+            "quit_button",
+            button_font,
+            visible=True,
+            color=Color(0, 0, 0),
+            text="Quit",
+            location=join_button.location
+            + Vector2(
+                0,
+                join_button.rect.h + 10,
+            ),
+            handle_click=self.change_state("Halt"),
+        )
+        self.group_add(quit_button)
 
 
-class CreditsScreen(MenuState):
+class CreditsState(MenuState):
     """Game state when credits for original game are up."""
 
     __slots__ = ()
 
     def __init__(self) -> None:
         """Initialize credits."""
-        super().__init__("Credits")
+        super().__init__("credits")
 
     def check_state(self) -> str:
         """Return to title."""
-        return "Title"
+        return "title"
 
 
-class SettingsScreen(MenuState):
+class SettingsState(MenuState):
     """Game state when user is defining game type, players, etc."""
 
     def __init__(self) -> None:
         """Initialize settings."""
-        super().__init__("Settings")
+        super().__init__("settings")
 
         self.player_count = 0  # 2
         self.host_mode = True
@@ -3104,7 +2827,7 @@ class SettingsScreen(MenuState):
             for i in range(count):
                 add_number(i, start + i)
 
-        sw, sh = SCREENSIZE
+        sw, sh = SCREEN_SIZE
         cx = sw // 2
         cy = sh // 2
 
@@ -3124,9 +2847,9 @@ class SettingsScreen(MenuState):
             size=int(self.fontsize / 1.5),
         )
 
-        # TEMPORARY: Hide everything to do with "Host Mode", networked games aren't done yet.
-        assert self.game is not None
-        self.game.set_attr_all("hidden", True)
+##        # TEMPORARY: Hide everything to do with "Host Mode", networked games aren't done yet.
+##        assert self.game is not None
+##        self.game.set_attr_all("visible", False)
 
         def varient_text(x: object) -> str:
             return f"Variant Play: {x}"
@@ -3292,19 +3015,6 @@ class PhaseWallTiling(GameState):
         self.game.player_turn = nturn
 
 
-class PhaseWallTilingNetworked(PhaseWallTiling):
-    """Wall tiling networked state."""
-
-    __slots__ = ()
-
-    def __init__(self) -> None:
-        """Initialize will tiling networked."""
-        GameState.__init__(self, "WallTilingNetworked")
-
-    def check_state(self) -> str:
-        """Go to networked next prepare."""
-        return "PrepareNextNetworked"
-
 
 class PhasePrepareNext(GameState):
     """Prepare next phase of game."""
@@ -3342,18 +3052,6 @@ class PhasePrepareNext(GameState):
         return "End"
 
 
-class PhasePrepareNextNetworked(PhasePrepareNext):
-    """Prepare for next, networked."""
-
-    __slots__ = ()
-
-    def __init__(self) -> None:
-        """Initialize prepare for next stage."""
-        GameState.__init__(self, "PrepareNextNetworked")
-
-    def check_state(self) -> str:
-        """Go to networked end."""
-        return "EndNetworked"
 
 
 class EndScreen(MenuState):
@@ -3455,7 +3153,7 @@ class EndScreen(MenuState):
             "ReturnTitle",
             "Return to Title",
             self.to_state("Title"),
-            (SCREENSIZE[0] // 2, SCREENSIZE[1] * 4 // 5),
+            (SCREEN_SIZE[0] // 2, SCREEN_SIZE[1] * 4 // 5),
         )
         buttontitle = self.game.get_object(bid)
         assert isinstance(buttontitle, Button)
@@ -3463,7 +3161,7 @@ class EndScreen(MenuState):
         buttontitle.cur_time = 2
 
         # Add score board
-        x = SCREENSIZE[0] // 2
+        x = SCREEN_SIZE[0] // 2
         y = 10
         for idx, line in enumerate(self.wininf.split("\n")):
             self.add_text(f"Line{idx}", line, (x, y), cx=True, cy=False)
@@ -3474,18 +3172,6 @@ class EndScreen(MenuState):
             y += self.bh
 
 
-class EndScreenNetworked(EndScreen):
-    """Networked end screen."""
-
-    def __init__(self) -> None:
-        """Initialize end screen."""
-        MenuState.__init__(self, "EndNetworked")
-        self.ranking = {}
-        self.wininf = ""
-
-    def check_state(self) -> str:
-        """Go to title."""
-        return "Title"
 
 
 class Game(ObjectHandler):
@@ -3504,10 +3190,10 @@ class Game(ObjectHandler):
 
         self.add_states(
             [
-                InitState(),
-                TitleScreen(),
-                CreditsScreen(),
-                SettingsScreen(),
+                InitializeState(),
+                TitleState(),
+                CreditsState(),
+                SettingsState(),
                 PhaseFactoryOffer(),
                 PhaseWallTiling(),
                 PhasePrepareNext(),
@@ -3538,91 +3224,10 @@ class Game(ObjectHandler):
         """Return representation of self."""
         return f"{self.__class__.__name__}()"
 
-    def debug(self) -> None:
-        """Debug."""
-
-    def screenshot(self) -> None:
-        """Save a screenshot of this game's most recent frame."""
-        surface = pygame.surface.Surface(SCREENSIZE)
-        self.render(surface)
-        str_time = "-".join(time.asctime().split(" "))
-        filename = f"Screenshot_at_{str_time}.png"
-
-        if not os.path.exists("Screenshots"):
-            os.mkdir("Screenshots")
-
-        surface.unlock()
-        pygame.image.save(
-            surface,
-            os.path.join("Screenshots", filename),
-            filename,
-        )
-        del surface
-
-        savepath = os.path.join(os.getcwd(), "Screenshots")
-
-        print(f'Saved screenshot as "{filename}" in "{savepath}".')
-
-    def raise_close(self) -> None:
-        """Raise a window close event."""
-        pygame.event.post(pygame.event.Event(QUIT))
-
-    def add_states(self, states: Iterable[GameState]) -> None:
-        """Add game states to self."""
-        for state in states:
-            if not isinstance(state, GameState):
-                raise ValueError(
-                    f'"{state}" Object is not a subclass of GameState!',
-                )
-            state.game = self
-            self.states[state.name] = state
-
-    def set_state(self, new_state_name: str) -> None:
-        """Change states and perform any exit / entry actions."""
-        # Ensure the new state is valid.
-        if new_state_name not in self.states:
-            raise ValueError(f'State "{new_state_name}" does not exist!')
-
-        # If we have an active state,
-        if self.active_state is not None:
-            # Perform exit actions
-            self.active_state.exit_actions()
-
-        # The active state is the new state
-        self.active_state = self.states[new_state_name]
-        # Perform entry actions for new active state
-        self.active_state.entry_actions()
-
-    def update_state(self) -> None:
-        """Perform the actions of the active state and potentially change states."""
-        # Only continue if there is an active state
-        if self.active_state is None:
-            return
-
-        # Perform the actions of the active state and check conditions
-        self.active_state.do_actions()
-
-        new_state_name = self.active_state.check_state()
-        if new_state_name is not None:
-            self.set_state(new_state_name)
-
     def add_object(self, obj: Object) -> None:
         """Add an object to the game."""
         obj.game = self
         super().add_object(obj)
-
-    def render(self, surface: pygame.surface.Surface) -> None:
-        """Render all of self.objects to the screen."""
-        surface.fill(self.background_color)
-        self.render_objects(surface)
-
-    def process(self, time_passed: float) -> None:
-        """Process all the objects and self."""
-        if not self.initialized_state and self.keyboard is not None:
-            self.set_state("Init")
-            self.initialized_state = True
-        self.process_objects(time_passed)
-        self.update_state()
 
     def get_player(self, player_id: int) -> Player:
         """Get the player with player id player_id."""
@@ -3681,7 +3286,7 @@ class Game(ObjectHandler):
         else:
             raise NotImplementedError()
 
-        cx, cy = SCREENSIZE[0] / 2, SCREENSIZE[1] / 2
+        cx, cy = SCREEN_SIZE[0] / 2, SCREEN_SIZE[1] / 2
         out = math.sqrt(cx**2 + cy**2) // 3 * 2
 
         mdeg = 360 // max_players
@@ -3721,247 +3326,532 @@ class Game(ObjectHandler):
             obj.screen_size_update()
 
 
-class Keyboard:
-    """Keyboard object, handles keyboard input."""
+class PlayHostingState(AsyncState["AzulClient"]):
+    """Start running server."""
 
-    __slots__ = ("actions", "active", "delay", "keys", "target", "time")
+    __slots__ = ("address",)
+
+    internal_server = False
+
+    def __init__(self) -> None:
+        """Initialize Play internal hosting / hosting State."""
+        extra = "_internal" if self.internal_server else ""
+        super().__init__(f"play{extra}_hosting")
+
+    async def entry_actions(self) -> None:
+        """Start hosting server."""
+        assert self.machine is not None
+        self.machine.manager.add_components(
+            (
+                GameServer(self.internal_server),
+                GameClient("network"),
+            ),
+        )
+
+        host = "localhost" if self.internal_server else await find_ip()
+        port = DEFAULT_PORT
+
+        self.address = (host, port)
+
+        await self.machine.raise_event(Event("server_start", self.address))
+
+    async def exit_actions(self) -> None:
+        """Have client connect."""
+        assert self.machine is not None
+        await self.machine.raise_event(
+            Event("client_connect", self.address),
+        )
+
+    async def check_conditions(self) -> str | None:
+        """Return to Play state when server is up and running."""
+        server: GameServer = self.machine.manager.get_component("GameServer")
+        return "play" if server.running else None
+
+
+class PlayInternalHostingState(PlayHostingState):
+    """Host server with internal server mode."""
+
+    __slots__ = ()
+
+    internal_server = True
+
+
+class ReturnElement(element_list.Element, objects.Button):
+    """Connection list return to title element sprite."""
+
+    __slots__ = ()
+
+    def __init__(self, name: str, font: pygame.font.Font) -> None:
+        """Initialize return element."""
+        super().__init__(name, font)
+
+        self.update_location_on_resize = False
+        self.border_width = 4
+        self.outline = RED
+        self.text = "Return to Title"
+        self.visible = True
+        self.location = (SCREEN_SIZE[0] // 2, self.location.y + 10)
+
+    async def handle_click(
+        self,
+        _: Event[sprite.PygameMouseButtonEventData],
+    ) -> None:
+        """Handle Click Event."""
+        await self.raise_event(
+            Event("return_to_title", None, 2),
+        )
+
+
+class ConnectionElement(element_list.Element, objects.Button):
+    """Connection list element sprite."""
+
+    __slots__ = ()
 
     def __init__(
         self,
-        target: Game,
-        **kwargs: tuple[str, str],
+        name: tuple[str, int],
+        font: pygame.font.Font,
+        motd: str,
     ) -> None:
-        """Initialize keyboard."""
-        self.target = target
-        self.target.keyboard = self
+        """Initialize connection element."""
+        super().__init__(name, font)
 
-        # Map of keyboard events to names
-        self.keys: dict[str, str] = {}
-        # Map of keyboard event names to functions
-        self.actions: dict[str, Callable[[], None]] = {}
-        # Map of names to time until function should be called again
-        self.time: dict[str, float] = {}
-        # Map of names to duration timer waits for function recalls
-        self.delay: dict[str, float | None] = {}
-        # Map of names to boolian of pressed or not
-        self.active: dict[str, bool] = {}
+        self.text = f"[{name[0]}:{name[1]}]\n{motd}"
+        self.visible = True
 
-        for name in kwargs:
-            if not hasattr(kwargs[name], "__iter__"):
-                raise ValueError(
-                    "Keyword arguments must be given as name=[key, self.target.function_name, delay]",
-                )
-            # if len(kwargs[name]) == 2:
-            key, function_name = kwargs[name]
-            # elif len(kwargs[name]) == 3:
-            # key, function_name, _delay = kwargs[name]
-            # else:
-            # raise ValueError
-            self.add_listener(key, name)
-            self.bind_action(name, function_name)
-
-    def __repr__(self) -> str:
-        """Return representation of self."""
-        return f"{self.__class__.__name__}({self.target!r})"
-
-    def is_pressed(self, key: str) -> bool:
-        """Return True if <key> is pressed."""
-        return self.active.get(key, False)
-
-    def add_listener(self, key: str, name: str) -> None:
-        """Listen for key down events with event.key == key argument and when that happens set self.actions[name] to true."""
-        self.keys[key] = name  # key to name
-        self.actions[name] = lambda: None  # name to function
-        self.time[name] = 0  # name to time until function recall
-        self.delay[name] = None  # name to function recall delay
-        self.active[name] = False  # name to boolian of pressed
-
-    def get_function_from_target(
+    async def handle_click(
         self,
-        function_name: str,
-    ) -> Callable[[], None]:
-        """Return function with name function_name from self.target."""
-        if hasattr(self.target, function_name):
-            attribute = getattr(self.target, function_name)
-            assert callable(attribute)
-            return cast("Callable[[], None]", attribute)
-        return lambda: None
-
-    def bind_action(
-        self,
-        name: str,
-        target_function_name: str,
-        delay: float | None = None,
+        _: Event[sprite.PygameMouseButtonEventData],
     ) -> None:
-        """Bind an event we are listening for to calling a function, can call multiple times if delay is not None."""
-        self.actions[name] = self.get_function_from_target(
-            target_function_name,
+        """Handle Click Event."""
+        details = self.name
+        await self.raise_event(
+            Event("join_server", details, 2),
         )
-        self.delay[name] = delay
-
-    def set_active(self, name: str, value: bool) -> None:
-        """Set active value for key name <name> to <value>."""
-        if name in self.active:
-            self.active[name] = bool(value)
-            if not value:
-                self.time[name] = 0
-
-    def set_key(self, key: str, value: bool) -> None:
-        """Set active value for key <key> to <value>."""
-        if key in self.keys:
-            self.set_active(self.keys[key], value)
-
-    # elif isinstance(key, int) and key < 0x110000:
-    # self.set_key(chr(key), value)
-
-    def read_event(self, event: pygame.event.Event) -> None:
-        """Handle an event."""
-        if event.type == KEYDOWN:
-            self.set_key(event.key, True)
-        elif event.type == KEYUP:
-            self.set_key(event.key, False)
-
-    def read_events(self, events: Iterable[pygame.event.Event]) -> None:
-        """Handle a list of events."""
-        for event in events:
-            self.read_event(event)
-
-    def process(self, time_passed: float) -> None:
-        """Send commands to self.target based on pressed keys and time."""
-        for name in self.active:
-            if self.active[name]:
-                self.time[name] = max(self.time[name] - time_passed, 0)
-                if self.time[name] == 0:
-                    self.actions[name]()
-                    delay = self.delay[name]
-                    if delay is not None:
-                        self.time[name] = delay
-                    else:
-                        self.time[name] = math.inf
 
 
-def network_shutdown() -> None:
-    """Handle network shutdown."""
+class PlayJoiningState(GameState):
+    """Start running client."""
+
+    __slots__ = ("font",)
+
+    def __init__(self) -> None:
+        """Initialize Joining State."""
+        super().__init__("play_joining")
+
+        self.font = pygame.font.Font(
+            FONT,
+            12,
+        )
+
+    async def entry_actions(self) -> None:
+        """Add game client component."""
+        await super().entry_actions()
+        assert self.machine is not None
+        self.id = self.machine.new_group("join")
+        client = GameClient("network")
+
+        # Add network to higher level manager
+        self.machine.manager.add_component(client)
+
+        connections = element_list.ElementList("connection_list")
+        self.manager.add_component(connections)
+        group = self.machine.get_group(self.id)
+        assert group is not None
+        group.add(connections)
+
+        return_font = pygame.font.Font(
+            FONT,
+            30,
+        )
+        return_button = ReturnElement("return_button", return_font)
+        connections.add_element(return_button)
+
+        self.manager.register_handlers(
+            {
+                "update_listing": self.handle_update_listing,
+                "return_to_title": self.handle_return_to_title,
+                "join_server": self.handle_join_server,
+            },
+        )
+
+        await self.manager.raise_event(Event("update_listing", None))
+
+    async def handle_update_listing(self, _: Event[None]) -> None:
+        """Update server listing."""
+        assert self.machine is not None
+
+        connections = self.manager.get_component("connection_list")
+
+        old: list[tuple[str, int]] = []
+        current: list[tuple[str, int]] = []
+
+        # print(f'{self.machine.active_state = }')
+        # print(f'{self.name = }')
+        while (
+            self.machine.active_state is not None
+            and self.machine.active_state is self
+        ):
+            # print("handle_update_listing click")
+
+            for motd, details in await read_advertisements():
+                current.append(details)
+                if connections.component_exists(details):
+                    continue
+                element = ConnectionElement(details, self.font, motd)
+                element.rect.topleft = (
+                    connections.get_new_connection_position()
+                )
+                element.rect.topleft = (10, element.location.y + 3)
+                connections.add_element(element)
+            for details in old:
+                if details in current:
+                    continue
+                connections.delete_element(details)
+            old, current = current, []
+
+    async def handle_join_server(self, event: Event[tuple[str, int]]) -> None:
+        """Handle join server event."""
+        details = event.data
+        await self.machine.raise_event(
+            Event("client_connect", details),
+        )
+        await self.machine.set_state("play")
+
+    async def handle_return_to_title(self, _: Event[None]) -> None:
+        """Handle return to title event."""
+        # Fire server stop event so server shuts down if it exists
+        await self.machine.raise_event_internal(Event("network_stop", None))
+
+        if self.machine.manager.component_exists("network"):
+            self.machine.manager.remove_component("network")
+
+        await self.machine.set_state("title")
 
 
-def run() -> None:
-    """Run program."""
-    # global game
-    global SCREENSIZE
-    # Set up the screen
-    screen = pygame.display.set_mode(SCREENSIZE, RESIZABLE, 16)
-    pygame.display.set_caption(f"{__title__} {__version__}")
-    # pygame.display.set_icon(pygame.image.load('icon.png'))
-    pygame.display.set_icon(get_tile_image(Tile(5), 32))
+# async def check_conditions(self) -> str | None:
+# return None
 
-    # Set up the FPS clock
-    clock = pygame.time.Clock()
 
-    game = Game()
-    keyboard = Keyboard(game)
+class PlayState(GameState):
+    """Game Play State."""
 
-    music_end = USEREVENT + 1  # This event is sent when a music track ends
+    __slots__ = ("exit_data",)
 
-    # Set music end event to our new event
-    pygame.mixer.music.set_endevent(music_end)
+    def __init__(self) -> None:
+        """Initialize Play State."""
+        super().__init__("play")
 
-    # Load and start playing the music
-    # pygame.mixer.music.load('sound/')
-    # pygame.mixer.music.play()
+        # (0: normal | 1: error) <error message> <? handled>
+        self.exit_data: tuple[int, str, bool] | None = None
 
-    running = True
+    def register_handlers(self) -> None:
+        """Register event handlers."""
+        self.manager.register_handlers(
+            {
+                "client_disconnected": self.handle_client_disconnected,
+                "game_winner": self.handle_game_over,
+            },
+        )
 
-    # While the game is active
-    while running:
-        # Event handler
-        for event in pygame.event.get():
-            if event.type == QUIT:
-                running = False
-            elif event.type == music_end:
-                # If the music ends, stop it and play it again.
-                pygame.mixer.music.stop()
-                pygame.mixer.music.play()
-            elif event.type == VIDEORESIZE:
-                SCREENSIZE = event.size
-                game.screen_size_update()
+    def add_actions(self) -> None:
+        """Register handlers."""
+        super().add_actions()
+        self.register_handlers()
+
+    async def entry_actions(self) -> None:
+        """Add GameBoard and raise init event."""
+        self.exit_data = None
+
+        assert self.machine is not None
+        if self.id == 0:
+            self.id = self.machine.new_group("play")
+
+        # self.group_add(())
+##        gameboard = GameBoard(
+##            45,
+##        )
+##        gameboard.location = [x // 2 for x in SCREEN_SIZE]
+##        self.group_add(gameboard)
+
+        await self.machine.raise_event(Event("init", None))
+
+    async def check_conditions(self) -> str | None:
+        """Return to title if client component doesn't exist."""
+        if not self.machine.manager.component_exists("network"):
+            return "title"
+        return None
+
+    async def exit_actions(self) -> None:
+        """Raise network stop event and remove components."""
+        # Fire server stop event so server shuts down if it exists
+        # await self.machine.raise_event(Event("network_stop", None))
+        await self.machine.raise_event_internal(Event("network_stop", None))
+
+        if self.machine.manager.component_exists("network"):
+            self.machine.manager.remove_component("network")
+        if self.machine.manager.component_exists("GameServer"):
+            self.machine.manager.remove_component("GameServer")
+
+        # Unbind components and remove group
+        await super().exit_actions()
+
+        self.register_handlers()
+
+        assert self.manager.has_handler("game_winner")
+
+    async def handle_game_over(self, event: Event[int]) -> None:
+        """Handle game over event."""
+        winner = event.data
+        self.exit_data = (0, f"{PLAYERS[winner]} Won", False)
+
+        await self.machine.raise_event_internal(Event("network_stop", None))
+
+    async def handle_client_disconnected(self, event: Event[str]) -> None:
+        """Handle client disconnected error."""
+        error = event.data
+        print(f"handle_client_disconnected  {error = }")
+
+        self.exit_data = (1, f"Client Disconnected$${error}", False)
+
+    # await self.do_actions()
+
+    async def do_actions(self) -> None:
+        """Perform actions for this State."""
+        # print(f"{self.__class__.__name__} do_actions tick")
+        if self.exit_data is None:
+            return
+
+        exit_status, message, handled = self.exit_data
+
+        if handled:
+            return
+        self.exit_data = (exit_status, message, True)
+
+        font = pygame.font.Font(
+            FONT,
+            28,
+        )
+
+        error_message = ""
+        if exit_status == 1:
+            message, error_message = message.split("$$")
+
+        if not self.manager.component_exists("continue_button"):
+            continue_button = KwargButton(
+                "continue_button",
+                font,
+                visible=True,
+                color=Color(0, 0, 0),
+                text=f"{message} - Return to Title",
+                location=[x // 2 for x in SCREEN_SIZE],
+                handle_click=self.change_state("title"),
+            )
+            self.group_add(continue_button)
+            group = continue_button.groups()[0]
+            # LayeredDirty, not just AbstractGroup
+            group.move_to_front(continue_button)  # type: ignore[attr-defined]
+        else:
+            continue_button = self.manager.get_component("continue_button")
+
+        if exit_status == 1:
+            if not self.manager.component_exists("error_text"):
+                error_text = objects.OutlinedText("error_text", font)
             else:
-                # If it's not a quit or music end event, tell the keyboard handler about it.
-                keyboard.read_event(event)
+                error_text = self.manager.get_component("error_text")
+            error_text.visible = True
+            error_text.color = Color(255, 0, 0)
+            error_text.border_width = 1
+            error_text.text += error_message + "\n"
+            error_text.location = continue_button.location + Vector2(
+                0,
+                continue_button.rect.h + 10,
+            )
 
-        # Get the time passed from the FPS clock
-        time_passed = clock.tick(FPS)
-        time_passed_secconds = time_passed / 1000
+            if not self.manager.component_exists("error_text"):
+                self.group_add(error_text)
 
-        # Process the game
-        game.process(time_passed_secconds)
-        keyboard.process(time_passed_secconds)
 
-        # Render the grid to the screen.
-        game.render(screen)
+class AzulClient(sprite.GroupProcessor):
+    """Azul Game Client."""
 
-        # Update the display
-        pygame.display.update()
-    # Once the game has ended, stop the music and de-initalize pygame.
+    __slots__ = ("manager",)
+
+    def __init__(self, manager: ExternalRaiseManager) -> None:
+        """Initialize Checkers Client."""
+        super().__init__()
+        self.manager = manager
+
+        self.add_states(
+            (
+                HaltState(),
+                InitializeState(),
+                TitleState(),
+                CreditsState(),
+                SettingsState(),
+                PlayHostingState(),
+                PlayInternalHostingState(),
+                PlayJoiningState(),
+                PlayState(),
+            ),
+        )
+
+    async def raise_event(self, event: Event[Any]) -> None:
+        """Raise component event in all groups."""
+        await self.manager.raise_event(event)
+
+    async def raise_event_internal(self, event: Event[Any]) -> None:
+        """Raise component event in all groups."""
+        await self.manager.raise_event_internal(event)
+
+
+async def async_run() -> None:
+    """Run program."""
+    # Set up globals
+    global SCREEN_SIZE
+
+    # Set up the screen
+    screen = pygame.display.set_mode(SCREEN_SIZE, RESIZABLE, 16, vsync=VSYNC)
+    pygame.display.set_caption(f"{__title__} v{__version__}")
+    # pygame.display.set_icon(pygame.image.load('icon.png'))
+    pygame.display.set_icon(get_tile_image(Tiles.one, 32))
+    screen.fill((0xFF, 0xFF, 0xFF))
+
+##    try:
+    async with trio.open_nursery() as main_nursery:
+        event_manager = ExternalRaiseManager(
+            "checkers",
+            main_nursery,  # "client"
+        )
+        client = AzulClient(event_manager)
+
+        background = pygame.image.load(
+            DATA_FOLDER / "background.png",
+        ).convert()
+        client.clear(screen, background)
+
+        client.set_timing_threshold(1000 / 80)
+
+        await client.set_state("initialize")
+
+        music_end = USEREVENT + 1  # This event is sent when a music track ends
+
+        # Set music end event to our new event
+        pygame.mixer.music.set_endevent(music_end)
+
+        # Load and start playing the music
+        # pygame.mixer.music.load('sound/')
+        # pygame.mixer.music.play()
+
+        clock = Clock()
+
+        resized_window = False
+        while client.running:
+            async with trio.open_nursery() as event_nursery:
+                for event in pygame.event.get():
+                    if event.type == QUIT:
+                        await client.set_state("Halt")
+                    elif event.type == KEYUP and event.key == K_ESCAPE:
+                        pygame.event.post(pygame.event.Event(QUIT))
+                    elif event.type == music_end:
+                        # If the music ends, stop it and play it again.
+                        pygame.mixer.music.stop()
+                        pygame.mixer.music.play()
+                    elif event.type == WINDOWRESIZED:
+                        SCREEN_SIZE = (event.x, event.y)
+                        resized_window = True
+                    sprite_event = sprite.convert_pygame_event(event)
+                    # print(sprite_event)
+                    event_nursery.start_soon(
+                        event_manager.raise_event,
+                        sprite_event,
+                    )
+                event_nursery.start_soon(client.think)
+                event_nursery.start_soon(clock.tick, FPS)
+
+            await client.raise_event(
+                Event(
+                    "tick",
+                    sprite.TickEventData(
+                        time_passed=clock.get_time()
+                        / 1e9,  # nanoseconds -> seconds
+                        fps=clock.get_fps(),
+                    ),
+                ),
+            )
+
+            if resized_window:
+                resized_window = False
+                screen.fill((0xFF, 0xFF, 0xFF))
+                rects = [Rect((0, 0), SCREEN_SIZE)]
+                client.repaint_rect(rects[0])
+                rects.extend(client.draw(screen))
+            else:
+                rects = client.draw(screen)
+            pygame.display.update(rects)
+    client.clear_groups()
+
+    # Once the game has ended, stop the music
     pygame.mixer.music.stop()
 
 
-def save_crash_img() -> None:
+def run() -> None:
+    """Start asynchronous run."""
+    trio.run(async_run)
+
+
+def screenshot_last_frame() -> None:
     """Save the last frame before the game crashed."""
     surface = pygame.display.get_surface().copy()
-    str_time = "-".join(time.asctime().split(" "))
+    str_time = "_".join(time.asctime().split(" "))
     filename = f"Crash_at_{str_time}.png"
 
-    if not os.path.exists("Screenshots"):
-        os.mkdir("Screenshots")
+    path = Path("screenshots").absolute()
+    if not path.exists():
+        os.mkdir(path)
 
-    # surface.lock()
-    pygame.image.save(surface, os.path.join("Screenshots", filename), filename)
-    # surface.unlock()
+    fullpath = path / filename
+
+    pygame.image.save(surface, fullpath, filename)
     del surface
 
-    savepath = os.path.join(os.getcwd(), "Screenshots")
-
-    print(f'Saved screenshot as "{filename}" in "{savepath}".')
+    print(f'Saved screenshot to "{fullpath}".')
 
 
 def cli_run() -> None:
     """Run from command line interface."""
-    # Linebreak before, as pygame prints a message on import.
-    print(f"\n{__title__} v{__version__}\nProgrammed by {__author__}.")
+    print(f"{__title__} v{__version__}\nProgrammed by {__author__}.\n")
+
+    # Make sure the game will display correctly on high DPI monitors on Windows.
+    if sys.platform == "win32":
+        from ctypes import windll
+
+        with contextlib.suppress(AttributeError):
+            windll.user32.SetProcessDPIAware()
+        del windll
+
+    exception: str | None = None
     try:
         # Initialize Pygame
         _success, fail = pygame.init()
         if fail > 0:
             print(
-                "Warning! Some modules of Pygame have not initialized properly!",
-            )
-            print(
-                "This can occur when not all required modules of SDL, which pygame utilizes, are installed.",
+                "Warning! Some modules of Pygame have not initialized properly!\n",
+                "This can occur when not all required modules of SDL are installed.",
             )
         run()
-    # except BaseException as ex:
-    # reraise = True#False
-    ##
-    # print('Debug: Activating Post motem.')
-    # import pdb
-    # pdb.post_mortem()
-    ##
-    # try:
-    # save_crash_img()
-    # except BaseException as svex:
-    # print(f'Could not save crash screenshot: {", ".join(svex.args)}')
-    # try:
-    # import errorbox
-    # except ImportError:
-    # reraise = True
-    # print(f'A {type(ex).__name__} Error Has Occored: {", ".join(ex.args)}')
-    # else:
-    # errorbox.errorbox('Error', f'A {type(ex).__name__} Error Has Occored: {", ".join(ex.args)}')
-    # if reraise:
-    # raise
+    except ExceptionGroup as exc:
+        print(exc)
+        exception = traceback.format_exception(exc)
+##        raise
+##    except BaseException as ex:
+##        screenshot_last_frame()
+##        # errorbox.errorbox('Error', f'A {type(ex).__name__} Error Has Occored: {", ".join(ex.args)}')
+##        raise
     finally:
         pygame.quit()
-        network_shutdown()
+        if exception is not None:
+            print(''.join(exception), file=sys.stderr)
 
 
 if __name__ == "__main__":
