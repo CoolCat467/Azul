@@ -25,6 +25,7 @@ __version__ = "2.0.0"
 
 import importlib
 import math
+import operator
 import os
 import random
 import time
@@ -1330,7 +1331,7 @@ class Board(Grid):
                         self.additions[row] = column
                     else:
                         raise RuntimeError(
-                            "%i not in row %i!" % (negative_tile_color, row),
+                            f"{negative_tile_color} not in row {row}!",
                         )
                 else:
                     raise RuntimeError(f"{row} not in moved_table!")
@@ -1502,7 +1503,7 @@ class Row(TileRenderer):
         xy = Grid.get_tile_point(self, screen_location)
         if xy is None:
             return None
-        x, y = xy
+        x, _y = xy
         return self.size - 1 - x
 
     def get_placed(self) -> int:
@@ -1926,10 +1927,9 @@ class Factory(Grid):
     def fill(self, tiles: list[Tile]) -> None:
         """Fill self with tiles. Will raise exception if insufficiant tiles."""
         if len(tiles) < self.size[0] * self.size[1]:
+            size = self.size[0] * self.size[1]
             raise RuntimeError(
-                "Insufficiant quantity of tiles! Needs %i!"
-                % self.size[0]
-                * self.size[1],
+                f"Insufficiant quantity of tiles! Needs {size}!",
             )
         for y in range(self.size[1]):
             for tile, x in zip(
@@ -2565,7 +2565,7 @@ class Player(MultipartObject):
                     if not row.is_full():
                         info = row.get_info(pos)
                         if info is not None and info.color < 0:
-                            color, held = cursor.get_held_info()
+                            _color, _held = cursor.get_held_info()
                             todrop = min(
                                 pos + 1,
                                 row.get_placeable(),
@@ -2607,7 +2607,7 @@ class Player(MultipartObject):
                 and board.get_info(point).color == -6
             ):
                 # Cursor holding and wall tiling
-                column, row_id = point
+                _column, row_id = point
                 cursor_tile = cursor.drop(1)[0]
                 board_tile = board.get_tile_for_cursor_by_row(
                     row_id,
@@ -2632,7 +2632,7 @@ class Player(MultipartObject):
         elif self.is_wall_tiling and obj == "Board" and not self.just_dropped:
             # Mouse down, something pressed, and not holding anything
             # Wall tiling, pressed, not holding
-            column_number, row_number = point
+            _column_number, row_number = point
             tile = board.get_tile_for_cursor_by_row(
                 row_number,
             )
@@ -2850,7 +2850,7 @@ class MenuState(GameState):
         for state in kwargs:
             if not len(kwargs[state]) == 2:
                 raise ValueError(f'Key "{state}" is invalid!')
-            key, value = kwargs[state]
+            key, _value = kwargs[state]
             if not hasattr(self, key):
                 raise ValueError(
                     f'{self} object does not have attribute "{key}"!',
@@ -3358,7 +3358,7 @@ class EndScreen(MenuState):
                 last = None
                 for c, player_id in sorted(
                     lines,
-                    key=lambda x: x[0],
+                    key=operator.itemgetter(0),
                     reverse=True,
                 ):
                     if last == c:
@@ -3716,9 +3716,8 @@ class Keyboard:
                 )
             if len(kwargs[name]) == 2:
                 key, function_name = kwargs[name]
-                delay = None
             elif len(kwargs[name]) == 3:
-                key, function_name, delay = kwargs[name]
+                key, function_name, _delay = kwargs[name]
             else:
                 raise ValueError
             self.add_listener(key, name)
