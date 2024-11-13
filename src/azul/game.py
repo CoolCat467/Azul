@@ -249,14 +249,21 @@ def add_symbol_to_tile_surf(
     tilecolor: int,
     tilesize: int,
     greyshift: float = GREYSHIFT,
-    font: Path = FONT,
 ) -> None:
     """Add symbol to tile surface."""
+    font = FONT_FOLDER / "VeraSerif.ttf"
     symbol, scolor = get_tile_symbol_and_color(tilecolor, greyshift)
     pyfont = pygame.font.Font(font, math.floor(math.sqrt(tilesize**2 * 2)) - 1)
 
     symbolsurf = pyfont.render(symbol, True, scolor)
     symbolsurf = auto_crop_clear(symbolsurf)
+
+    width, height = symbolsurf.get_size()
+    scale_factor = tilesize / height
+    symbolsurf = pygame.transform.scale(
+        symbolsurf,
+        (width * scale_factor, height * scale_factor),
+    )
     # symbolsurf = pygame.transform.scale(symbolsurf, (tilesize, tilesize))
 
     # sw, sh = symbolsurf.get_size()
@@ -284,7 +291,6 @@ def get_tile_image(
     tilesize: int,
     greyshift: float = GREYSHIFT,
     outline_size: float = 0.2,
-    font: Path = FONT,
 ) -> pygame.surface.Surface:
     """Return a surface of a given tile."""
     cid = tile.color
@@ -301,12 +307,12 @@ def get_tile_image(
             outline_size,
         )
         # Add tile symbol
-        add_symbol_to_tile_surf(surf, cid, tilesize, greyshift, font)
+        add_symbol_to_tile_surf(surf, cid, tilesize, greyshift)
 
         return surf
     surf = make_square_surf(color, tilesize)
     # Add tile symbol
-    add_symbol_to_tile_surf(surf, cid, tilesize, greyshift, font)
+    add_symbol_to_tile_surf(surf, cid, tilesize, greyshift)
     return surf
 
 
