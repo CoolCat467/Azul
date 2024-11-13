@@ -411,7 +411,7 @@ async def async_run() -> None:
 class Tracer(trio.abc.Instrument):
     """Tracer instrument."""
 
-    __slots__ = ()
+    __slots__ = ("_sleep_time",)
 
     def before_run(self) -> None:
         """Before run."""

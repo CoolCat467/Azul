@@ -213,18 +213,15 @@ def auto_crop_clear(
 def get_tile_color(
     tile_color: int,
     greyshift: float = GREYSHIFT,
-) -> (
-    tuple[float, float, float]
-    | tuple[int, int, int]
-    | tuple[tuple[int, int, int], tuple[int, int, int]]
-):
+) -> tuple[int, int, int] | tuple[tuple[int, int, int], tuple[int, int, int]]:
     """Return the color a given tile should be."""
     if tile_color < 0:
         if tile_color == -6:
             return GREY
         color = tile_colors[abs(tile_color + 1)]
         assert len(color) == 3
-        return lerp_color(color, GREY, greyshift)
+        r, g, b = lerp_color(color, GREY, greyshift)
+        return int(r), int(g), int(b)
     if tile_color < 5:
         return tile_colors[tile_color]
     raise ValueError("Invalid tile color")
@@ -674,6 +671,7 @@ class Object:
 
         self.id = 0
         self.game: Game
+        self.Render_Priority: str | int
 
     def __repr__(self) -> str:
         """Return representation of self."""
@@ -695,19 +693,25 @@ class Object:
         """Return a Rect object representing this Object's area."""
         return Rect(self.get_image_zero(), self.wh)
 
-    def point_intersects(self, screen_location: tuple[int, int]) -> bool:
+    def point_intersects(
+        self,
+        screen_location: tuple[int, int] | Vector2,
+    ) -> bool:
         """Return True if this Object intersects with a given screen location."""
-        return self.get_rect().collidepoint(screen_location)
+        return self.get_rect().collidepoint(tuple(screen_location))
 
     def to_image_surface_location(
         self,
-        screen_location: tuple[int, int],
+        screen_location: tuple[int, int] | Vector2,
     ) -> tuple[int, int]:
         """Return the location a screen location would be at on the objects image. Can return invalid data."""
         # Get zero zero in image locations
         zx, zy = self.get_image_zero()  # Zero x and y
         sx, sy = screen_location  # Screen x and y
-        return sx - zx, sy - zy  # Location with respect to image dimensions
+        return (
+            int(sx) - zx,
+            int(sy) - zy,
+        )  # Location with respect to image dimensions
 
     def process(self, time_passed: float) -> None:
         """Process Object. Replace when calling this class."""
@@ -1081,7 +1085,7 @@ class Grid(TileRenderer):
 
     def get_tile_point(
         self,
-        screen_location: tuple[int, int],
+        screen_location: tuple[int, int] | Vector2,
     ) -> tuple[int, int] | None:
         """Return the xy choordinates of which tile intersects given a point. Returns None if no intersections."""
         # Can't get tile if screen location doesn't intersect our hitbox!
@@ -1157,7 +1161,7 @@ class Board(Grid):
         self.player = player
 
         self.variant_play = variant_play
-        self.additions: dict[int, Tile] = {}
+        self.additions: dict[int, Tile | int | None] = {}
 
         self.wall_tiling = False
 
@@ -1276,13 +1280,15 @@ class Board(Grid):
         # space left for it. In this case, you must immediately
         # place all tiles of that pattern line in your floor line.
         for row in range(self.size[1]):
-            if isinstance(self.additions[row], Tile):
-                valid = self.calculate_valid_locations_for_tile_row(row)
-                if not valid:
-                    floor = self.player.get_object_by_name("floor_line")
-                    assert isinstance(floor, FloorLine)
-                    floor.place_tile(self.additions[row])
-                    self.additions[row] = None
+            row_tile = self.additions[row]
+            if not isinstance(row_tile, Tile):
+                continue
+            valid = self.calculate_valid_locations_for_tile_row(row)
+            if not valid:
+                floor = self.player.get_object_by_name("floor_line")
+                assert isinstance(floor, FloorLine)
+                floor.place_tile(row_tile)
+                self.additions[row] = None
 
     @gsc_bound_index(False)
     def wall_tile_from_point(self, position: tuple[int, int]) -> bool:
@@ -1293,7 +1299,7 @@ class Board(Grid):
         assert at_point is not None
         if at_point.color <= 0 and row in self.additions:
             tile = self.additions[row]
-            if tile is not None and self.can_place_tile_color_at_point(
+            if isinstance(tile, Tile) and self.can_place_tile_color_at_point(
                 position,
                 tile,
             ):
@@ -1321,7 +1327,7 @@ class Board(Grid):
                 if row in self.additions:
                     rowdata = [tile.color for tile in self.get_row(row)]
                     tile = self.additions[row]
-                    if tile is None:
+                    if not isinstance(tile, Tile):
                         continue
                     negative_tile_color = -(tile.color + 1)
                     if negative_tile_color in rowdata:
@@ -1395,6 +1401,7 @@ class Board(Grid):
         score = 0
         for x, y in ((self.additions[y], y) for y in range(self.size[1])):
             if x is not None:
+                assert isinstance(x, int)
                 rowt, colt = self.get_touches_continuous((x, y))
                 horiz = len(rowt)
                 verti = len(colt)
@@ -1500,11 +1507,16 @@ class Row(TileRenderer):
 
     def get_tile_point(self, screen_location: tuple[int, int]) -> int | None:
         """Return the xy choordinates of which tile intersects given a point. Returns None if no intersections."""
-        xy = Grid.get_tile_point(self, screen_location)
-        if xy is None:
+        # `Grid.get_tile_point` inlined
+        # Can't get tile if screen location doesn't intersect our hitbox!
+        if not self.point_intersects(screen_location):
             return None
-        x, _y = xy
-        return self.size - 1 - x
+        # Otherwise, find out where screen point is in image locations
+        # board x and y
+        bx, _by = self.to_image_surface_location(screen_location)
+        # Finally, return the full divides (no decimals) of xy location by self.tile_full.
+
+        return self.size - 1 - int(bx // self.tile_full)
 
     def get_placed(self) -> int:
         """Return the number of tiles in self that are not fake tiles, like grey ones."""
@@ -1898,18 +1910,18 @@ class Factory(Grid):
 
     def add_circle(self, surface: pygame.surface.Surface) -> None:
         """Add circle to self.image."""
-        if f"FactoryCircle{self.radius}" not in self.game.cache:
-            rad = math.ceil(self.radius)
-            surf = set_alpha(pygame.surface.Surface((2 * rad, 2 * rad)), 1)
-            pygame.draw.circle(surf, self.outline, (rad, rad), rad)
-            pygame.draw.circle(
-                surf,
-                self.color,
-                (rad, rad),
-                math.ceil(rad * (1 - self.out_size)),
-            )
-            self.game.cache[f"FactoryCircle{self.radius}"] = surf
-        surf = self.game.cache[f"FactoryCircle{self.radius}"].copy()
+        # if f"FactoryCircle{self.radius}" not in self.game.cache:
+        rad = math.ceil(self.radius)
+        surf = set_alpha(pygame.surface.Surface((2 * rad, 2 * rad)), 1)
+        pygame.draw.circle(surf, self.outline, (rad, rad), rad)
+        pygame.draw.circle(
+            surf,
+            self.color,
+            (rad, rad),
+            math.ceil(rad * (1 - self.out_size)),
+        )
+        # self.game.cache[f"FactoryCircle{self.radius}"] = surf
+        # surf = self.game.cache[f"FactoryCircle{self.radius}"].copy()
         surface.blit(
             surf,
             (
@@ -1946,7 +1958,7 @@ class Factory(Grid):
         return [
             tile
             for tile in (
-                self.get_tile((x, y))
+                self.get_tile((x, y), -6)
                 for x in range(self.size[0])
                 for y in range(self.size[1])
             )
@@ -1967,7 +1979,9 @@ class Factory(Grid):
     def process(self, time_passed: float) -> None:
         """Process self."""
         if self.image_update:
-            self.radius = self.tile_full * self.size[0] * self.size[1] // 3 + 3
+            self.radius = int(
+                self.tile_full * self.size[0] * self.size[1] // 3 + 3,
+            )
         super().process(time_passed)
 
 
@@ -2059,7 +2073,9 @@ class Factories(MultipartObject):
                 # If the bag is not empty,
                 if not self.game.bag.is_empty():
                     # Draw a tile from the bag.
-                    drawn.append(self.game.bag.draw_tile())
+                    tile = self.game.bag.draw_tile()
+                    assert tile is not None
+                    drawn.append(tile)
                 else:  # Otherwise, get the box lid
                     box_lid = self.game.get_object_by_name("BoxLid")
                     assert isinstance(box_lid, BoxLid)
@@ -2070,7 +2086,9 @@ class Factories(MultipartObject):
                         # and shake the bag to randomize everything
                         self.game.bag.reset()
                         # Then, grab a tile from the bag like usual.
-                        drawn.append(self.game.bag.draw_tile())
+                        tile = self.game.bag.draw_tile()
+                        assert tile is not None
+                        drawn.append(tile)
                     else:
                         # "In the rare case that you run out of tiles again
                         # while there are none left in the lid, start a new
@@ -2195,7 +2213,10 @@ class TableCenter(Grid):
         ):
             point = self.get_tile_point(cursor.location)
             # Shouldn't return none anymore since we have point_intersects now.
-            color_at_point = self.get_info(point).color
+            assert point is not None
+            tile = self.get_info(point)
+            assert isinstance(tile, Tile)
+            color_at_point = tile.color
             if color_at_point >= 0 and color_at_point < 5:
                 cursor.drag(self.pull_tiles(color_at_point))
         super().process(time_passed)
@@ -2384,9 +2405,11 @@ class Player(MultipartObject):
                 board = self.get_object_by_name("Board")
                 assert isinstance(board, Board)
                 rows = board.get_rows_to_tile_map()
-                for rowpos in rows:
+                for rowpos, value in rows.items():
+                    color = get_tile_color(value, board.greyshift)
+                    assert isinstance(color[0], int)
                     pattern_line.get_row(rowpos).set_background(
-                        get_tile_color(rows[rowpos], board.greyshift),
+                        color,
                     )
             else:
                 pattern_line.set_background(PATSELECTCOLOR)
@@ -2424,7 +2447,7 @@ class Player(MultipartObject):
         pattern_line = self.get_object_by_name("PatternLine")
         assert isinstance(pattern_line, PatternLine)
         lw = pattern_line.wh[0] // 2
-        pattern_line.location = x - lw, y
+        pattern_line.location = Vector2(x - lw, y)
 
         floor_line = self.get_object_by_name("floor_line")
         assert isinstance(floor_line, FloorLine)
@@ -2449,10 +2472,18 @@ class Player(MultipartObject):
         assert isinstance(box_lid, BoxLid)
 
         data = pattern_line.wall_tiling()
-        box_lid.add_tiles(data["tiles_for_box"])
+        tiles_for_box = data["tiles_for_box"]
+        assert isinstance(tiles_for_box, list)
+        box_lid.add_tiles(tiles_for_box)
         del data["tiles_for_box"]
 
-        board.wall_tiling_mode(data)
+        cleaned = {}
+        for key, value in data.items():
+            if not isinstance(value, Tile):
+                continue
+            cleaned[int(key)] = value
+
+        board.wall_tiling_mode(cleaned)
 
     def done_wall_tiling(self) -> bool:
         """Return True if internal Board is done wall tiling."""
@@ -2600,28 +2631,25 @@ class Player(MultipartObject):
                         # Otherwise add to floor line for all.
                         floor_line.place_tiles(tiles_to_add)
                     move_made = True
-            elif (
-                not self.just_held
-                and obj == "Board"
-                and board.get_info(point) is not None
-                and board.get_info(point).color == -6
-            ):
-                # Cursor holding and wall tiling
-                _column, row_id = point
-                cursor_tile = cursor.drop(1)[0]
-                board_tile = board.get_tile_for_cursor_by_row(
-                    row_id,
-                )
-                if (
-                    board_tile is not None
-                    and cursor_tile.color == board_tile.color
-                    and board.wall_tile_from_point(point)
-                ):
-                    self.just_dropped = True
-                    pattern_line.get_row(
+            elif not self.just_held and obj == "Board":
+                tile = board.get_info(point)
+                assert isinstance(tile, Tile)
+                if tile.color == -6:
+                    # Cursor holding and wall tiling
+                    _column, row_id = point
+                    cursor_tile = cursor.drop(1)[0]
+                    board_tile = board.get_tile_for_cursor_by_row(
                         row_id,
-                    ).set_background(None)
-
+                    )
+                    if (
+                        board_tile is not None
+                        and cursor_tile.color == board_tile.color
+                        and board.wall_tile_from_point(point)
+                    ):
+                        self.just_dropped = True
+                        pattern_line.get_row(
+                            row_id,
+                        ).set_background(None)
             if move_made and not self.is_wall_tiling:
                 if cursor.holding_number_one:
                     one_tile = cursor.drop_one_tile()
@@ -2670,9 +2698,10 @@ class Button(Text):
 
         self.borderWidth = math.floor(font_size / 12)  # 5
 
-        self.action = lambda: None
         self.delay = 0.6
         self.cur_time = 1.0
+
+        self.action: Callable[[], None] = lambda: None
 
     def __repr__(self) -> str:
         """Return representation of self."""
@@ -2692,11 +2721,12 @@ class Button(Text):
         size: int | None = None,
         color: tuple[int, int, int] | None = None,
         background: tuple[int, int, int] | None = None,
-    ) -> None:
+    ) -> pygame.surface.Surface:
         """Update button text."""
         disp = str(text or "").center(self.minsize)
-        super().update_value(f" {disp} ", size, color, background)
+        surface = super().update_value(f" {disp} ", size, color, background)
         self.font.last_text = disp
+        return surface
 
     def render(self, surface: pygame.surface.Surface) -> None:
         """Render button."""
@@ -3020,8 +3050,8 @@ class SettingsScreen(MenuState):
             start: int,
             end: int,
             width_each: int,
-            cx: bool,
-            cy: bool,
+            cx: int,
+            cy: int,
         ) -> None:
             """Add numbers."""
             count = end - start + 1
@@ -3113,7 +3143,7 @@ class SettingsScreen(MenuState):
             f"Players: {self.player_count}",
             (cx, cy + self.bh),
         )
-        add_numbers(2, 4, 70, int(cx), int(cy + self.bh * 2))
+        add_numbers(2, 4, 70, cx, int(cy + self.bh * 2))
 
         var_to_state = self.var_dependant_to_state(
             FactoryOffer=("host_mode", True),
@@ -3374,8 +3404,8 @@ class EndScreen(MenuState):
         text = ""
         for rank in sorted(self.ranking):
             line = "Player"
-            players = self.ranking[rank]
-            cnt = len(players)
+            players_rank = self.ranking[rank]
+            cnt = len(players_rank)
             if cnt > 1:
                 line += "s"
             line += " "
@@ -3397,7 +3427,7 @@ class EndScreen(MenuState):
             else:
                 line += f"{rank}th"
             line += " place!\n"
-            text += line.format(*players)
+            text += line.format(*players_rank)
         self.wininf = text[:-1]
 
     def entry_actions(self) -> None:
@@ -3433,6 +3463,7 @@ class EndScreen(MenuState):
             self.add_text(f"Line{idx}", line, (x, y), cx=True, cy=False)
             # self.game.get_object(bid).Render_Priority = f'last{-(2+idx)}'
             button = self.game.get_object(bid)
+            assert isinstance(button, Button)
             button.Render_Priority = "last-2"
             y += self.bh
 
@@ -3494,8 +3525,8 @@ class Game(ObjectHandler):
         # Tiles
         self.bag = Bag(TILECOUNT, REGTILECOUNT)
 
-        # Cache
-        self.cache: dict[int, pygame.surface.Surface] = {}
+    # # Cache
+    # self.cache: dict[int, pygame.surface.Surface] = {}
 
     def __repr__(self) -> str:
         """Return representation of self."""
@@ -3692,7 +3723,7 @@ class Keyboard:
     def __init__(
         self,
         target: Game,
-        **kwargs: tuple[str, str] | tuple[str, str, float | None],
+        **kwargs: tuple[str, str],
     ) -> None:
         """Initialize keyboard."""
         self.target = target
@@ -3714,12 +3745,12 @@ class Keyboard:
                 raise ValueError(
                     "Keyword arguments must be given as name=[key, self.target.function_name, delay]",
                 )
-            if len(kwargs[name]) == 2:
-                key, function_name = kwargs[name]
-            elif len(kwargs[name]) == 3:
-                key, function_name, _delay = kwargs[name]
-            else:
-                raise ValueError
+            # if len(kwargs[name]) == 2:
+            key, function_name = kwargs[name]
+            # elif len(kwargs[name]) == 3:
+            # key, function_name, _delay = kwargs[name]
+            # else:
+            # raise ValueError
             self.add_listener(key, name)
             self.bind_action(name, function_name)
 
@@ -3747,7 +3778,7 @@ class Keyboard:
         if hasattr(self.target, function_name):
             attribute = getattr(self.target, function_name)
             assert callable(attribute)
-            return attribute
+            return cast("Callable[[], None]", attribute)
         return lambda: None
 
     def bind_action(
@@ -3769,12 +3800,13 @@ class Keyboard:
             if not value:
                 self.time[name] = 0
 
-    def set_key(self, key: int | str, value: bool) -> None:
+    def set_key(self, key: str, value: bool) -> None:
         """Set active value for key <key> to <value>."""
         if key in self.keys:
             self.set_active(self.keys[key], value)
-        elif isinstance(key, int) and key < 0x110000:
-            self.set_key(chr(key), value)
+
+    # elif isinstance(key, int) and key < 0x110000:
+    # self.set_key(chr(key), value)
 
     def read_event(self, event: pygame.event.Event) -> None:
         """Handle an event."""
