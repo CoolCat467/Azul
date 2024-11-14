@@ -1,10 +1,10 @@
-"""Checkers State."""
+"""Azul State."""
 
 # Programmed by CoolCat467
 
 from __future__ import annotations
 
-# Copyright (C) 2023-2024  CoolCat467
+# Copyright (C) 2024  CoolCat467
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,443 +19,1042 @@ from __future__ import annotations
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__title__ = "Checkers State"
+__title__ = "Azul State"
 __author__ = "CoolCat467"
 __license__ = "GNU General Public License Version 3"
 __version__ = "0.0.0"
 
-import copy
-import math
-from dataclasses import dataclass
+
+import random
+from collections import Counter
+from enum import IntEnum, auto
 from typing import (
     TYPE_CHECKING,
+    Any,
+    Final,
     NamedTuple,
-    TypeAlias,
     TypeVar,
-    cast,
 )
 
-from mypy_extensions import u8
+from numpy import array, int8
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator, Iterable
+    from collections.abc import Generator
 
+    from numpy.typing import NDArray
     from typing_extensions import Self
-
-MANDATORY_CAPTURE = True  # If a jump is available, do you have to or not?
-PAWN_JUMP_FORWARD_ONLY = True  # Pawns not allowed to go backwards in jumps?
-
-# Note: Tile Ids are chess board tile titles, A1 to H8
-# A8 ... H8
-# .........
-# A1 ... H1
-
-# Player:
-# 0 = False = Red   = MIN = 0, 2
-# 1 = True  = Black = MAX = 1, 3
 
 T = TypeVar("T")
 
-Pos: TypeAlias = tuple[u8, u8]
+FLOOR_LINE_COUNT: Final = 7
 
 
-class Action(NamedTuple):
-    """Represents an action."""
-
-    from_pos: Pos
-    to_pos: Pos
-
-
-class ActionSet(NamedTuple):
-    """Represents a set of actions."""
-
-    jumps: dict[Pos, list[Pos]]
-    moves: tuple[Pos, ...]
-    ends: set[Pos]
+def floor_line_subtract_generator(seed: int = 1) -> Generator[int, None, None]:
+    """Floor Line subtraction number generator. Can continue indefinitely."""
+    while True:
+        yield from (-seed,) * (seed + 1)
+        seed += 1
 
 
-def get_sides(xy: Pos) -> tuple[Pos, Pos, Pos, Pos]:
-    """Return the tile xy coordinates on the top left, top right, bottom left, and bottom right sides of given xy coordinates."""
-    cx, cy = xy
-    sides = []
-    for raw_dy in range(2):
-        dy = raw_dy * 2 - 1
-        ny = cy + dy
-        for raw_dx in range(2):
-            dx = raw_dx * 2 - 1
-            nx = cx + dx
-            sides.append((nx, ny))
-    tuple_sides = tuple(sides)
-    assert len(tuple_sides) == 4
-    return cast(tuple[Pos, Pos, Pos, Pos], tuple_sides)
+FLOOR_LINE_DATA: Final = tuple(
+    value
+    for _, value in zip(
+        range(FLOOR_LINE_COUNT),
+        floor_line_subtract_generator(),
+        strict=False,
+    )
+)
 
 
-def pawn_modify(moves: tuple[T, ...], piece_type: u8) -> tuple[T, ...]:
-    """Return moves but remove invalid moves for pawns."""
-    assert (
-        len(moves) == 4
-    ), "Tuple size MUST be four for this to return valid results!"
-    if (
-        piece_type == 0
-    ):  # If it's a white pawn, it can only move to top left and top right
-        return moves[:2]
-    if (
-        piece_type == 1
-    ):  # If it's a black pawn, it can only move to bottom left anf bottom right
-        return moves[2:]
-    return moves
+class Tile(IntEnum):
+    """All type types."""
+
+    blank = -6
+    fake_cyan = -5
+    fake_black = -4
+    fake_red = -3
+    fake_yellow = -2
+    fake_blue = -1
+    blue = 0
+    yellow = auto()
+    red = auto()
+    black = auto()
+    cyan = auto()
+    one = auto()
 
 
-@dataclass(slots=True)
-class State:
-    """Represents state of checkers game."""
+REAL_TILES: Final = {Tile.blue, Tile.yellow, Tile.red, Tile.black, Tile.cyan}
 
-    size: tuple[int, int]
-    pieces: dict[Pos, int]
-    turn: bool = True  # Black moves first
 
-    def __str__(self) -> str:
-        """Return text representation of game board state."""
-        map_ = {None: " ", 0: "-", 1: "+", 2: "O", 3: "X"}
-        w, h = self.size
-        lines = []
-        for y in range(h):
-            line = []
-            for x in range(w):
-                if (x + y + 1) % 2:
-                    # line.append("_")
-                    line.append(" ")
-                    continue
-                line.append(map_[self.pieces.get((x, y))])
-            lines.append("".join(line))
-        # lines.append(" | ".join(line))
-        # lines.append("--+-"*(w-1)+"-")
-        return "\n".join(lines)
+class Phase(IntEnum):
+    """Game phases."""
 
-    def calculate_actions(self, position: Pos) -> ActionSet:
-        """Return actions the piece at given position can make."""
-        if MANDATORY_CAPTURE:
-            exists = False
-            for start, _end in self.get_all_actions(self.pieces[position]):
-                if start == position:
-                    exists = True
-                    break
-            if not exists:
-                return ActionSet({}, (), set())
-        jumps = self.get_jumps(position)
-        moves: tuple[Pos, ...]
-        moves = () if MANDATORY_CAPTURE and jumps else self.get_moves(position)
-        ends = set(jumps)
-        ends.update(moves)
-        return ActionSet(jumps, moves, ends)
+    factory_offer = 0
+    wall_tiling = auto()
+    end = auto()
 
-    def piece_kinged(self, piece_pos: Pos, new_type: int) -> None:
-        """Piece kinged."""
-        # print(f'piece_kinged {piece = }')
 
-    def piece_moved(self, start_pos: Pos, end_pos: Pos) -> None:
-        """Piece moved from start_pos to end_pos."""
+def generate_bag_contents() -> Counter[int]:
+    """Generate and return unrandomized bag."""
+    tile_types = 5
+    tile_count = 100
+    count_each = tile_count // tile_types
+    return Counter({type_: count_each for type_ in range(tile_types)})
 
-    def piece_jumped(self, jumped_piece_pos: Pos) -> None:
-        """Piece has been jumped."""
-        # print(f'piece_jumped {position = }')
 
-    def preform_action(self, action: Action) -> Self:
-        """Return new state after performing action on self."""
-        from_pos, to_pos = action
+def bag_draw_tile(bag: Counter[int]) -> int:
+    """Return drawn tile from bag. Mutates bag."""
+    tile = random.choice(tuple(bag.elements()))
+    bag[tile] -= 1
+    return tile
 
-        pieces_copy = dict(self.pieces.items())
 
-        # Remove piece from it's start position
-        piece_type = pieces_copy.pop(from_pos)
+def select_color(holder: Counter[int], color: int) -> int:
+    """Pop color tiles from bag. Returns count. Mutates holder.
 
-        # See if it's a jump
-        if to_pos not in self.get_moves(from_pos):
-            # Jumps are more complex to calculate and we need
-            # to know what pieces got jumped over
-            cur_x, cur_y = from_pos
-            for jumped_pos in self.get_jumps(from_pos)[to_pos]:
-                from_pos = (cur_x, cur_y)
+    Raises KeyError if color not in holder.
+    """
+    return holder.pop(color)
 
-                # Remove jumped position from pieces in play
-                if jumped_pos in pieces_copy:
-                    pieces_copy.pop(jumped_pos)
-                self.piece_jumped(jumped_pos)
-                # See if piece kinged
-                jumped_x, jumped_y = jumped_pos
-                # Rightshift 1 is more efficiant way to multiply by 2
-                cur_x += (jumped_x - cur_x) << 1
-                cur_y += (jumped_y - cur_y) << 1
 
-                self.piece_moved(from_pos, (cur_x, cur_y))
+class PatternLine(NamedTuple):
+    """Player pattern line row."""
 
-                # Now that we know the current position, see if kinged
-                if self.does_piece_king(piece_type, (cur_x, cur_y)):
-                    piece_type += 2
-                    self.piece_kinged((cur_x, cur_y), piece_type)
-        else:
-            self.piece_moved(from_pos, to_pos)
-
-        # See if it kings and king it if so
-        if self.does_piece_king(piece_type, to_pos):
-            piece_type += 2
-            self.piece_kinged(to_pos, piece_type)
-
-        # Move piece to it's end position
-        pieces_copy[to_pos] = piece_type
-
-        # Swap turn
-        return self.__class__(
-            self.size,
-            pieces_copy,
-            not self.turn,
-        )
-
-    def get_tile_name(self, x: int, y: int) -> str:
-        """Return name of a given tile."""
-        return chr(65 + x) + str(self.size[1] - y)
-
-    @staticmethod
-    def action_from_points(start: Pos, end: Pos) -> Action:
-        """Return action from given start and end coordinates."""
-        # return Action(self.get_tile_name(*start), self.get_tile_name(*end))
-        return Action(start, end)
-
-    def get_turn(self) -> int:
-        """Return whose turn it is. 0 = red, 1 = black."""
-        return int(self.turn)
-
-    def valid_location(self, position: Pos) -> bool:
-        """Return if position is valid."""
-        x, y = position
-        w, h = self.size
-        return x >= 0 and y >= 0 and x < w and y < h
-
-    def does_piece_king(self, piece_type: int, position: Pos) -> bool:
-        """Return if piece needs to be kinged given it's type and position."""
-        _, y = position
-        _, h = self.size
-        return (piece_type == 0 and y == 0) or (piece_type == 1 and y == h - 1)
-
-    @staticmethod
-    def get_enemy(self_type: int) -> int:
-        """Return enemy pawn piece type."""
-        # If we are kinged, get a pawn version of ourselves.
-        # Take that plus one mod 2 to get the pawn of the enemy
-        return (self_type + 1) % 2
-
-    @staticmethod
-    def get_piece_types(self_type: int) -> tuple[int, int]:
-        """Return piece types of given piece type."""
-        # If we are kinged, get a pawn version of ourselves.
-        self_pawn = self_type % 2
-        return (self_pawn, self_pawn + 2)
-
-    def get_jumps(
-        self,
-        position: Pos,
-        piece_type: int | None = None,
-        _pieces: dict[Pos, int] | None = None,
-        _recursion: int = 0,
-    ) -> dict[Pos, list[Pos]]:
-        """Return valid jumps a piece can make.
-
-        position is a xy coordinate tuple pointing to a board position
-            that may or may not have a piece on it.
-        piece_type is the piece type at position. If not
-            given, position must point to a tile with a piece on it
-
-        Returns dictionary that maps end positions to
-        jumped pieces to get there
-        """
-        if piece_type is None:
-            piece_type = self.pieces[position]
-        if _pieces is None:
-            _pieces = self.pieces
-        _pieces = copy.deepcopy(_pieces)
-
-        enemy_pieces = self.get_piece_types(self.get_enemy(piece_type))
-
-        # Get the side coordinates of the tile and make them tuples so
-        # the scan later works properly.
-        sides = get_sides(position)
-        # Make a dictionary to find what direction a tile is in if you
-        # give it the tile.
-        # end position : jumped pieces
-
-        # Make a dictionary for the valid jumps and the pieces they jump
-        valid: dict[Pos, list[Pos]] = {}
-
-        valid_sides: tuple[tuple[int, Pos], ...]
-        if PAWN_JUMP_FORWARD_ONLY:
-            valid_sides = pawn_modify(
-                tuple(enumerate(sides)),
-                piece_type,
-            )
-        else:
-            valid_sides = tuple(enumerate(sides))
-
-        # For each side tile in the jumpable tiles for this type of piece,
-        for direction, side in valid_sides:
-            # Make sure side exists
-            if not self.valid_location(side):
-                continue
-            side_piece = _pieces.get(side)
-            # Side piece must be one of our enemy's pieces
-            if side_piece not in enemy_pieces:
-                continue
-            # Get the direction from the dictionary we made earlier
-            # Get the coordinates of the tile on the side of the main tile's
-            # side in the same direction as the main tile's side
-            side_side = get_sides(side)[direction]
-            # Make sure side exists
-            if not self.valid_location(side_side):
-                continue
-            side_side_piece = _pieces.get(side_side)
-            # If the side is open,
-            if side_side_piece is None:
-                # Add it the valid jumps dictionary and add the tile
-                # to the list of end tiles.
-                valid[side_side] = [side]
-
-                # Remove jumped piece from future calculations
-                _pieces.pop(side)
-
-        # For each end point tile in the list of end point tiles,
-        for end_tile in tuple(valid):
-            # Get the dictionary from the jumps you could make
-            # from that end tile
-            w, h = self.size
-            if _recursion + 1 > math.ceil((w**2 + h**2) ** 0.25):
-                break
-            # If the piece has made it to the opposite side,
-            piece_type_copy = piece_type
-            if self.does_piece_king(piece_type_copy, end_tile):
-                # King that piece
-                piece_type_copy += 2
-                _recursion = -1
-            add_valid = self.get_jumps(
-                end_tile,
-                piece_type_copy,
-                _pieces=_pieces,
-                _recursion=_recursion + 1,
-            )
-            # For each key in the new dictionary of valid tile's keys,
-            for end_pos, jumped_pieces in add_valid.items():
-                # If the key is not already existent in the list of
-                # valid destinations,
-                if end_pos not in valid:
-                    # Add that destination to the dictionary and every
-                    # tile you have to jump to get there.
-                    no_duplicates = [
-                        p for p in jumped_pieces if p not in valid[end_tile]
-                    ]
-                    valid[end_pos] = valid[end_tile] + no_duplicates
-
-        return valid
-
-    def get_moves(self, position: Pos) -> tuple[Pos, ...]:
-        """Return valid moves piece at position can make, not including jumps."""
-        piece_type = self.pieces[position]
-        # Get the side xy choords of the tile's xy pos,
-        # then modify results for pawns
-        moves = pawn_modify(get_sides(position), piece_type)
-        return tuple(
-            m
-            for m in filter(self.valid_location, moves)
-            if m not in self.pieces
-        )
+    color: Tile
+    count_: int
 
     @classmethod
-    def wrap_actions(
-        cls,
-        position: Pos,
-        calculate_ends: Callable[[Pos], Iterable[Pos]],
-    ) -> Generator[Action, None, None]:
-        """Yield end calculation function results as Actions."""
-        for end in calculate_ends(position):
-            yield cls.action_from_points(position, end)
+    def blank(cls) -> Self:
+        """Return new blank pattern line."""
+        return cls(
+            color=Tile.blank,
+            count_=0,
+        )
 
-    def get_actions(self, position: Pos) -> Generator[Action, None, None]:
-        """Yield all moves and jumps the piece at position can make."""
-        ends = set(self.get_jumps(position))
-        if not (ends and MANDATORY_CAPTURE):
-            ends.update(self.get_moves(position))
-        for end in ends:
-            yield self.action_from_points(position, end)
+    def place_tiles(self, color: Tile, place_count: int) -> Self:
+        """Return new pattern line after placing <count> tiles of given color."""
+        assert self.color == Tile.blank or self.color == color
+        assert place_count > 0
+        return self._replace(
+            color=color,
+            count_=self.count_ + place_count,
+        )
 
-    def get_all_actions(self, player: int) -> Generator[Action, None, None]:
-        """Yield all actions for given player."""
-        player_pieces = {player, player + 2}
-        if not MANDATORY_CAPTURE:
-            for position, piece_type in self.pieces.items():
-                if piece_type not in player_pieces:
-                    continue
-                yield from self.get_actions(position)
-            return
-        jumps_available = False
-        for position, piece_type in self.pieces.items():
-            if piece_type not in player_pieces:
+
+def remove_counter_zeros(counter: Counter[Any]) -> None:
+    """Remove any zero counts from given counter. Mutates counter."""
+    for key, count in tuple(counter.items()):
+        if count == 0:
+            del counter[key]
+
+
+def floor_fill_tile_excess(
+    floor: Counter[int],
+    tile: int,
+    count: int,
+) -> Counter[int]:
+    """Fill floor with count of tile, return excess for box lid. Mutates floor."""
+    excess: Counter[int] = Counter()
+    while floor.total() < FLOOR_LINE_COUNT and count > 0:
+        floor[tile] += 1
+        count -= 1
+    # If overflow and it's number one tile
+    if count and tile == Tile.one:
+        # Move non-one tiles from floor to excess
+        non_one = floor.total() - floor[Tile.one]
+        assert non_one > 0
+        for _ in range(min(non_one, count)):
+            non_one_tiles = set(floor.elements()) - {Tile.one}
+            non_one_tile = sorted(non_one_tiles).pop()
+            # Move non-one tile from floor to box lid
+            floor[non_one_tile] -= 1
+            excess[non_one_tile] += 1
+            # Add one tile to floor
+            floor[tile] += 1
+            count -= 1
+        remove_counter_zeros(floor)
+    assert count >= 0
+    if count:
+        # Add overflow tiles to box lid.
+        excess[tile] += count
+
+    return excess
+
+
+class PlayerData(NamedTuple):
+    """Player data."""
+
+    score: int
+    wall: NDArray[int8]
+    lines: tuple[PatternLine, ...]
+    floor: Counter[int]
+
+    @classmethod
+    def new(cls, varient_play: bool = False) -> Self:
+        """Return new player data instance."""
+        wall = array(
+            [Tile.blank for _ in range(5 * 5)],
+            int8,
+        ).reshape((5, 5))
+
+        if not varient_play:
+            for y in range(5):
+                for x in range(5):
+                    color = -((5 - y + x) % len(REAL_TILES) + 1)
+                    wall[y, x] = color
+
+        return cls(
+            score=0,
+            wall=wall,
+            lines=(PatternLine.blank(),) * 5,
+            floor=Counter(),
+        )
+
+    def copy(self) -> Self:
+        """Return copy of self."""
+        return self._replace(
+            floor=self.floor.copy(),
+        )
+
+    def line_id_valid(self, line_id: int) -> bool:
+        """Return if given line id is valid."""
+        return line_id >= 0 and line_id < len(self.lines)
+
+    @staticmethod
+    def get_line_max_count(line_id: int) -> int:
+        """Return max count allowed in given line."""
+        # Line id is keeping track of max count
+        return line_id + 1
+
+    def get_line_max_placable_count(self, line_id: int) -> int:
+        """Return max placable count for given line."""
+        assert self.line_id_valid(line_id)
+        max_count = self.get_line_max_count(line_id)
+        return max_count - self.lines[line_id].count_
+
+    def get_row_colors_used(self, line_id: int) -> set[Tile]:
+        """Return set of tile colors used in wall for given row."""
+        row = self.wall[line_id, :]
+        return {Tile(int(x)) for x in row[row >= 0]}
+
+    def get_row_unused_colors(self, line_id: int) -> set[Tile]:
+        """Return set of tiles colors not currently used in wall for given row."""
+        return REAL_TILES - self.get_row_colors_used(line_id)
+
+    def yield_possible_placement_rows(
+        self,
+        color: int,
+    ) -> Generator[tuple[int, int], None, None]:
+        """Yield row line ids and number of placable for rows able to place color at."""
+        for line_id, line in enumerate(self.lines):
+            # Color must match
+            if line.color != Tile.blank and int(line.color) != color:
+                # print("color mismatch")
                 continue
-            if not jumps_available:
-                for jump in self.wrap_actions(position, self.get_jumps):
-                    yield jump
-                    jumps_available = True
-            else:
-                yield from self.wrap_actions(position, self.get_jumps)
-        if not jumps_available:
-            for position, piece_type in self.pieces.items():
-                if piece_type not in player_pieces:
-                    continue
-                yield from self.wrap_actions(position, self.get_moves)
+            placable = self.get_line_max_placable_count(line_id)
+            # Must have placable spots
+            if not placable:
+                continue
+            # Must not already use color
+            if color in self.get_row_colors_used(line_id):
+                continue
+            yield (line_id, placable)
 
-    def check_for_win(self) -> int | None:
-        """Return player number if they won else None."""
-        # For each of the two players,
-        for player in range(2):
-            # For each tile in the playable tiles,
-            has_move = False
-            for _ in self.get_all_actions(player):
-                has_move = True
-                # Player has at least one move, no need to continue
-                break
-            if not has_move and self.turn == bool(player):
-                # Continued without break, so player either has no moves
-                # or no possible moves, so their opponent wins
-                return (player + 1) % 2
-        return None
-
-    def can_player_select_piece(self, player: int, tile_pos: Pos) -> bool:
-        """Return True if player can select piece on given tile position."""
-        piece_at_pos = self.pieces.get(tile_pos)
-        if piece_at_pos is None:
+    def can_select_line(
+        self,
+        line_id: int,
+        color: int,
+        place_count: int,
+    ) -> bool:
+        """Return if can select given line with given color and place count."""
+        if not self.line_id_valid(line_id):
+            # print("invalid line id")
             return False
-        return (piece_at_pos % 2) == player
+        line = self.lines[line_id]
+        # Don't allow placing zero
+        if place_count <= 0:
+            # print("place count too smol")
+            return False
+        # Color must match
+        if line.color != Tile.blank and int(line.color) != color:
+            # print("color mismatch")
+            return False
+        # Must have space to place
+        if place_count > self.get_line_max_placable_count(line_id):
+            return False
+        # Can't place in row that uses that color already
+        return Tile(color) not in self.get_row_colors_used(line_id)
 
-    def get_pieces(self) -> tuple[tuple[Pos, int], ...]:
-        """Return all pieces."""
-        return tuple((pos, type_) for pos, type_ in self.pieces.items())
+    @staticmethod
+    def replace_pattern_line(
+        lines: tuple[PatternLine, ...],
+        line_id: int,
+        new: PatternLine,
+    ) -> tuple[PatternLine, ...]:
+        """Return new pattern line data after replacing one of them."""
+        left = lines[:line_id]
+        right = lines[line_id + 1 :]
+        return (*left, new, *right)
+
+    def place_pattern_line_tiles(
+        self,
+        line_id: int,
+        color: int,
+        place_count: int,
+    ) -> Self:
+        """Return new player data after placing tiles in a pattern line."""
+        assert self.can_select_line(line_id, color, place_count)
+        line = self.lines[line_id]
+        return self._replace(
+            lines=self.replace_pattern_line(
+                self.lines,
+                line_id,
+                line.place_tiles(Tile(color), place_count),
+            ),
+        )
+
+    def is_floor_line_full(self) -> bool:
+        """Return if floor line is full."""
+        return self.floor.total() >= FLOOR_LINE_COUNT
+
+    def place_floor_line_tiles(
+        self,
+        color: int,
+        place_count: int,
+    ) -> tuple[Self, Counter[int]]:
+        """Return new player and excess tiles for box lid."""
+        floor = self.floor.copy()
+        for_box_lid = floor_fill_tile_excess(floor, color, place_count)
+        assert all(x > 0 for x in for_box_lid.values()), for_box_lid
+        return (
+            self._replace(floor=floor),
+            for_box_lid,
+        )
+
+    def get_horizontal_linked_wall_count(
+        self,
+        x: int,
+        y: int,
+        wall: NDArray[int8],
+    ) -> int:
+        """Return horizontally-linked tile count."""
+        count = 0
+        for range_ in (range(x - 1, -1, -1), range(x + 1, 5)):
+            for cx in range_:
+                if wall[y, cx] < 0:
+                    break
+                count += 1
+        return count
+
+    def get_vertically_linked_wall_count(
+        self,
+        x: int,
+        y: int,
+        wall: NDArray[int8],
+    ) -> int:
+        """Return vertically-linked tile count."""
+        count = 0
+        for range_ in (range(y - 1, -1, -1), range(y + 1, 5)):
+            for cy in range_:
+                if wall[cy, x] < 0:
+                    break
+                count += 1
+        return count
+
+    def get_score_from_wall_placement(
+        self,
+        color: int,
+        x: int,
+        y: int,
+        wall: NDArray[int8],
+    ) -> int:
+        """Return score increment value from placing tile at given coordinates."""
+        # Should be blank or fake at position
+        assert wall[y, x] < 0
+        count = 1
+        count += self.get_horizontal_linked_wall_count(x, y, wall)
+        count += self.get_vertically_linked_wall_count(x, y, wall)
+        return count
+
+    def perform_floor_line_scoring(self) -> int:
+        """Return score increment value from floor line."""
+        total_count = self.floor.total()
+        assert total_count <= FLOOR_LINE_COUNT
+        score = 0
+        for idx in range(total_count):
+            score += FLOOR_LINE_DATA[idx]
+        return score
+
+    def perform_auto_wall_tiling(self) -> tuple[Self, Counter[int], bool]:
+        """Return new player data and tiles for box lid after performing automatic wall tiling."""
+        for_box_lid: Counter[int] = Counter()
+
+        score = self.score
+        new_lines = self.lines
+        new_wall = self.wall.copy()
+        for line_id, line in enumerate(self.lines):
+            if line.count_ != self.get_line_max_count(line_id):
+                continue
+            right = max(0, line.count_ - 1)
+            if right:
+                for_box_lid[line.color] += right
+            x = tuple(map(int, new_wall[line_id, :])).index(-line.color - 1)
+            score += self.get_score_from_wall_placement(
+                line.color,
+                x,
+                line_id,
+                new_wall,
+            )
+            new_wall[line_id, x] = line.color
+            new_lines = self.replace_pattern_line(
+                new_lines,
+                line_id,
+                PatternLine.blank(),
+            )
+
+        score += self.perform_floor_line_scoring()
+        if score < 0:
+            score = 0
+
+        # Get one tile from floor line
+        floor = self.floor.copy()
+        has_one = False
+        if floor[Tile.one]:
+            floor[Tile.one] -= 1
+            remove_counter_zeros(floor)
+            has_one = True
+        for_box_lid.update(floor)
+
+        return (
+            self._replace(
+                lines=new_lines,
+                wall=new_wall,
+                score=score,
+                floor=Counter(),
+            ),
+            for_box_lid,
+            has_one,
+        )
+
+    def has_horizontal_wall_line(self) -> bool:
+        """Return if full horizontal line is filled anywhere."""
+        return any(all(self.wall[y, :] >= 0) for y in range(5))
+
+    def get_filled_horizontal_line_count(self) -> int:
+        """Return number of filled horizontal lines."""
+        count = 0
+        for y in range(5):
+            if all(self.wall[y, :] >= 0):
+                count += 1
+        return count
+
+    def get_end_of_game_score(self) -> int:
+        """Return end of game score for this player."""
+        score = self.score
+        score += self.get_filled_horizontal_line_count() * 2
+        for x in range(5):
+            if all(self.wall[:, x] >= 0):
+                score += 7
+        counts = Counter(int(x) for x in self.wall[self.wall >= 0])
+        for count in counts.values():
+            if count == 5:
+                score += 10
+        return score
+
+    def perform_end_of_game_scoring(self) -> Self:
+        """Return new player data after performing end of game scoring."""
+        return self._replace(score=self.get_end_of_game_score())
 
 
-def generate_pieces(
-    board_width: int,
-    board_height: int,
-    colors: int = 2,
-) -> dict[Pos, int]:
-    """Generate data about each piece."""
-    pieces: dict[Pos, int] = {}
-    # Get where pieces should be placed
-    z_to_1 = round(board_height / 3)  # White
-    z_to_2 = (board_height - (z_to_1 * 2)) + z_to_1  # Black
-    # For each xy position in the area of where tiles should be,
-    for y in range(board_height):
-        # Reset the x pos to 0
-        for x in range(board_width):
-            # Get the color of that spot by adding x and y mod the number of different colors
-            color = (x + y + 1) % colors
-            # If a piece should be placed on that tile and the tile is not Red,
-            if (not color) and ((y <= z_to_1 - 1) or (y >= z_to_2)):
-                # Set the piece to White Pawn or Black Pawn depending on the current y pos
-                piece_type = int(y <= z_to_1)
-                pieces[x, y] = piece_type
-    return pieces
+def factory_displays_deepcopy(
+    factory_displays: dict[int, Counter[int]],
+) -> dict[int, Counter[int]]:
+    """Return deepcopy of factory displays."""
+    return {k: v.copy() for k, v in factory_displays.items()}
+
+
+def player_data_deepcopy(
+    player_data: dict[int, PlayerData],
+) -> dict[int, PlayerData]:
+    """Return deepcopy of player data."""
+    return {k: v.copy() for k, v in player_data.items()}
+
+
+class SelectableSource(IntEnum):
+    """Selectable tile source."""
+
+    table_center = 0
+    factory = auto()
+
+
+class SelectableSourceTiles(NamedTuple):
+    """Selectable source tiles data."""
+
+    source: SelectableSource
+    tiles: Tile
+    # Factory ids
+    source_id: int | None = None
+
+
+class SelectableDestination(IntEnum):
+    """Selectable tile destination."""
+
+    floor_line = 0
+    pattern_line = auto()
+
+
+class SelectableDestinationTiles(NamedTuple):
+    """Selectable destination tiles data."""
+
+    destination: SelectableDestination
+    place_count: int
+    # Pattern line ids
+    destination_id: int | None = None
+
+
+class State(NamedTuple):
+    """Represents state of an azul game."""
+
+    varient_play: bool
+    current_phase: Phase
+    bag: Counter[int]
+    box_lid: Counter[int]
+    table_center: Counter[int]
+    factory_displays: dict[int, Counter[int]]
+    cursor_contents: Counter[int]
+    current_turn: int
+    player_data: dict[int, PlayerData]
+
+    @classmethod
+    def new_game(cls, player_count: int, varient_play: bool = False) -> Self:
+        """Return state of a new game."""
+        factory_count = player_count * 2 + 1
+        bag = generate_bag_contents()
+
+        factory_displays: dict[int, Counter[int]] = {}
+        for x in range(factory_count):
+            tiles: Counter[int] = Counter()
+            for _ in range(4):
+                tiles[bag_draw_tile(bag)] += 1
+            factory_displays[x] = tiles
+
+        return cls(
+            varient_play=varient_play,
+            current_phase=Phase.factory_offer,
+            bag=bag,
+            box_lid=Counter(),
+            table_center=Counter({Tile.one, 1}),
+            factory_displays=factory_displays,
+            cursor_contents=Counter(),
+            current_turn=0,
+            player_data={
+                x: PlayerData.new(varient_play) for x in range(player_count)
+            },
+        )
+
+    def is_cursor_empty(self) -> bool:
+        """Return if cursor is empty."""
+        return self.cursor_contents.total() == 0
+
+    def can_cursor_select_factory(self, factory_id: int) -> bool:
+        """Return if cursor can select a specific factory."""
+        assert self.current_phase == Phase.factory_offer
+        if not self.is_cursor_empty():
+            return False
+        factory = self.factory_displays.get(factory_id, None)
+        if factory is None:
+            return False
+        return factory.total() > 0
+
+    def can_cursor_select_factory_color(
+        self,
+        factory_id: int,
+        color: int,
+    ) -> bool:
+        """Return if cursor can select color at factory."""
+        if not self.can_cursor_select_factory(factory_id):
+            return False
+        factory = self.factory_displays[factory_id]
+        return factory[color] > 0
+
+    def cursor_selects_factory(self, factory_id: int, color: int) -> Self:
+        """Return new state after cursor selects factory."""
+        assert self.can_cursor_select_factory_color(factory_id, color)
+        # Only mutate copies
+        factory_displays = factory_displays_deepcopy(self.factory_displays)
+        table_center = self.table_center.copy()
+        cursor_contents = self.cursor_contents.copy()
+
+        factory = factory_displays[factory_id]
+        count = select_color(factory, color)
+        # Add to cursor
+        cursor_contents[color] += count
+        # Add all non-matching colored tiles to center of table
+        table_center.update(factory)
+        factory.clear()
+
+        return self._replace(
+            table_center=table_center,
+            factory_displays=factory_displays,
+            cursor_contents=cursor_contents,
+        )
+
+    def can_cursor_select_center(self, color: int) -> bool:
+        """Return if cursor can select color from table center."""
+        assert self.current_phase == Phase.factory_offer
+        if not self.is_cursor_empty():
+            return False
+        return color != Tile.one and self.table_center[color] > 0
+
+    def cursor_selects_table_center(self, color: int) -> Self:
+        """Return new state after cursor selects from table center."""
+        assert self.can_cursor_select_center(color)
+        table_center = self.table_center.copy()
+        cursor_contents = self.cursor_contents.copy()
+
+        # Get all of color from table center and add to cursor
+        cursor_contents[color] += select_color(table_center, color)
+        # Handle number one tile
+        if table_center[Tile.one]:
+            cursor_contents[Tile.one] += select_color(table_center, Tile.one)
+        remove_counter_zeros(table_center)
+
+        return self._replace(
+            table_center=table_center,
+            cursor_contents=cursor_contents,
+        )
+
+    def yield_table_center_selections(
+        self,
+    ) -> Generator[SelectableSourceTiles, None, None]:
+        """Yield SelectableSourceTiles objects from table center."""
+        for color, count in self.table_center.items():
+            if color == Tile.one or count <= 0:
+                continue
+            yield SelectableSourceTiles(
+                source=SelectableSource.table_center,
+                tiles=Tile(color),
+            )
+
+    def yield_selectable_tiles_factory_offer(
+        self,
+    ) -> Generator[SelectableSourceTiles, None, None]:
+        """Yield SelectableSourceTiles objects from all sources."""
+        yield from self.yield_table_center_selections()
+        for factory_id, factory_display in self.factory_displays.items():
+            for color in factory_display:
+                yield SelectableSourceTiles(
+                    source=SelectableSource.factory,
+                    tiles=Tile(color),
+                    source_id=factory_id,
+                )
+
+    def apply_source_select_action_factory_offer(
+        self,
+        selection: SelectableSourceTiles,
+    ) -> Self:
+        """Return new state after applying selection action."""
+        color = selection.tiles
+        if selection.source == SelectableSource.table_center:
+            return self.cursor_selects_table_center(color)
+        if selection.source == SelectableSource.factory:
+            assert selection.source_id is not None
+            return self.cursor_selects_factory(selection.source_id, color)
+        raise NotImplementedError(selection.source)
+
+    def get_cursor_holding_color(self) -> int:
+        """Return color of tile cursor is holding."""
+        cursor_colors = set(self.cursor_contents.elements())
+        # Do not count number one tile
+        cursor_colors.discard(Tile.one)
+        assert len(cursor_colors) == 1, "Cursor should only exactly one color"
+        return cursor_colors.pop()
+
+    def can_player_select_line(
+        self,
+        line_id: int,
+        color: int,
+        place_count: int,
+    ) -> bool:
+        """Return if player can select line."""
+        player_data = self.player_data[self.current_turn]
+
+        # Cannot place more than we have
+        # Can't be pulling tiles out of thin air now can we?
+        if place_count > self.cursor_contents[color]:
+            return False
+
+        return player_data.can_select_line(line_id, color, place_count)
+
+    def get_player_line_max_placable_count(self, line_id: int) -> int:
+        """Return max placable count for given line."""
+        player_data = self.player_data[self.current_turn]
+
+        return player_data.get_line_max_placable_count(line_id)
+
+    def all_pullable_empty(self) -> bool:
+        """Return if all pullable tile locations are empty, not counting cursor."""
+        if self.table_center.total():
+            return False
+        for factory_display in self.factory_displays.values():
+            if factory_display.total():
+                return False
+        return True
+
+    def _factory_offer_maybe_next_turn(self) -> Self:
+        """Return either current state or new state if player's turn is over."""
+        assert self.current_phase == Phase.factory_offer
+        # If cursor is still holding things, turn is not over.
+        if not self.is_cursor_empty():
+            return self
+        # Turn is over
+        # Increment who's turn it is
+        current_turn = (self.current_turn + 1) % len(self.player_data)
+
+        current_phase: Phase = self.current_phase
+        if self.all_pullable_empty():
+            # Go to wall tiling phase
+            current_phase = Phase.wall_tiling
+
+        new_state = self._replace(
+            current_phase=current_phase,
+            current_turn=current_turn,
+        )
+        if current_phase == Phase.wall_tiling:
+            if self.varient_play:
+                raise NotImplementedError()
+            return new_state.apply_auto_wall_tiling()
+        return new_state
+
+    def player_select_floor_line(self, color: int, place_count: int) -> Self:
+        """Return new state after player adds tiles to floor line."""
+        assert self.current_phase == Phase.factory_offer
+        cursor_contents = self.cursor_contents.copy()
+        assert place_count > 0
+        assert place_count <= cursor_contents[color]
+
+        box_lid = self.box_lid.copy()
+        current_player_data = self.player_data[self.current_turn]
+
+        # Remove from cursor
+        cursor_contents[color] -= place_count
+        # Add to floor line
+        new_player_data, for_box_lid = (
+            current_player_data.place_floor_line_tiles(
+                color,
+                place_count,
+            )
+        )
+        # Add overflow tiles to box lid
+        assert all(x > 0 for x in for_box_lid.values()), for_box_lid
+        box_lid.update(for_box_lid)
+
+        # If has number one tile, add to floor line
+        if cursor_contents[Tile.one]:
+            # Add to floor line
+            new_player_data, for_box_lid = (
+                new_player_data.place_floor_line_tiles(
+                    Tile.one,
+                    cursor_contents.pop(Tile.one),
+                )
+            )
+            # Add overflow tiles to box lid
+            assert all(x > 0 for x in for_box_lid.values()), for_box_lid
+            box_lid.update(for_box_lid)
+
+        remove_counter_zeros(cursor_contents)
+
+        # Update player data
+        player_data = player_data_deepcopy(self.player_data)
+        player_data[self.current_turn] = new_player_data
+
+        return self._replace(
+            box_lid=box_lid,
+            cursor_contents=cursor_contents,
+            player_data=player_data,
+        )._factory_offer_maybe_next_turn()
+
+    def player_selects_pattern_line(
+        self,
+        line_id: int,
+        place_count: int,
+    ) -> Self:
+        """Return new state after player selects line."""
+        assert self.current_phase == Phase.factory_offer
+        assert not self.is_cursor_empty()
+        color = self.get_cursor_holding_color()
+
+        assert self.can_player_select_line(line_id, color, place_count)
+        current_player_data = self.player_data[self.current_turn]
+
+        new_player_data = current_player_data.place_pattern_line_tiles(
+            line_id,
+            color,
+            place_count,
+        )
+
+        cursor_contents = self.cursor_contents.copy()
+        cursor_contents[color] -= place_count
+
+        # Might need to change box lid
+        box_lid = self.box_lid
+
+        # If has number one tile, add to floor line
+        if cursor_contents[Tile.one]:
+            # Will be mutating box lid then
+            box_lid = self.box_lid.copy()
+            # Add to floor line
+            new_player_data, for_box_lid = (
+                new_player_data.place_floor_line_tiles(
+                    Tile.one,
+                    cursor_contents.pop(Tile.one),
+                )
+            )
+            # Add overflow tiles to box lid
+            assert all(x > 0 for x in for_box_lid.values()), for_box_lid
+            box_lid.update(for_box_lid)
+
+        remove_counter_zeros(cursor_contents)
+
+        player_data = player_data_deepcopy(self.player_data)
+        player_data[self.current_turn] = new_player_data
+
+        return self._replace(
+            box_lid=box_lid,
+            player_data=player_data,
+            cursor_contents=cursor_contents,
+        )._factory_offer_maybe_next_turn()
+
+    def yield_selectable_tile_destinations_factory_offer(
+        self,
+    ) -> Generator[SelectableDestinationTiles, None, None]:
+        """Yield selectable tile destinations for factory offer phase."""
+        assert self.current_phase == Phase.factory_offer
+        assert not self.is_cursor_empty()
+
+        current_player_data = self.player_data[self.current_turn]
+
+        color = self.get_cursor_holding_color()
+        count = self.cursor_contents[color] + 1
+
+        for (
+            line_id,
+            placable,
+        ) in current_player_data.yield_possible_placement_rows(color):
+            for place_count in range(1, min(count, placable + 1)):
+                yield SelectableDestinationTiles(
+                    destination=SelectableDestination.pattern_line,
+                    place_count=place_count,
+                    destination_id=line_id,
+                )
+        # Can always place in floor line, even if full,
+        # because of box lid overflow
+        for place_count in range(1, count):
+            yield SelectableDestinationTiles(
+                destination=SelectableDestination.floor_line,
+                place_count=place_count,
+            )
+
+    def apply_destination_select_action_factory_offer(
+        self,
+        selection: SelectableDestinationTiles,
+    ) -> Self:
+        """Return new state after applying destination selection action."""
+        assert self.current_phase == Phase.factory_offer
+        assert not self.is_cursor_empty()
+
+        if selection.destination == SelectableDestination.floor_line:
+            color = self.get_cursor_holding_color()
+            return self.player_select_floor_line(
+                color,
+                selection.place_count,
+            )
+        if selection.destination == SelectableDestination.pattern_line:
+            assert selection.destination_id is not None
+            return self.player_selects_pattern_line(
+                selection.destination_id,
+                selection.place_count,
+            )
+        raise NotImplementedError(selection.destination)
+
+    def apply_auto_wall_tiling(self) -> Self:
+        """Return new state after performing automatic wall tiling."""
+        assert self.current_phase == Phase.wall_tiling
+        assert not self.varient_play
+        box_lid = self.box_lid.copy()
+        new_players = player_data_deepcopy(self.player_data)
+
+        is_end = False
+        current_turn = self.current_turn
+        for player_id, player in self.player_data.items():
+            new_player, for_box_lid, has_one = (
+                player.perform_auto_wall_tiling()
+            )
+            new_players[player_id] = new_player
+            box_lid.update(for_box_lid)
+            if not is_end:
+                is_end = new_player.has_horizontal_wall_line()
+            if has_one:
+                current_turn = player_id
+
+        bag = self.bag.copy()
+        factory_displays: dict[int, Counter[int]] = {}
+
+        if is_end:
+            for player_id in self.player_data:
+                new_players[player_id] = new_players[
+                    player_id
+                ].perform_end_of_game_scoring()
+        else:
+            out_of_tiles = False
+            for factory_id in self.factory_displays:
+                tiles: Counter[int] = Counter()
+                if out_of_tiles:
+                    factory_displays[factory_id] = tiles
+                    continue
+                for _ in range(4):
+                    if bag.total() > 0:
+                        tiles[bag_draw_tile(bag)] += 1
+                    else:
+                        bag = box_lid
+                        box_lid = Counter()
+                        if bag.total() <= 0:
+                            # "In the rare case that you run out of
+                            # tiles again while there are one left in
+                            # the lid, start the new round as usual even
+                            # though not all Factory displays are
+                            # properly filled."
+                            out_of_tiles = True
+                            break
+                factory_displays[factory_id] = tiles
+
+        return self._replace(
+            current_phase=Phase.end if is_end else Phase.factory_offer,
+            current_turn=current_turn,
+            player_data=new_players,
+            bag=bag,
+            box_lid=box_lid,
+            factory_displays=factory_displays,
+            table_center=Counter({Tile.one: 1}),
+        )
+
+    def get_win_order(self) -> list[tuple[int, int]]:
+        """Return player ranking with (id, compare_score) entries."""
+        counts: dict[int, int] = {}
+        # get_filled_horizontal_line_count can return at most 5
+        for player_id, player in self.player_data.items():
+            counts[player_id] = (
+                player.score * 6 + player.get_filled_horizontal_line_count()
+            )
+        return sorted(counts.items(), key=lambda x: x[1], reverse=True)
+
+    def yield_all_factory_offer_destinations(
+        self,
+    ) -> Generator[tuple[SelectableDestinationTiles, ...]]:
+        """Yield all factory offer destinations."""
+        if self.is_cursor_empty():
+            yield ()
+        else:
+            for (
+                destination
+            ) in self.yield_selectable_tile_destinations_factory_offer():
+                new = self.apply_destination_select_action_factory_offer(
+                    destination,
+                )
+                did_not_iter = True
+                for action in new.yield_all_factory_offer_destinations():
+                    did_not_iter = False
+                    yield (destination, *action)
+                if did_not_iter:
+                    yield (destination,)
+
+    def yield_actions(
+        self,
+    ) -> Generator[
+        tuple[SelectableDestinationTiles, ...]
+        | tuple[SelectableSourceTiles, tuple[SelectableDestinationTiles, ...]],
+        None,
+        None,
+    ]:
+        """Yield all possible actions able to be performed on this state."""
+        if self.current_phase == Phase.factory_offer:
+            if not self.is_cursor_empty():
+                yield from self.yield_all_factory_offer_destinations()
+            else:
+                for selection in self.yield_selectable_tiles_factory_offer():
+                    new = self.apply_source_select_action_factory_offer(
+                        selection,
+                    )
+                    for (
+                        action_chain
+                    ) in new.yield_all_factory_offer_destinations():
+                        yield (selection, action_chain)
+        else:
+            raise NotImplementedError()
+
+    def preform_action(
+        self,
+        action: (
+            tuple[SelectableDestinationTiles, ...]
+            | tuple[
+                SelectableSourceTiles,
+                tuple[SelectableDestinationTiles, ...],
+            ]
+        ),
+    ) -> Self:
+        """Return new state after applying an action."""
+        if self.current_phase == Phase.factory_offer:
+            if isinstance(action[0], SelectableDestinationTiles):
+                new = self
+                for destination in action:
+                    assert isinstance(destination, SelectableDestinationTiles)
+                    new = new.apply_destination_select_action_factory_offer(
+                        destination,
+                    )
+                return new
+            selection, destinations = action
+            assert isinstance(selection, SelectableSourceTiles)
+            new = self.apply_source_select_action_factory_offer(
+                selection,
+            )
+            for destination_ in destinations:
+                assert isinstance(destination_, SelectableDestinationTiles)
+                new = new.apply_destination_select_action_factory_offer(
+                    destination_,
+                )
+            return new
+        raise NotImplementedError()
+
+
+def run() -> None:
+    """Run program."""
+    from market_api import pretty_print_response as pprint
+
+    random.seed(0)
+    state = State.new_game(2)
+    ticks = 0
+    try:
+        ##        last_turn = -1
+        while state.current_phase == Phase.factory_offer:
+            ##            assert last_turn != state.current_turn
+            ##            last_turn = state.current_turn
+            actions = tuple(state.yield_actions())
+            print(f"{len(actions) = }")
+            action = random.choice(actions)
+            ##            pprint(action)
+            state = state.preform_action(action)
+
+            ticks += 1
+        print(f"{state.get_win_order() = }")
+    except BaseException:
+        print(f"{ticks = }")
+        ##        print(f'{state = }')
+        pprint(state)
+        raise
+        ##            print(f'{destination = }')
+    ##        pprint(state)
+    pprint(state)
+
+
+if __name__ == "__main__":
+    run()

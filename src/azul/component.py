@@ -145,6 +145,25 @@ class Component:
         """
         return self.manager.has_handler(event_name)
 
+    def unregister_handler(
+        self,
+        event_name: str,
+        handler_coro: Callable[[Event[Any]], Awaitable[None]],
+    ) -> None:
+        """Unregister a handler function for event_name.
+
+        Raises ValueError if no component with given name is registered.
+        """
+        return self.manager.unregister_handler(
+            event_name,
+            handler_coro,
+            self.name,
+        )
+
+    def unregister_handler_type(self, event_name: str) -> bool:
+        """Unregister all event handlers for a given event type."""
+        return self.manager.unregister_handler_type(event_name)
+
     async def raise_event(self, event: Event[Any]) -> None:
         """Raise event for bound manager.
 
@@ -246,6 +265,43 @@ class ComponentManager(Component):
         if event_name not in self.__event_handlers:
             self.__event_handlers[event_name] = set()
         self.__event_handlers[event_name].add((handler_coro, component_name))
+
+    def unregister_handler(
+        self,
+        event_name: str,
+        handler_coro: Callable[[Event[Any]], Awaitable[None]],
+        component_name: object,
+    ) -> None:
+        """Unregister a handler function for event_name.
+
+        Raises ValueError if no component with given name is registered.
+        """
+        if (
+            component_name != self.name
+            and component_name not in self.__components
+        ):
+            raise ValueError(
+                f"Component named {component_name!r} is not registered!",
+            )
+
+        if event_name not in self.__event_handlers:
+            return
+
+        handler_tuple = (handler_coro, component_name)
+        if handler_tuple in self.__event_handlers[event_name]:
+            self.__event_handlers[event_name].remove(handler_tuple)
+
+        # If the event_name no longer has any handlers, remove it
+        if not self.__event_handlers[event_name]:
+            del self.__event_handlers[event_name]
+
+    def unregister_handler_type(
+        self,
+        event_name: str,
+    ) -> None:
+        """Unregister all event handlers for a given event type."""
+        if event_name in self.__event_handlers:
+            del self.__event_handlers[event_name]
 
     def has_handler(self, event_name: str) -> bool:
         """Return if there are event handlers registered for a given event."""

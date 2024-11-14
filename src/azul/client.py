@@ -202,18 +202,7 @@ class GameClient(EncryptedNetworkEventComponent):
         self.register_handlers(
             {
                 "server->callback_ping": self.read_callback_ping,
-                "gameboard_piece_clicked": self.write_piece_click,
-                "gameboard_tile_clicked": self.write_tile_click,
-                "server->create_piece": self.read_create_piece,
-                "server->select_piece": self.read_select_piece,
-                "server->create_tile": self.read_create_tile,
-                "server->delete_tile": self.read_delete_tile,
-                "server->delete_piece_animation": self.read_delete_piece_animation,
-                "server->update_piece_animation": self.read_update_piece_animation,
-                "server->move_piece_animation": self.read_move_piece_animation,
-                "server->animation_state": self.read_animation_state,
                 "server->game_over": self.read_game_over,
-                "server->action_complete": self.read_action_complete,
                 "server->initial_config": self.read_initial_config,
                 "server->playing_as": self.read_playing_as,
                 "server->encryption_request": self.read_encryption_request,
@@ -348,118 +337,6 @@ class GameClient(EncryptedNetworkEventComponent):
             Event("callback_ping", difference),
         )
 
-    async def read_create_piece(self, event: Event[bytearray]) -> None:
-        """Read create_piece event from server."""
-        buffer = Buffer(event.data)
-
-        piece_pos = read_position(buffer)
-        piece_type: u8 = buffer.read_value(StructFormat.UBYTE)
-
-        await self.raise_event(
-            Event("gameboard_create_piece", (piece_pos, piece_type)),
-        )
-
-    async def read_select_piece(self, event: Event[bytearray]) -> None:
-        """Read create_piece event from server."""
-        buffer = Buffer(event.data)
-
-        piece_pos = read_position(buffer)
-        outline_value = buffer.read_value(StructFormat.BOOL)
-
-        await self.raise_event(
-            Event("gameboard_select_piece", (piece_pos, outline_value)),
-        )
-
-    async def read_create_tile(self, event: Event[bytearray]) -> None:
-        """Read create_tile event from server."""
-        buffer = Buffer(event.data)
-
-        tile_pos = read_position(buffer)
-
-        await self.raise_event(Event("gameboard_create_tile", tile_pos))
-
-    async def read_delete_tile(self, event: Event[bytearray]) -> None:
-        """Read delete_tile event from server."""
-        buffer = Buffer(event.data)
-
-        tile_pos = read_position(buffer)
-
-        await self.raise_event(Event("gameboard_delete_tile", tile_pos))
-
-    async def write_piece_click(self, event: Event[tuple[Pos, int]]) -> None:
-        """Write piece click event to server."""
-        if self.not_connected:
-            return
-        piece_position, _piece_type = event.data
-
-        buffer = Buffer()
-        write_position(buffer, piece_position)
-        # buffer.write_value(StructFormat.UINT, piece_type)
-
-        await self.write_event(Event("select_piece->server", buffer))
-
-    async def write_tile_click(self, event: Event[Pos]) -> None:
-        """Write tile click event to server."""
-        if self.not_connected:
-            return
-        tile_position = event.data
-
-        buffer = Buffer()
-        write_position(buffer, tile_position)
-
-        await self.write_event(Event("select_tile->server", buffer))
-
-    async def read_delete_piece_animation(
-        self,
-        event: Event[bytearray],
-    ) -> None:
-        """Read delete_piece_animation event from server."""
-        buffer = Buffer(event.data)
-
-        tile_pos = read_position(buffer)
-
-        await self.raise_event(
-            Event("gameboard_delete_piece_animation", tile_pos),
-        )
-
-    async def read_update_piece_animation(
-        self,
-        event: Event[bytearray],
-    ) -> None:
-        """Read update_piece_animation event from server."""
-        buffer = Buffer(event.data)
-
-        piece_pos = read_position(buffer)
-        piece_type: u8 = buffer.read_value(StructFormat.UBYTE)
-
-        await self.raise_event(
-            Event("gameboard_update_piece_animation", (piece_pos, piece_type)),
-        )
-
-    async def read_move_piece_animation(self, event: Event[bytearray]) -> None:
-        """Read move_piece_animation event from server."""
-        buffer = Buffer(event.data)
-
-        piece_current_pos = read_position(buffer)
-        piece_new_pos = read_position(buffer)
-
-        await self.raise_event(
-            Event(
-                "gameboard_move_piece_animation",
-                (piece_current_pos, piece_new_pos),
-            ),
-        )
-
-    async def read_animation_state(self, event: Event[bytearray]) -> None:
-        """Read animation_state event from server."""
-        buffer = Buffer(event.data)
-
-        animation_state = buffer.read_value(StructFormat.BOOL)
-
-        await self.raise_event(
-            Event("gameboard_animation_state", animation_state),
-        )
-
     async def read_game_over(self, event: Event[bytearray]) -> None:
         """Read update_piece event from server."""
         buffer = Buffer(event.data)
@@ -468,22 +345,6 @@ class GameClient(EncryptedNetworkEventComponent):
 
         await self.raise_event(Event("game_winner", winner))
         self.running = False
-
-    async def read_action_complete(self, event: Event[bytearray]) -> None:
-        """Read action_complete event from server.
-
-        Sent when last action from client is done, great for AIs.
-        As of writing, not used for main client.
-        """
-        buffer = Buffer(event.data)
-
-        from_pos = read_position(buffer)
-        to_pos = read_position(buffer)
-        current_turn: u8 = buffer.read_value(StructFormat.UBYTE)
-
-        await self.raise_event(
-            Event("game_action_complete", (from_pos, to_pos, current_turn)),
-        )
 
     async def read_initial_config(self, event: Event[bytearray]) -> None:
         """Read initial_config event from server."""

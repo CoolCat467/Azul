@@ -55,7 +55,7 @@ from azul.network_shared import (
     ServerBoundEvents,
     find_ip,
 )
-from azul.state import State, generate_pieces
+from azul.state import State
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterable
@@ -130,7 +130,7 @@ class ServerClient(EncryptedNetworkEventComponent):
 
         buffer = Buffer()
 
-##        write_position(buffer, board_size)
+        ##        write_position(buffer, board_size)
         buffer.write_value(StructFormat.UBYTE, 0)
         buffer.write_value(StructFormat.UBYTE, player_turn)
 
@@ -259,7 +259,7 @@ class GameServer(network.Server):
         super().__init__("GameServer")
 
         self.client_count: int
-        self.state: CheckersState = State(self.board_size, {})
+        self.state = State.new_game(0)
 
         self.client_players: dict[int, int] = {}
         self.player_selections: dict[int, Pos] = {}
@@ -276,8 +276,6 @@ class GameServer(network.Server):
                 "server_start": self.start_server,
                 "network_stop": self.stop_server,
                 "server_send_game_start": self.handle_server_start_new_game,
-                "network->select_piece": self.handle_network_select_piece,
-                "network->select_tile": self.handle_network_select_tile,
             },
         )
 
@@ -387,8 +385,8 @@ class GameServer(network.Server):
         self.client_players.clear()
         self.player_selections.clear()
 
-        pieces = generate_pieces(*self.board_size)
-        self.state = State(self.board_size, pieces)
+        ##        pieces = generate_pieces(*self.board_size)
+        self.state = State.new_game(self.client_count)
 
         # Why keep track of another object just to know client ID numbers
         # if we already have that with the components? No need!
@@ -437,25 +435,25 @@ class GameServer(network.Server):
 
     async def handle_server_start_new_game(self, event: Event[None]) -> None:
         """Handle game start."""
-##        # Delete all pieces from last state (shouldn't be needed but still.)
-##        async with trio.open_nursery() as nursery:
-##            for piece_pos, _piece_type in self.state.get_pieces():
-##                nursery.start_soon(
-##                    self.raise_event,
-##                    Event("delete_piece->network", piece_pos),
-##                )
+        ##        # Delete all pieces from last state (shouldn't be needed but still.)
+        ##        async with trio.open_nursery() as nursery:
+        ##            for piece_pos, _piece_type in self.state.get_pieces():
+        ##                nursery.start_soon(
+        ##                    self.raise_event,
+        ##                    Event("delete_piece->network", piece_pos),
+        ##                )
 
         # Choose which team plays first
         # Using non-cryptographically secure random because it doesn't matter
         self.new_game_init()
 
-##        # Send create_piece events for all pieces
-##        async with trio.open_nursery() as nursery:
-##            for piece_pos, piece_type in self.state.get_pieces():
-##                nursery.start_soon(
-##                    self.raise_event,
-##                    Event("create_piece->network", (piece_pos, piece_type)),
-##                )
+        ##        # Send create_piece events for all pieces
+        ##        async with trio.open_nursery() as nursery:
+        ##            for piece_pos, piece_type in self.state.get_pieces():
+        ##                nursery.start_soon(
+        ##                    self.raise_event,
+        ##                    Event("create_piece->network", (piece_pos, piece_type)),
+        ##                )
 
         await self.transmit_playing_as()
 
@@ -537,16 +535,16 @@ class GameServer(network.Server):
         )
         with self.temporary_component(private_events_pocket):
             with private_events_pocket.temporary_component(client):
-##                # Send create_piece events for all pieces
-##                async with trio.open_nursery() as nursery:
-##                    for piece_pos, piece_type in self.state.get_pieces():
-##                        nursery.start_soon(
-##                            client.raise_event,
-##                            Event(
-##                                "create_piece->network",
-##                                (piece_pos, piece_type),
-##                            ),
-##                        )
+                ##                # Send create_piece events for all pieces
+                ##                async with trio.open_nursery() as nursery:
+                ##                    for piece_pos, piece_type in self.state.get_pieces():
+                ##                        nursery.start_soon(
+                ##                            client.raise_event,
+                ##                            Event(
+                ##                                "create_piece->network",
+                ##                                (piece_pos, piece_type),
+                ##                            ),
+                ##                        )
 
                 await client.raise_event(
                     Event(f"playing_as->network[{client.client_id}]", 255),
@@ -743,79 +741,6 @@ class GameServer(network.Server):
                 )
             else:
                 raise NotImplementedError(f"Animation for action {name}")
-
-    async def handle_network_select_tile(
-        self,
-        event: Event[tuple[int, Pos]],
-    ) -> None:
-        """Handle select tile event from network."""
-        client_id, tile_pos = event.data
-
-        player = self.client_players.get(client_id, 0xFF)
-        if player == 2:
-            player = int(self.state.turn)
-
-        if not self.players_can_interact:
-            print(
-                f"{player = } cannot select tile {tile_pos = } because players_can_interact is False",
-            )
-            return
-
-        if player != self.state.turn:
-            print(
-                f"{player = } cannot select tile {tile_pos = } because it is not their turn.",
-            )
-            return
-
-        piece_pos = self.player_selections.get(player)
-        if piece_pos is None:
-            print(
-                f"{player = } cannot select tile {tile_pos = } because has no selection",
-            )
-            return
-
-        if tile_pos not in self.state.calculate_actions(piece_pos).ends:
-            print(
-                f"{player = } cannot select tile {piece_pos!r} because not valid move",
-            )
-            return
-
-        self.players_can_interact = False  # No one moves during animation
-        # Send animation state start event
-        await self.raise_event(Event("animation_state->network", True))
-
-        # Remove tile sprites and glowing effect
-        await self.player_select_piece(player, None)
-
-        action = self.state.action_from_points(piece_pos, tile_pos)
-        # print(f"{action = }")
-
-        # Get new state after performing valid action
-        new_state = self.state.preform_action(action)
-        # Get action queue from old state
-        action_queue = self.state.get_action_queue()
-        self.state = new_state
-
-        # Send action animations
-        await self.handle_action_animations(action_queue)
-
-        # Send action complete event
-        await self.raise_event(
-            Event(
-                "action_complete->network",
-                (piece_pos, tile_pos, self.state.turn),
-            ),
-        )
-
-        win_value = self.state.check_for_win()
-        if win_value is not None:
-            # If we have a winner, send game over event.
-            await self.raise_event(Event("game_over->network", win_value))
-            return
-
-        # If not game over, allow interactions so next player can take turn
-        self.players_can_interact = True
-        await self.raise_event(Event("animation_state->network", False))
 
     def __del__(self) -> None:
         """Debug print."""
