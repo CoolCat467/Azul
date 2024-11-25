@@ -31,7 +31,7 @@ import time
 import traceback
 from collections import deque
 from functools import partial
-from typing import TYPE_CHECKING, NoReturn, cast
+from typing import TYPE_CHECKING, NoReturn
 
 import trio
 
@@ -58,7 +58,7 @@ from azul.network_shared import (
 from azul.state import State
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Iterable
+    from collections.abc import Awaitable, Callable
 
 
 class ServerClient(EncryptedNetworkEventComponent):
@@ -123,7 +123,7 @@ class ServerClient(EncryptedNetworkEventComponent):
 
     async def handle_initial_config(
         self,
-        event: Event[tuple[Pos, int]],
+        event: Event[tuple[None, int]],
     ) -> None:
         """Read initial config event and reraise as server[write]->initial_config."""
         board_size, player_turn = event.data
@@ -251,7 +251,6 @@ class GameServer(network.Server):
         "state",
     )
 
-    board_size = (8, 8)
     max_clients = 4
 
     def __init__(self, internal_singleplayer_mode: bool = False) -> None:
@@ -461,7 +460,7 @@ class GameServer(network.Server):
         await self.raise_event(
             Event(
                 "initial_config->network",
-                (self.board_size, self.state.turn),
+                (None, self.state.turn),
             ),
         )
 
@@ -535,27 +534,16 @@ class GameServer(network.Server):
         )
         with self.temporary_component(private_events_pocket):
             with private_events_pocket.temporary_component(client):
-                ##                # Send create_piece events for all pieces
-                ##                async with trio.open_nursery() as nursery:
-                ##                    for piece_pos, piece_type in self.state.get_pieces():
-                ##                        nursery.start_soon(
-                ##                            client.raise_event,
-                ##                            Event(
-                ##                                "create_piece->network",
-                ##                                (piece_pos, piece_type),
-                ##                            ),
-                ##                        )
-
-                await client.raise_event(
-                    Event(f"playing_as->network[{client.client_id}]", 255),
-                )
-
                 # Raise initial config event with board size and initial turn.
                 await client.raise_event(
                     Event(
                         "initial_config->network",
-                        (self.state.size, self.state.turn),
+                        (None, self.state.turn),
                     ),
+                )
+
+                await client.raise_event(
+                    Event(f"playing_as->network[{client.client_id}]", 255),
                 )
 
     async def handler(self, stream: trio.SocketStream) -> None:
@@ -606,141 +594,6 @@ class GameServer(network.Server):
                     )
                     self.client_count -= 1
         # ServerClient's `with` block handles closing stream.
-
-    async def handle_network_select_piece(
-        self,
-        event: Event[tuple[int, Pos]],
-    ) -> None:
-        """Handle piece event from client."""
-        client_id, tile_pos = event.data
-
-        player = self.client_players.get(client_id, 0xFF)
-        if player == 2:
-            player = int(self.state.turn)
-
-        if player != self.state.turn:
-            print(
-                f"{player = } cannot select piece {tile_pos = } because it is not that player's turn",
-            )
-            return
-
-        if not self.players_can_interact:
-            print(
-                f"{player = } cannot select piece {tile_pos = } because players_can_interact is False",
-            )
-            return
-        if not self.state.can_player_select_piece(player, tile_pos):
-            print(f"{player = } cannot select piece {tile_pos = }")
-            await self.player_select_piece(player, None)
-            return
-        if tile_pos == self.player_selections.get(player):
-            # print(f"{player = } toggle select -> No select")
-            await self.player_select_piece(player, None)
-            return
-
-        await self.player_select_piece(player, tile_pos)
-
-    async def player_select_piece(
-        self,
-        player: int,
-        piece_pos: Pos | None,
-    ) -> None:
-        """Update glowing tiles from new selected piece."""
-        ignore: set[Pos] = set()
-
-        if piece_pos is not None:
-            # Calculate actions if required
-            new_action_set = self.state.calculate_actions(piece_pos)
-            ignore = new_action_set.ends
-
-        ignored: set[Pos] = set()
-
-        # Remove outlined tiles from previous selection if existed
-        if prev_selection := self.player_selections.get(player):
-            action_set = self.state.calculate_actions(prev_selection)
-            ignored = action_set.ends & ignore
-            remove = action_set.ends - ignore
-            async with trio.open_nursery() as nursery:
-                for tile_position in remove:
-                    nursery.start_soon(
-                        self.raise_event,
-                        Event("delete_tile->network", tile_position),
-                    )
-                if piece_pos != prev_selection:
-                    nursery.start_soon(
-                        self.raise_event,
-                        Event(
-                            "select_piece->network",
-                            (prev_selection, False),
-                        ),
-                    )
-
-        if piece_pos is None:
-            if prev_selection:
-                del self.player_selections[player]
-            return
-
-        self.player_selections[player] = piece_pos
-
-        # For each end point
-        async with trio.open_nursery() as nursery:
-            for tile_position in new_action_set.ends - ignored:
-                nursery.start_soon(
-                    self.raise_event,
-                    Event("create_tile->network", tile_position),
-                )
-            # Sent select piece as well
-            nursery.start_soon(
-                self.raise_event,
-                Event(
-                    "select_piece->network",
-                    (self.player_selections[player], True),
-                ),
-            )
-
-    async def handle_move_animation(self, from_pos: Pos, to_pos: Pos) -> None:
-        """Handle move animation."""
-        await self.raise_event(
-            Event("move_piece_animation->network", (from_pos, to_pos)),
-        )
-
-    async def handle_jump_animation(self, jumped_pos: Pos) -> None:
-        """Handle jump animation."""
-        await self.raise_event(
-            Event("delete_piece_animation->network", jumped_pos),
-        )
-
-    async def handle_king_animation(
-        self,
-        kinged_pos: Pos,
-        piece_type: int,
-    ) -> None:
-        """Handle jump animation."""
-        await self.raise_event(
-            Event("update_piece_animation->network", (kinged_pos, piece_type)),
-        )
-
-    async def handle_action_animations(
-        self,
-        actions: deque[tuple[str, Iterable[Pos | int]]],
-    ) -> None:
-        """Handle action animations."""
-        while actions:
-            name, params = actions.popleft()
-            if name == "move":
-                await self.handle_move_animation(
-                    *cast("Iterable[Pos]", params),
-                )
-            elif name == "jump":
-                await self.handle_jump_animation(
-                    *cast("Iterable[Pos]", params),
-                )
-            elif name == "king":
-                await self.handle_king_animation(
-                    *cast("tuple[Pos, int]", params),
-                )
-            else:
-                raise NotImplementedError(f"Animation for action {name}")
 
     def __del__(self) -> None:
         """Debug print."""

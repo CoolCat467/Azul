@@ -39,7 +39,7 @@ class RemoteState(Component, metaclass=ABCMeta):
     turn.
     """
 
-    __slots__ = ("state", "pieces", "has_initial", "playing_as", "moves")
+    __slots__ = ("has_initial", "moves", "pieces", "playing_as", "state")
 
     def __init__(self) -> None:
         """Initialize remote state."""

@@ -63,6 +63,7 @@ from azul.component import (
 from azul.network_shared import DEFAULT_PORT, find_ip
 from azul.server import GameServer
 from azul.sound import SoundData, play_sound as base_play_sound
+from azul.state import Tile
 from azul.statemachine import AsyncState
 from azul.tools import (
     lerp_color,
@@ -132,8 +133,6 @@ TILESYMBOLS = (
     ("1", BLUE),
 )
 
-
-from azul.state import Tile
 
 TILESIZE = 15
 

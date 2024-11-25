@@ -14,7 +14,7 @@ __version__ = "0.0.0"
 from typing import TYPE_CHECKING, TypeAlias, TypeVar
 
 ##from machine_client import RemoteState, run_clients_in_local_servers_sync
-from minimax import Minimax, Player
+from minimax import Minimax, MinimaxResult, Player
 
 from azul.state import (
     Phase,
@@ -50,13 +50,14 @@ class AzulMinimax(Minimax[State, Action]):
         if AzulMinimax.terminal(state):
             winner, _score = real_state.get_win_order()[0]
             if winner == max_player:
-                return 1
-            return -1
+                return 10
+            return -10
         # Heuristic
         min_ = 0
         max_ = 0
         for player_id, player_data in real_state.player_data.items():
             score = player_data.get_end_of_game_score()
+            score += player_data.get_floor_line_scoring()
             if player_id == max_player:
                 max_ += score
             else:
@@ -64,7 +65,7 @@ class AzulMinimax(Minimax[State, Action]):
         # More max will make score higher,
         # more min will make score lower
         # Plus one in divisor makes so never / 0
-        return (max_ - min_) / (max_ + min_ + 1)
+        return (max_ - min_) / (abs(max_) + abs(min_) + 1)
 
     @staticmethod
     def terminal(state: State) -> bool:
@@ -92,6 +93,13 @@ class AzulMinimax(Minimax[State, Action]):
         """Return new state after performing given action on given current state."""
         real_state, max_player = state
         return (real_state.preform_action(action), max_player)
+
+    @classmethod
+    def adaptive_depth_minimax(cls, state: State) -> MinimaxResult[Action]:
+        """Adaptive depth minimax."""
+        # TODO
+        depth = 1
+        return cls.alphabeta(state, depth)
 
 
 ##class MinimaxPlayer(RemoteState):
@@ -122,9 +130,10 @@ def run() -> None:
     state = (State.new_game(2), 0)
 
     while not AzulMinimax.terminal(state):
-        action = AzulMinimax.alphabeta(state, 2)
-        print(f"{action.value = }")
+        action = AzulMinimax.adaptive_depth_minimax(state)
+        print(f"{action = }")
         state = AzulMinimax.result(state, action.action)
+        print(f"{state = }")
     print(state)
 
 

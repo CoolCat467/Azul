@@ -44,149 +44,16 @@ class Minimax(ABC, Generic[State, Action]):
 
     __slots__ = ()
 
-    @classmethod
-    @abstractmethod
-    def value(cls, state: State) -> int | float:
-        """Return the value of a given game state."""
-
-    @classmethod
-    @abstractmethod
-    def terminal(cls, state: State) -> bool:
-        """Return if given game state is terminal."""
-
-    @classmethod
-    @abstractmethod
-    def player(cls, state: State) -> Player:
-        """Return player status given the state of the game.
-
-        Must return either Player.MIN or Player.MAX
-        """
-
-    @classmethod
-    @abstractmethod
-    def actions(cls, state: State) -> Iterable[Action]:
-        """Return a collection of all possible actions in a given game state."""
-
-    @classmethod
-    @abstractmethod
-    def result(cls, state: State, action: Action) -> State:
-        """Return new game state after performing action on given state."""
-
-    @classmethod
-    def minimax(
-        cls,
-        state: State,
-        depth: int | None = 5,
-    ) -> MinimaxResult[Action]:
-        """Return minimax result best action for a given state for the current player."""
-        if cls.terminal(state):
-            return MinimaxResult(cls.value(state), None)
-        if depth is not None and depth <= 0:
-            # Choose a random action
-            # No need for cryptographic secure random
-            return MinimaxResult(
-                cls.value(state),
-                random.choice(tuple(cls.actions(state))),  # noqa: S311
-            )
-        next_down = None if depth is None else depth - 1
-
-        current_player = cls.player(state)
-        value: int | float
-        if current_player == Player.MAX:
-            value = -infinity
-            best = max
-        elif current_player == Player.MIN:
-            value = infinity
-            best = min
-        elif current_player == Player.CHANCE:
-            raise ValueError("CHANCE is not valid for regular minimax.")
-        else:
-            raise ValueError(f"Unexpected player type {current_player!r}")
-
-        best_action: Action | None = None
-        for action in cls.actions(state):
-            result = cls.minimax(cls.result(state, action), next_down)
-            new_value = best(value, result.value)
-            if new_value != value:
-                best_action = action
-            value = new_value
-        return MinimaxResult(value, best_action)
-
-    @classmethod
-    def alphabeta(
-        cls,
-        state: State,
-        depth: int | None = 5,
-        a: int | float = -infinity,
-        b: int | float = infinity,
-    ) -> MinimaxResult[Action]:
-        """Return minimax alphabeta pruning result best action for given current state."""
-        # print(f'alphabeta {depth = } {a = } {b = }')
-
-        if cls.terminal(state):
-            return MinimaxResult(cls.value(state), None)
-        if depth is not None and depth <= 0:
-            # Choose a random action
-            # No need for cryptographic secure random
-            return MinimaxResult(
-                cls.value(state),
-                random.choice(tuple(cls.actions(state))),  # noqa: S311
-            )
-        next_down = None if depth is None else depth - 1
-
-        current_player = cls.player(state)
-        value: int | float
-        if current_player == Player.MAX:
-            value = -infinity
-            best = max
-            compare = operator.gt  # greater than (>)
-            set_idx = 0
-        elif current_player == Player.MIN:
-            value = infinity
-            best = min
-            compare = operator.lt  # less than (<)
-            set_idx = 1
-        elif current_player == Player.CHANCE:
-            raise ValueError("CHANCE is not valid for regular minimax.")
-        else:
-            raise ValueError(f"Unexpected player type {current_player!r}")
-
-        best_action: Action | None = None
-        for action in cls.actions(state):
-            result = cls.alphabeta(cls.result(state, action), next_down, a, b)
-            new_value = best(value, result.value)
-
-            if new_value != value:
-                best_action = action
-            value = new_value
-
-            if compare(new_value, (a, b)[set_idx ^ 1]):
-                # print("cutoff")
-                break  # cutoff
-
-            alpha_beta_value = (a, b)[set_idx]
-            new_alpha_beta_value = best(alpha_beta_value, value)
-
-            if new_alpha_beta_value != alpha_beta_value:
-                # Set new best
-                alpha_beta_list = [a, b]
-                alpha_beta_list[set_idx] = new_alpha_beta_value
-                a, b = alpha_beta_list
-        return MinimaxResult(value, best_action)
-
-
-class Expectiminimax(ABC, Generic[State, Action]):
-    """Base class for Expectiminimax AIs."""
-
-    __slots__ = ()
-
     LOWEST = -1
     HIGHEST = 1
 
     @classmethod
     @abstractmethod
     def value(cls, state: State) -> int | float:
-        """Return the value of a given game state."""
+        """Return the value of a given game state.
+
+        Should be in range [cls.LOWEST, cls.HIGHEST].
+        """
 
     @classmethod
     @abstractmethod
@@ -218,7 +85,7 @@ class Expectiminimax(ABC, Generic[State, Action]):
 
         Should be in range [0.0, 1.0] for 0% and 100% chance respectively.
         """
-        return 1.0
+        raise NotImplementedError()
 
     @classmethod
     def minimax(

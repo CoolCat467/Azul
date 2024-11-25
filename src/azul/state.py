@@ -36,7 +36,7 @@ from typing import (
     TypeVar,
 )
 
-from numpy import array, int8
+from numpy import full, int8
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -192,10 +192,7 @@ class PlayerData(NamedTuple):
     @classmethod
     def new(cls, varient_play: bool = False) -> Self:
         """Return new player data instance."""
-        wall = array(
-            [Tile.blank for _ in range(5 * 5)],
-            int8,
-        ).reshape((5, 5))
+        wall = full((5, 5), Tile.blank, int8)
 
         if not varient_play:
             for y in range(5):
@@ -376,7 +373,7 @@ class PlayerData(NamedTuple):
         count += self.get_vertically_linked_wall_count(x, y, wall)
         return count
 
-    def perform_floor_line_scoring(self) -> int:
+    def get_floor_line_scoring(self) -> int:
         """Return score increment value from floor line."""
         total_count = self.floor.total()
         assert total_count <= FLOOR_LINE_COUNT
@@ -412,7 +409,7 @@ class PlayerData(NamedTuple):
                 PatternLine.blank(),
             )
 
-        score += self.perform_floor_line_scoring()
+        score += self.get_floor_line_scoring()
         if score < 0:
             score = 0
 
@@ -722,7 +719,7 @@ class State(NamedTuple):
         )
         if current_phase == Phase.wall_tiling:
             if self.varient_play:
-                raise NotImplementedError()
+                return new_state.start_manual_wall_tiling()
             return new_state.apply_auto_wall_tiling()
         return new_state
 
@@ -1025,12 +1022,17 @@ class State(NamedTuple):
             return new
         raise NotImplementedError()
 
+    def start_manual_wall_tiling(self) -> Self:
+        """Return new state after starting manual wall tiling."""
+        raise NotImplementedError()
+        return self
+
 
 def run() -> None:
     """Run program."""
     from market_api import pretty_print_response as pprint
 
-    random.seed(0)
+    random.seed(2)
     state = State.new_game(2)
     ticks = 0
     try:
