@@ -35,10 +35,16 @@ import traceback
 from collections import Counter
 from functools import lru_cache, wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, TypeVar
+from typing import TYPE_CHECKING, Any, Final, TypeVar
 
 import pygame
 import trio
+from libcomponent.component import (
+    ComponentManager,
+    Event,
+    ExternalRaiseManager,
+)
+from libcomponent.network_utils import find_ip
 from numpy import array, int8
 from pygame.color import Color
 from pygame.locals import (
@@ -55,12 +61,7 @@ from pygame.rect import Rect
 from azul import element_list, objects, sprite
 from azul.async_clock import Clock
 from azul.client import GameClient, read_advertisements
-from azul.component import (
-    ComponentManager,
-    Event,
-    ExternalRaiseManager,
-)
-from azul.network_shared import DEFAULT_PORT, find_ip
+from azul.network_shared import DEFAULT_PORT
 from azul.server import GameServer
 from azul.sound import SoundData, play_sound as base_play_sound
 from azul.state import Tile
@@ -70,6 +71,9 @@ from azul.tools import (
     saturate,
 )
 from azul.vector import Vector2
+
+if sys.version_info < (3, 11):
+    from exceptiongroup import ExceptionGroup
 
 if TYPE_CHECKING:
     from collections.abc import (
@@ -395,21 +399,21 @@ class ObjectHandler:
 
     def __init__(self) -> None:
         """Initialize object handler."""
-        self.objects: dict[int, Object] = {}
+        self.objects: dict[int, sprite.Sprite] = {}
         self.next_id = 0
         self.cache: dict[str, int] = {}
 
         self.recalculate_render = True
         self._render_order: tuple[int, ...] = ()
 
-    def add_object(self, obj: Object) -> None:
+    def add_object(self, obj: sprite.Sprite) -> None:
         """Add an object to the game."""
         obj.id = self.next_id
         self.objects[self.next_id] = obj
         self.next_id += 1
         self.recalculate_render = True
 
-    def rm_object(self, obj: Object) -> None:
+    def rm_object(self, obj: sprite.Sprite) -> None:
         """Remove an object from the game."""
         del self.objects[obj.id]
         self.recalculate_render = True
@@ -420,7 +424,7 @@ class ObjectHandler:
             self.rm_object(self.objects[oid])
         self.next_id = 0
 
-    def get_object(self, object_id: int) -> Object | None:
+    def get_object(self, object_id: int) -> sprite.Sprite | None:
         """Return the object associated with object id given. Return None if object not found."""
         if object_id in self.objects:
             return self.objects[object_id]
@@ -454,17 +458,17 @@ class ObjectHandler:
         """Reset the cache."""
         self.cache = {}
 
-    def get_object_by_name(self, object_name: str) -> Object:
+    def get_object_by_name(self, object_name: str) -> sprite.Sprite:
         """Get object by name, with cache."""
         if object_name not in self.cache:
             ids = self.get_object_given_name(object_name)
             if ids:
                 self.cache[object_name] = min(ids)
             else:
-                raise RuntimeError(f"{object_name} Object Not Found!")
+                raise RuntimeError(f"{object_name} sprite.Sprite Not Found!")
         result = self.get_object(self.cache[object_name])
         if result is None:
-            raise RuntimeError(f"{object_name} Object Not Found!")
+            raise RuntimeError(f"{object_name} sprite.Sprite Not Found!")
         return result
 
     def set_attr_all(self, attribute: str, value: object) -> None:
@@ -550,10 +554,10 @@ class ObjectHandler:
 
 
 class MultipartObject(ObjectHandler):
-    """Thing that is both an Object and an ObjectHandler, and is meant to be an Object made up of multiple Objects."""
+    """Thing that is both an sprite.Sprite and an ObjectHandler, and is meant to be an sprite.Sprite made up of multiple Objects."""
 
     def __init__(self, name: str):
-        """Initialize Object and ObjectHandler of self.
+        """Initialize sprite.Sprite and ObjectHandler of self.
 
         Also set self._lastloc and self._lasthidden to None
         """
@@ -584,8 +588,8 @@ class MultipartObject(ObjectHandler):
         return None, None
 
     def process(self, time_passed: float) -> None:
-        """Process Object self and ObjectHandler self and call self.reset_position on location change."""
-        Object.process(self, time_passed)
+        """Process sprite.Sprite self and ObjectHandler self and call self.reset_position on location change."""
+        sprite.Sprite.process(self, time_passed)
         ObjectHandler.process_objects(self, time_passed)
 
         if self.location != self._lastloc:
@@ -598,12 +602,12 @@ class MultipartObject(ObjectHandler):
 
     def render(self, surface: pygame.surface.Surface) -> None:
         """Render self and all parts to the surface."""
-        Object.render(self, surface)
+        sprite.Sprite.render(self, surface)
         ObjectHandler.render_objects(self, surface)
 
     def __del__(self) -> None:
         """Delete data."""
-        Object.__del__(self)
+        sprite.Sprite.__del__(self)
         ObjectHandler.__del__(self)
 
 
@@ -760,7 +764,7 @@ class Cursor(TileRenderer):
             self.dirty = 1
         self.visible = bool(tile_count)
 
-    def bind_handlers(self):
+    def bind_handlers(self) -> None:
         """Register handlers."""
         self.register_handlers(
             {
@@ -1271,7 +1275,7 @@ class Row(TileRenderer):
         return self.tiles.pop()
 
     def place_tile(self, tile: int) -> None:
-        """Place a given int Object on self if permitted."""
+        """Place a given int sprite.Sprite on self if permitted."""
         if self.can_place(tile):
             self.color = tile.color
             self.tiles.append(tile)
@@ -1369,7 +1373,7 @@ class PatternLine(MultipartObject):
         w = self.get_row(last - 1).width_height[0]
         if w is None:
             raise RuntimeError(
-                "Image Dimensions for Row Object (row.width_height) are None!",
+                "Image Dimensions for Row sprite.Sprite (row.width_height) are None!",
             )
         h1 = self.get_row(0).tile_full
         h = int(last * h1)
@@ -1424,7 +1428,7 @@ class FloorLine(Row):
         self.name = "floor_line"
 
         # self.font = Font(FONT, round(self.tile_size*1.2), color=BLACK, cx=False, cy=False)
-        self.text = Text(
+        self.text = objects.Text(
             round(self.tile_size * 1.2),
             BLACK,
             cx=False,
@@ -1432,8 +1436,7 @@ class FloorLine(Row):
         )
         self.has_number_one_tile = False
 
-        gen = floor_line_subtract_generator(1)
-        self.numbers = [next(gen) for i in range(self.size)]
+        self.numbers = [-255 for _ in range(self.size)]
 
     def __repr__(self) -> str:
         """Return representation of self."""
@@ -1459,27 +1462,8 @@ class FloorLine(Row):
     # self.font.render(surface, str(self.numbers[x]), xy)
 
     def place_tile(self, tile: int) -> None:
-        """Place a given int Object on self if permitted."""
+        """Place a given int sprite.Sprite on self if permitted."""
         self.tiles.insert(self.get_placed(), tile)
-
-        if tile.color == self.number_one_color:
-            self.has_number_one_tile = True
-
-        box_lid = self.player.game.get_object_by_name("BoxLid")
-        assert isinstance(box_lid, BoxLid)
-
-        def handle_end(end: int) -> None:
-            """Handle the end tile we are replacing. Ensures number one tile is not removed."""
-            if not end.color < 0:
-                if end.color == self.number_one_color:
-                    handle_end(self.tiles.pop())
-                    self.tiles.appendleft(end)
-                    return
-                box_lid.add_tile(end)
-
-        handle_end(self.tiles.pop())
-
-        self.image_update = True
 
     def score_tiles(self) -> int:
         """Score self.tiles and return how to change points."""
@@ -1615,7 +1599,7 @@ class Factory(Grid):
 
 
 class Factories(MultipartObject):
-    """Factories Multipart Object, made of multiple Factory Objects."""
+    """Factories Multipart sprite.Sprite, made of multiple Factory Objects."""
 
     tiles_each = 4
 
@@ -1693,43 +1677,6 @@ class Factories(MultipartObject):
             table.add_tiles(tocenter)
         cursor.drag(select)
 
-    def play_tiles_from_bag(self, empty_color: int = Tile.blank) -> None:
-        """Divy up tiles to each factory from the bag."""
-        # For every factory we have,
-        for fid in range(self.count):
-            # Draw tiles for the factory
-            drawn = []
-            for _i in range(self.tiles_each):
-                # If the bag is not empty,
-                if not self.game.bag.is_empty():
-                    # Draw a tile from the bag.
-                    tile = self.game.bag.draw_tile()
-                    assert tile is not None
-                    drawn.append(tile)
-                else:  # Otherwise, get the box lid
-                    box_lid = self.game.get_object_by_name("BoxLid")
-                    assert isinstance(box_lid, BoxLid)
-                    # If the box lid is not empty,
-                    if not box_lid.is_empty():
-                        # Add all the tiles from the box lid to the bag
-                        self.game.bag.add_tiles(box_lid.get_tiles())
-                        # and shake the bag to randomize everything
-                        self.game.bag.reset()
-                        # Then, grab a tile from the bag like usual.
-                        tile = self.game.bag.draw_tile()
-                        assert tile is not None
-                        drawn.append(tile)
-                    else:
-                        # "In the rare case that you run out of tiles again
-                        # while there are none left in the lid, start a new
-                        # round as usual even though are not all factory
-                        # displays are properly filled."
-                        drawn.append(int(empty_color))
-            # Place drawn tiles on factory
-            factory = self.objects[fid]
-            assert isinstance(factory, Factory)
-            factory.fill(drawn)
-
     def is_all_empty(self) -> bool:
         """Return True if all factories are empty."""
         for fid in range(self.count):
@@ -1741,7 +1688,7 @@ class Factories(MultipartObject):
 
 
 class TableCenter(TileRenderer):
-    """Object that represents the center of the table."""
+    """sprite.Sprite that represents the center of the table."""
 
     __slots__ = ("tiles",)
     size = (6, 6)
@@ -1777,7 +1724,7 @@ class TableCenter(TileRenderer):
         for _ in range(one_count):
             yield Tile.one
 
-    def update_image(self):
+    def update_image(self) -> None:
         """Reset/update image."""
         self.clear_image(self.size)
 
@@ -1852,7 +1799,7 @@ class Player(sprite.Sprite):
         self.add_object(Board(self.varient_play))
         self.add_object(PatternLine(self))
         self.add_object(FloorLine(self))
-        ##        self.add_object(objects.Text(SCOREFONTSIZE, SCORECOLOR))
+        ##        self.add_object(objects.objects.Text(SCOREFONTSIZE, SCORECOLOR))
 
         self.score = 0
         self.is_turn = False
@@ -1875,8 +1822,8 @@ class Player(sprite.Sprite):
 
     ##    def update_score(self) -> None:
     ##        """Update the scorebox for this player."""
-    ##        score_box = self.get_object_by_name("Text")
-    ##        assert isinstance(score_box, Text)
+    ##        score_box = self.get_object_by_name("objects.Text")
+    ##        assert isinstance(score_box, objects.Text)
     ##        score_box.update_value(f"Player {self.player_id + 1}: {self.score}")
 
     def trigger_turn_now(self) -> None:
@@ -1939,8 +1886,8 @@ class Player(sprite.Sprite):
             int(y + bh * (2 / 3)),
         )
 
-        text = self.get_object_by_name("Text")
-        assert isinstance(text, Text)
+        text = self.get_object_by_name("objects.Text")
+        assert isinstance(text, objects.Text)
         text.location = Vector2(x - (bw // 3), y - (bh * 2 // 3))
 
 
@@ -2218,7 +2165,7 @@ class GameState(AsyncState["AzulClient"]):
 
 
 class KwargOutlineText(objects.OutlinedText):
-    """Outlined Text with attributes settable via keyword arguments."""
+    """Outlined objects.Text with attributes settable via keyword arguments."""
 
     __slots__ = ()
 
@@ -2236,7 +2183,7 @@ class KwargOutlineText(objects.OutlinedText):
 
 
 class KwargButton(objects.Button):
-    """Button with attributes settable via keyword arguments."""
+    """objects.Button with attributes settable via keyword arguments."""
 
     __slots__ = ()
 
@@ -2272,7 +2219,7 @@ class MenuState(GameState):
         size: int = fontsize,
         minlen: int = button_minimum,
     ) -> int:
-        """Add a new Button object to group."""
+        """Add a new objects.Button object to group."""
         button = KwargButton(
             name,
             font=pygame.font.Font(FONT, size),
@@ -2293,7 +2240,7 @@ class MenuState(GameState):
         size: int = fontsize,
         outline: tuple[int, int, int] = BUTTON_TEXT_OUTLINE,
     ) -> int:
-        """Add a new Text object to self.game with arguments. Return text id."""
+        """Add a new objects.Text object to self.game with arguments. Return text id."""
         text = KwargOutlineText(
             name,
             font=pygame.font.Font(FONT, size),
@@ -2369,8 +2316,8 @@ class MenuState(GameState):
         def updater() -> None:
             """Update text object {text_name}'s value with {value_function}."""
             assert self.game is not None
-            text = self.game.get_object_by_name(f"Text{text_name}")
-            assert isinstance(text, Text)
+            text = self.game.get_object_by_name(f"objects.Text{text_name}")
+            assert isinstance(text, objects.Text)
             text.update_value(value_function())
 
         return updater
@@ -2441,6 +2388,7 @@ class InitializeState(GameState):
         self,
         event: Event[sprite.PygameMouseMotion],
     ) -> None:
+        """Handle PygameMouseMotion event."""
         ##        print(f'{event = }')
         await self.manager.raise_event(
             Event("cursor_set_location", event.data["pos"]),
@@ -2950,7 +2898,7 @@ class EndScreen(MenuState):
             (SCREEN_SIZE[0] // 2, SCREEN_SIZE[1] * 4 // 5),
         )
         buttontitle = self.game.get_object(bid)
-        assert isinstance(buttontitle, Button)
+        assert isinstance(buttontitle, objects.Button)
         buttontitle.Render_Priority = "last-1"
         buttontitle.cur_time = 2
 
@@ -2961,7 +2909,7 @@ class EndScreen(MenuState):
             self.add_text(f"Line{idx}", line, (x, y), cx=True, cy=False)
             # self.game.get_object(bid).Render_Priority = f'last{-(2+idx)}'
             button = self.game.get_object(bid)
-            assert isinstance(button, Button)
+            assert isinstance(button, objects.Button)
             button.Render_Priority = "last-2"
             y += self.bh
 
@@ -2974,8 +2922,6 @@ class Game(ObjectHandler):
     def __init__(self) -> None:
         """Initialize game."""
         super().__init__()
-        # Gets overwritten by Keyboard object
-        self.keyboard: Keyboard | None = None
 
         self.states: dict[str, GameState] = {}
         self.active_state: GameState | None = None
@@ -3006,9 +2952,6 @@ class Game(ObjectHandler):
 
         self.player_turn: int = 0
 
-        # Tiles
-        self.bag = Bag(TILECOUNT, REGTILECOUNT)
-
     # # Cache
     # self.cache: dict[int, pygame.surface.Surface] = {}
 
@@ -3016,7 +2959,7 @@ class Game(ObjectHandler):
         """Return representation of self."""
         return f"{self.__class__.__name__}()"
 
-    def add_object(self, obj: Object) -> None:
+    def add_object(self, obj: sprite.Sprite) -> None:
         """Add an object to the game."""
         obj.game = self
         super().add_object(obj)
@@ -3066,7 +3009,6 @@ class Game(ObjectHandler):
 
         self.add_object(Cursor(self))
         self.add_object(TableCenter(self))
-        self.add_object(BoxLid(self))
 
         if self.is_host:
             self.bag.reset()

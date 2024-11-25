@@ -13,11 +13,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 import trio
+from libcomponent.component import Component, ComponentManager, Event
 from pygame.locals import K_ESCAPE, KEYUP, QUIT, RESIZABLE, WINDOWRESIZED
 from pygame.rect import Rect
 
 from azul import conf, lang, objects, sprite
-from azul.component import Component, ComponentManager, Event
 from azul.statemachine import AsyncState, AsyncStateMachine
 from azul.vector import Vector2
 

@@ -34,26 +34,25 @@ from functools import partial
 from typing import TYPE_CHECKING, NoReturn
 
 import trio
-
-from azul import network
-from azul.base_io import StructFormat
-from azul.buffer import Buffer
-from azul.component import ComponentManager, Event, ExternalRaiseManager
-from azul.encrypted_event import EncryptedNetworkEventComponent
-from azul.encryption import (
-    RSAPrivateKey,
-    decrypt_token_and_secret,
-    generate_rsa_key,
-    generate_verify_token,
-    serialize_public_key,
+from libcomponent import network
+from libcomponent.base_io import StructFormat
+from libcomponent.buffer import Buffer
+from libcomponent.component import (
+    ComponentManager,
+    Event,
+    ExternalRaiseManager,
 )
+from libcomponent.network_utils import (
+    ServerClientNetworkEventComponent,
+    find_ip,
+)
+
 from azul.network_shared import (
     ADVERTISEMENT_IP,
     ADVERTISEMENT_PORT,
     DEFAULT_PORT,
     ClientBoundEvents,
     ServerBoundEvents,
-    find_ip,
 )
 from azul.state import State
 
@@ -61,7 +60,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
 
-class ServerClient(EncryptedNetworkEventComponent):
+class ServerClient(ServerClientNetworkEventComponent):
     """Server Client Network Event Component.
 
     When clients connect to server, this class handles the incoming
@@ -69,7 +68,7 @@ class ServerClient(EncryptedNetworkEventComponent):
     that are transferred over the network.
     """
 
-    __slots__ = ("client_id", "rsa_key", "verify_token")
+    __slots__ = ("client_id",)
 
     def __init__(self, client_id: int) -> None:
         """Initialize Server Client."""
@@ -94,9 +93,6 @@ class ServerClient(EncryptedNetworkEventComponent):
                 sbe.encryption_response: f"client[{self.client_id}]->encryption_response",
             },
         )
-
-        self.rsa_key: RSAPrivateKey | None = None
-        self.verify_token: bytes | None = None
 
     def bind_handlers(self) -> None:
         """Bind event handlers."""
@@ -176,23 +172,8 @@ class ServerClient(EncryptedNetworkEventComponent):
         await self.write_callback_ping()
 
     async def start_encryption_request(self) -> None:
-        """Start encryption request and raise as server[write]->encryption_request."""
-        if self.encryption_enabled:
-            raise RuntimeError("Encryption is already set up!")
-        self.rsa_key = generate_rsa_key()
-        self.verify_token = generate_verify_token()
-
-        public_key = self.rsa_key.public_key()
-
-        serialized_public_key = serialize_public_key(public_key)
-
-        buffer = Buffer()
-        buffer.write_bytearray(serialized_public_key)
-        buffer.write_bytearray(self.verify_token)
-
-        await self.write_event(
-            Event("server[write]->encryption_request", buffer),
-        )
+        """Start encryption request and raise as `server[write]->encryption_request`."""
+        await super().start_encryption_request()
 
         event = await self.read_event()
         if event.name != f"client[{self.client_id}]->encryption_response":
@@ -200,36 +181,6 @@ class ServerClient(EncryptedNetworkEventComponent):
                 f"Expected encryption response, got but {event.name!r}",
             )
         await self.handle_encryption_response(event)
-
-    async def handle_encryption_response(
-        self,
-        event: Event[bytearray],
-    ) -> None:
-        """Read encryption response."""
-        if self.rsa_key is None or self.verify_token is None:
-            raise RuntimeError(
-                "Was not expecting encryption response, request start not sent!",
-            )
-        if self.encryption_enabled:
-            raise RuntimeError("Encryption is already set up!")
-        buffer = Buffer(event.data)
-
-        encrypted_shared_secret = buffer.read_bytearray()
-        encrypted_verify_token = buffer.read_bytearray()
-
-        verify_token, shared_secret = decrypt_token_and_secret(
-            self.rsa_key,
-            encrypted_verify_token,
-            encrypted_shared_secret,
-        )
-
-        if verify_token != self.verify_token:
-            raise RuntimeError(
-                "Received verify token does not match sent verify token!",
-            )
-
-        # Start encrypting all future data
-        self.enable_encryption(shared_secret, verify_token)
 
 
 class GameServer(network.Server):
@@ -261,7 +212,6 @@ class GameServer(network.Server):
         self.state = State.new_game(0)
 
         self.client_players: dict[int, int] = {}
-        self.player_selections: dict[int, Pos] = {}
         self.players_can_interact: bool = False
 
         self.internal_singleplayer_mode = internal_singleplayer_mode
@@ -382,7 +332,6 @@ class GameServer(network.Server):
     def new_game_init(self) -> None:
         """Start new game."""
         self.client_players.clear()
-        self.player_selections.clear()
 
         ##        pieces = generate_pieces(*self.board_size)
         self.state = State.new_game(self.client_count)
@@ -550,8 +499,7 @@ class GameServer(network.Server):
         """Accept clients. Called by network.Server.serve."""
         if self.client_count == 0 and self.game_active():
             # Old game was running but everyone left, restart
-            self.state.pieces.clear()
-            # self.state = CheckersState(self.board_size, {})
+            print("TODO: restart")
         new_client_id = self.client_count
         print(
             f"{self.__class__.__name__}: client connected [client_id {new_client_id}]",

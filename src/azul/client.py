@@ -25,22 +25,16 @@ __license__ = "GNU General Public License Version 3"
 __version__ = "0.0.0"
 
 import struct
-import time
 import traceback
 from typing import TYPE_CHECKING
 
 import trio
+from libcomponent import network
+from libcomponent.base_io import StructFormat
+from libcomponent.buffer import Buffer
+from libcomponent.component import Event
+from libcomponent.network_utils import ClientNetworkEventComponent
 
-from azul import network
-from azul.base_io import StructFormat
-from azul.buffer import Buffer
-from azul.component import Event
-from azul.encrypted_event import EncryptedNetworkEventComponent
-from azul.encryption import (
-    deserialize_public_key,
-    encrypt_token_and_secret,
-    generate_shared_secret,
-)
 from azul.network_shared import (
     ADVERTISEMENT_IP,
     ADVERTISEMENT_PORT,
@@ -148,7 +142,7 @@ async def read_advertisements(
         return response
 
 
-class GameClient(EncryptedNetworkEventComponent):
+class GameClient(ClientNetworkEventComponent):
     """Game Client Network Event Component.
 
     This class handles connecting to the game server, transmitting events
@@ -325,18 +319,6 @@ class GameClient(EncryptedNetworkEventComponent):
                 return
             await self.raise_disconnect("Error connecting to server.")
 
-    async def read_callback_ping(self, event: Event[bytearray]) -> None:
-        """Read callback_ping event from server."""
-        ns = int.from_bytes(event.data)
-        now = int(time.time() * 1e9)
-        difference = now - ns
-
-        # print(f'{difference / 1e9 = } seconds')
-
-        await self.raise_event(
-            Event("callback_ping", difference),
-        )
-
     async def read_game_over(self, event: Event[bytearray]) -> None:
         """Read update_piece event from server."""
         buffer = Buffer(event.data)
@@ -366,40 +348,6 @@ class GameClient(EncryptedNetworkEventComponent):
         await self.raise_event(
             Event("game_playing_as", playing_as),
         )
-
-    async def write_encryption_response(
-        self,
-        shared_secret: bytes,
-        verify_token: bytes,
-    ) -> None:
-        """Write encryption response to server."""
-        buffer = Buffer()
-        buffer.write_bytearray(shared_secret)
-        buffer.write_bytearray(verify_token)
-
-        await self.write_event(Event("encryption_response->server", buffer))
-
-    async def read_encryption_request(self, event: Event[bytearray]) -> None:
-        """Read and handle encryption request from server."""
-        buffer = Buffer(event.data)
-
-        serialized_public_key = buffer.read_bytearray()
-        verify_token = buffer.read_bytearray()
-
-        public_key = deserialize_public_key(serialized_public_key)
-
-        shared_secret = generate_shared_secret()
-
-        encrypted_token, encrypted_secret = encrypt_token_and_secret(
-            public_key,
-            verify_token,
-            shared_secret,
-        )
-
-        await self.write_encryption_response(encrypted_secret, encrypted_token)
-
-        # Start encrypting all future data
-        self.enable_encryption(shared_secret, verify_token)
 
     async def handle_network_stop(self, event: Event[None]) -> None:
         """Send EOF if connected and close socket."""

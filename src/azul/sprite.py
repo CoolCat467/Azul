@@ -27,6 +27,7 @@ __version__ = "0.0.0"
 from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, TypedDict, cast
 
 import trio
+from libcomponent.component import Component, ComponentManager, Event
 from pygame.color import Color
 from pygame.event import Event as PygameEvent, event_name
 from pygame.mask import Mask, from_surface as mask_from_surface
@@ -34,7 +35,6 @@ from pygame.rect import Rect
 from pygame.sprite import LayeredDirty, LayeredUpdates, WeakDirtySprite
 from pygame.surface import Surface
 
-from azul.component import Component, ComponentManager, Event
 from azul.statemachine import AsyncStateMachine
 from azul.vector import Vector2
 
