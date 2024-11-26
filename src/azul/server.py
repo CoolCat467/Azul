@@ -54,7 +54,7 @@ from azul.network_shared import (
     ClientBoundEvents,
     ServerBoundEvents,
 )
-from azul.state import State
+from azul.state import Phase, State
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -196,7 +196,6 @@ class GameServer(network.Server):
         "client_count",
         "client_players",
         "internal_singleplayer_mode",
-        "player_selections",
         "players_can_interact",
         "running",
         "state",
@@ -208,7 +207,7 @@ class GameServer(network.Server):
         """Initialize server."""
         super().__init__("GameServer")
 
-        self.client_count: int
+        self.client_count: int = 0
         self.state = State.new_game(0)
 
         self.client_players: dict[int, int] = {}
@@ -323,18 +322,20 @@ class GameServer(network.Server):
         """Return teams given sorted client ids."""
         players: dict[int, int] = {}
         for idx, client_id in enumerate(client_ids):
-            if idx < 2:
-                players[client_id] = idx % 2
+            if idx < 4:
+                players[client_id] = idx % 4
             else:
                 players[client_id] = 0xFF  # Spectator
         return players
 
-    def new_game_init(self) -> None:
+    def new_game_init(self, varient_play: bool = False) -> None:
         """Start new game."""
         self.client_players.clear()
 
-        ##        pieces = generate_pieces(*self.board_size)
-        self.state = State.new_game(self.client_count)
+        self.state = State.new_game(
+            max(2, min(4, self.client_count)),
+            varient_play,
+        )
 
         # Why keep track of another object just to know client ID numbers
         # if we already have that with the components? No need!
@@ -360,7 +361,6 @@ class GameServer(network.Server):
         print(f"{self.__class__.__name__}: Closing old server clients")
         await self.stop_server()
         print(f"{self.__class__.__name__}: Starting Server")
-        self.client_count = 0
 
         host, port = event.data
 
@@ -381,8 +381,9 @@ class GameServer(network.Server):
                     Event(f"playing_as->network[{client_id}]", team),
                 )
 
-    async def handle_server_start_new_game(self, event: Event[None]) -> None:
+    async def handle_server_start_new_game(self, event: Event[bool]) -> None:
         """Handle game start."""
+        varient_play = event.data
         ##        # Delete all pieces from last state (shouldn't be needed but still.)
         ##        async with trio.open_nursery() as nursery:
         ##            for piece_pos, _piece_type in self.state.get_pieces():
@@ -393,7 +394,7 @@ class GameServer(network.Server):
 
         # Choose which team plays first
         # Using non-cryptographically secure random because it doesn't matter
-        self.new_game_init()
+        self.new_game_init(varient_play)
 
         ##        # Send create_piece events for all pieces
         ##        async with trio.open_nursery() as nursery:
@@ -413,7 +414,11 @@ class GameServer(network.Server):
             ),
         )
 
-    async def client_network_loop(self, client: ServerClient) -> None:
+    async def client_network_loop(
+        self,
+        client: ServerClient,
+        controls_lobby: bool = False,
+    ) -> None:
         """Network loop for given ServerClient.
 
         Could raise the following exceptions:
@@ -457,6 +462,7 @@ class GameServer(network.Server):
                 traceback.print_exception(exc)
                 break
             if event is not None:
+                # if controls_lobby:
                 # print(f"{client.name} client_network_loop tick")
                 # print(f"{client.name} {event = }")
                 await client.raise_event(event)
@@ -469,7 +475,7 @@ class GameServer(network.Server):
 
     def game_active(self) -> bool:
         """Return if game is active."""
-        return self.state.check_for_win() is None
+        return self.state.current_phase != Phase.end
 
     async def send_spectator_join_packets(
         self,
@@ -487,7 +493,7 @@ class GameServer(network.Server):
                 await client.raise_event(
                     Event(
                         "initial_config->network",
-                        (None, self.state.turn),
+                        (self.state.varient_play, self.state.current_turn),
                     ),
                 )
 
@@ -501,6 +507,10 @@ class GameServer(network.Server):
             # Old game was running but everyone left, restart
             print("TODO: restart")
         new_client_id = self.client_count
+
+        # Is controlling player?
+        is_zee_capitan = new_client_id == 0
+
         print(
             f"{self.__class__.__name__}: client connected [client_id {new_client_id}]",
         )
@@ -530,12 +540,13 @@ class GameServer(network.Server):
             if can_start and game_active:
                 await self.send_spectator_join_packets(client)
             with self.temporary_component(client):
-                if can_start and not game_active:
+                if can_start and not game_active and is_zee_capitan:
+                    varient_play = False
                     await self.raise_event(
-                        Event("server_send_game_start", None),
+                        Event("server_send_game_start", varient_play),
                     )
                 try:
-                    await self.client_network_loop(client)
+                    await self.client_network_loop(client, is_zee_capitan)
                 finally:
                     print(
                         f"{self.__class__.__name__}: client disconnected [client_id {new_client_id}]",

@@ -2516,9 +2516,9 @@ class SettingsState(MenuState):
         self.host_mode = True
         self.variant_play = False
 
-    def entry_actions(self) -> None:
+    async def entry_actions(self) -> None:
         """Add cursor object and tons of button and text objects to the game."""
-        super().entry_actions()
+        await super().entry_actions()
 
         def add_numbers(
             start: int,

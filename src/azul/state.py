@@ -181,6 +181,16 @@ def floor_fill_tile_excess(
     return excess
 
 
+class UnplacableTileError(Exception):
+    """Unplacable Tile Exception."""
+
+    __slots__ = ("y",)
+
+    def __init__(self, y: int) -> None:
+        """Remember Y position."""
+        self.y = y
+
+
 class PlayerData(NamedTuple):
     """Player data."""
 
@@ -392,9 +402,10 @@ class PlayerData(NamedTuple):
         for line_id, line in enumerate(self.lines):
             if line.count_ != self.get_line_max_count(line_id):
                 continue
-            right = max(0, line.count_ - 1)
-            if right:
-                for_box_lid[line.color] += right
+            left = max(0, line.count_ - 1)
+            if left:
+                for_box_lid[line.color] += left
+            # placed tile is stuck in the wall now
             x = tuple(map(int, new_wall[line_id, :])).index(-line.color - 1)
             score += self.get_score_from_wall_placement(
                 line.color,
@@ -461,6 +472,122 @@ class PlayerData(NamedTuple):
     def perform_end_of_game_scoring(self) -> Self:
         """Return new player data after performing end of game scoring."""
         return self._replace(score=self.get_end_of_game_score())
+
+    def get_manual_wall_tile_location(self) -> tuple[int, list[int]] | None:
+        """Return tuple of row and placable columns for wall tiling, or None if done.
+
+        Raises UnplacableTileError if no valid placement locations.
+        """
+        for y, line in enumerate(self.lines):
+            if line.color == Tile.blank:
+                continue
+            if line.count_ != self.get_line_max_count(y):
+                continue
+
+            valid_x: list[int] = []
+            for x, is_open in enumerate(self.wall[y, :] >= 0):
+                if not is_open:
+                    continue
+                if line.color in {Tile(int(v)) for v in self.wall[:, x]}:
+                    continue
+                valid_x.append(x)
+            if not valid_x:
+                raise UnplacableTileError(y)
+            return (y, valid_x)
+        return None
+
+    def handle_unplacable_wall_tiling(
+        self,
+        y: int,
+    ) -> tuple[Self, Counter[int]]:
+        """Return new player data and tiles for floor line."""
+        line = self.lines[y]
+        assert line.color != Tile.blank
+
+        new_lines = self.replace_pattern_line(
+            self.lines,
+            y,
+            PatternLine.blank(),
+        )
+
+        return self._replace(
+            lines=new_lines,
+        ).place_floor_line_tiles(line.color, line.count_)
+
+    def manual_wall_tiling_action(
+        self,
+        line_id: int,
+        x_pos: int,
+    ) -> tuple[Self, Counter[int]]:
+        """Wall tile given full line to given x position in that row.
+
+        Return new player data and any tiles to return to box lid.
+        """
+        for_box_lid: Counter[int] = Counter()
+
+        score = self.score
+        new_lines = self.lines
+        new_wall = self.wall.copy()
+
+        line = self.lines[line_id]
+
+        assert line.count_ == self.get_line_max_count(line_id)
+        assert line.color != Tile.blank
+        assert new_wall[line_id, x_pos] == Tile.blank
+
+        left = max(0, line.count_ - 1)
+        if left:
+            for_box_lid[line.color] += left
+        # placed tile is stuck in wall now
+        score += self.get_score_from_wall_placement(
+            line.color,
+            x_pos,
+            line_id,
+            new_wall,
+        )
+        new_wall[line_id, x_pos] = line.color
+        new_lines = self.replace_pattern_line(
+            new_lines,
+            line_id,
+            PatternLine.blank(),
+        )
+
+        return (
+            self._replace(
+                lines=new_lines,
+                wall=new_wall,
+                score=score,
+            ),
+            for_box_lid,
+        )
+
+    def finish_manual_wall_tiling(self) -> tuple[Self, Counter[int], bool]:
+        """Return new player data and tiles for box lid after performing automatic wall tiling."""
+        for_box_lid: Counter[int] = Counter()
+
+        score = self.score
+
+        score += self.get_floor_line_scoring()
+        if score < 0:
+            score = 0
+
+        # Get one tile from floor line
+        floor = self.floor.copy()
+        has_one = False
+        if floor[Tile.one]:
+            floor[Tile.one] -= 1
+            remove_counter_zeros(floor)
+            has_one = True
+        for_box_lid.update(floor)
+
+        return (
+            self._replace(
+                score=score,
+                floor=Counter(),
+            ),
+            for_box_lid,
+            has_one,
+        )
 
 
 def factory_displays_deepcopy(
@@ -717,9 +844,7 @@ class State(NamedTuple):
             current_phase=current_phase,
             current_turn=current_turn,
         )
-        if current_phase == Phase.wall_tiling:
-            if self.varient_play:
-                return new_state.start_manual_wall_tiling()
+        if current_phase == Phase.wall_tiling and not self.varient_play:
             return new_state.apply_auto_wall_tiling()
         return new_state
 
@@ -1022,17 +1147,85 @@ class State(NamedTuple):
             return new
         raise NotImplementedError()
 
-    def start_manual_wall_tiling(self) -> Self:
-        """Return new state after starting manual wall tiling."""
+    def _manual_wall_tiling_maybe_next_turn(self) -> Self:
         raise NotImplementedError()
         return self
+
+    def get_manual_wall_tiling_locations_for_player(
+        self,
+        player_id: int,
+    ) -> tuple[int, list[int]] | None | Self:
+        """Either return player wall tiling location data or new state.
+
+        New state when player cannot wall tile their current row.
+        """
+        current_player_data = self.player_data[player_id]
+
+        try:
+            return current_player_data.get_manual_wall_tile_location()
+        except UnplacableTileError as unplacable_exc:
+            # kind of hacky, but it works
+            y_position = unplacable_exc.y
+
+            new_player_data, for_box_lid = (
+                current_player_data.handle_unplacable_wall_tiling(y_position)
+            )
+
+            box_lid = self.box_lid.copy()
+
+            # Add overflow tiles to box lid
+            assert all(x > 0 for x in for_box_lid.values()), for_box_lid
+            box_lid.update(for_box_lid)
+
+            # Update player data
+            player_data = player_data_deepcopy(self.player_data)
+            player_data[player_id] = new_player_data
+
+            return self._replace(
+                box_lid=box_lid,
+                player_data=player_data,
+            )._manual_wall_tiling_maybe_next_turn()
+
+    def manual_wall_tiling_action(
+        self,
+        player_id: int,
+        line_id: int,
+        x_pos: int,
+    ) -> Self:
+        """Perform manual wall tiling action."""
+        current_player_data = self.player_data[player_id]
+
+        new_player_data, for_box_lid = (
+            current_player_data.manual_wall_tiling_action(line_id, x_pos)
+        )
+        box_lid = self.box_lid.copy()
+
+        # Add overflow tiles to box lid
+        assert all(x > 0 for x in for_box_lid.values()), for_box_lid
+        box_lid.update(for_box_lid)
+
+        # Update player data
+        player_data = player_data_deepcopy(self.player_data)
+        player_data[player_id] = new_player_data
+
+        new_state = self._replace(
+            box_lid=box_lid,
+            player_data=player_data,
+        )
+
+        result = new_state.get_manual_wall_tiling_locations_for_player(
+            player_id,
+        )
+        if isinstance(result, tuple) or result is None:
+            return new_state._manual_wall_tiling_maybe_next_turn()
+        return result._manual_wall_tiling_maybe_next_turn()
 
 
 def run() -> None:
     """Run program."""
     from market_api import pretty_print_response as pprint
 
-    random.seed(2)
+    random.seed(0)
     state = State.new_game(2)
     ticks = 0
     try:

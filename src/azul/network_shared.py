@@ -24,9 +24,12 @@ __author__ = "CoolCat467"
 __license__ = "GNU General Public License Version 3"
 
 
+from collections import Counter
 from enum import IntEnum, auto
-from typing import Final, NamedTuple, TypeAlias
+from typing import Final, TypeAlias
 
+from libcomponent.base_io import StructFormat
+from libcomponent.buffer import Buffer
 from mypy_extensions import u8
 
 ADVERTISEMENT_IP: Final = "224.0.2.60"
@@ -37,11 +40,28 @@ DEFAULT_PORT: Final = 31613
 Pos: TypeAlias = tuple[u8, u8]
 
 
-class TickEventData(NamedTuple):
-    """Tick Event Data."""
+def encode_numeric_uint8_counter(counter: Counter[int]) -> Buffer:
+    """Return buffer from uint8 counter (both keys and values)."""
+    buffer = Buffer()
 
-    time_passed: float
-    fps: float
+    for key, value in counter.items():
+        assert isinstance(key, int)
+        buffer.write_value(StructFormat.UBYTE, key)
+        buffer.write_value(StructFormat.UBYTE, value)
+    return buffer
+
+
+def decode_numeric_uint8_counter(buffer: Buffer) -> Counter[int]:
+    """Return buffer from uint8 counter (both keys and values)."""
+    data: dict[int, int] = {}
+
+    for _ in range(0, len(buffer), 2):
+        key = buffer.read_value(StructFormat.UBYTE)
+        value = buffer.read_value(StructFormat.UBYTE)
+        assert key not in data
+        data[key] = value
+
+    return Counter(data)
 
 
 class ClientBoundEvents(IntEnum):
@@ -51,15 +71,6 @@ class ClientBoundEvents(IntEnum):
     callback_ping = auto()
     initial_config = auto()
     playing_as = auto()
-    create_piece = auto()
-    select_piece = auto()
-    create_tile = auto()
-    delete_tile = auto()
-    animation_state = auto()
-    delete_piece_animation = auto()
-    update_piece_animation = auto()
-    move_piece_animation = auto()
-    action_complete = auto()
     game_over = auto()
 
 
@@ -67,5 +78,3 @@ class ServerBoundEvents(IntEnum):
     """Server bound event IDs."""
 
     encryption_response = 0
-    select_piece = auto()
-    select_tile = auto()
