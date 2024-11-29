@@ -650,6 +650,20 @@ class State(NamedTuple):
     player_data: dict[int, PlayerData]
 
     @classmethod
+    def blank(cls) -> Self:
+        return cls(
+            varient_play=False,
+            current_phase=Phase.end,
+            bag=Counter(),
+            box_lid=Counter(),
+            table_center=Counter(),
+            factory_displays={},
+            cursor_contents=Counter(),
+            current_turn=0,
+            player_data={},
+        )
+
+    @classmethod
     def new_game(cls, player_count: int, varient_play: bool = False) -> Self:
         """Return state of a new game."""
         factory_count = player_count * 2 + 1

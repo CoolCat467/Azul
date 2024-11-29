@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# Checkers Game Server
+# Azul Game Server
 
-"""Checkers Game Server."""
+"""Azul Game Server."""
 
 # Programmed by CoolCat467
 
@@ -27,7 +27,6 @@ __author__ = "CoolCat467"
 __license__ = "GNU General Public License Version 3"
 __version__ = "0.0.0"
 
-import time
 import traceback
 from collections import deque
 from functools import partial
@@ -53,11 +52,15 @@ from azul.network_shared import (
     DEFAULT_PORT,
     ClientBoundEvents,
     ServerBoundEvents,
+    encode_int8_array,
 )
 from azul.state import Phase, State
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+
+    from numpy import int8
+    from numpy.typing import NDArray
 
 
 # cursor_set_movement_mode
@@ -87,8 +90,9 @@ class ServerClient(ServerClientNetworkEventComponent):
                 "server[write]->encryption_request": cbe.encryption_request,
                 "server[write]->callback_ping": cbe.callback_ping,
                 "server[write]->initial_config": cbe.initial_config,
-                "server[write]->game_over": cbe.game_over,
                 "server[write]->playing_as": cbe.playing_as,
+                "server[write]->game_over": cbe.game_over,
+                "server[write]->board_data": cbe.board_data,
             },
         )
         sbe = ServerBoundEvents
@@ -103,23 +107,32 @@ class ServerClient(ServerClientNetworkEventComponent):
         super().bind_handlers()
         self.register_handlers(
             {
-                f"callback_ping->network[{self.client_id}]": self.handle_callback_ping,
                 f"client[{self.client_id}]->encryption_response": self.handle_encryption_response,
+                f"callback_ping->network[{self.client_id}]": self.handle_callback_ping,
                 "initial_config->network": self.handle_initial_config,
-                "game_over->network": self.handle_game_over,
                 f"playing_as->network[{self.client_id}]": self.handle_playing_as,
+                "game_over->network": self.handle_game_over,
+                "board_data->network": self.handle_board_data,
             },
         )
 
-    async def handle_game_over(self, event: Event[int]) -> None:
-        """Read game over event and reraise as server[write]->game_over."""
-        winner = event.data
+    async def start_encryption_request(self) -> None:
+        """Start encryption request and raise as `server[write]->encryption_request`."""
+        await super().start_encryption_request()
 
-        buffer = Buffer()
+        event = await self.read_event()
+        if event.name != f"client[{self.client_id}]->encryption_response":
+            raise RuntimeError(
+                f"Expected encryption response, got but {event.name!r}",
+            )
+        await self.handle_encryption_response(event)
 
-        buffer.write_value(StructFormat.UBYTE, winner)
-
-        await self.write_event(Event("server[write]->game_over", buffer))
+    async def handle_callback_ping(
+        self,
+        _: Event[None],
+    ) -> None:
+        """Reraise as server[write]->callback_ping."""
+        await self.write_callback_ping()
 
     async def handle_initial_config(
         self,
@@ -148,48 +161,32 @@ class ServerClient(ServerClientNetworkEventComponent):
         buffer.write_value(StructFormat.UBYTE, playing_as)
         await self.write_event(Event("server[write]->playing_as", buffer))
 
-    async def write_callback_ping(self) -> None:
-        """Write callback_ping packet to client.
+    async def handle_game_over(self, event: Event[int]) -> None:
+        """Read game over event and reraise as server[write]->game_over."""
+        winner = event.data
 
-        Could raise the following exceptions:
-          trio.BrokenResourceError: if something has gone wrong, and the stream
-            is broken.
-          trio.ClosedResourceError: if stream was previously closed
-
-        Listed as possible but probably not because of write lock:
-          trio.BusyResourceError: if another task is using :meth:`write`
-        """
         buffer = Buffer()
 
-        # Try to be as accurate with time as possible
-        await self.wait_write_might_not_block()
-        ns = int(time.time() * 1e9)
-        # Use as many bits as time needs, write_buffer handles size for us.
-        buffer.write(ns.to_bytes(-(-ns.bit_length() // 8), "big"))
+        buffer.write_value(StructFormat.UBYTE, winner)
 
-        await self.write_event(Event("server[write]->callback_ping", buffer))
+        await self.write_event(Event("server[write]->game_over", buffer))
 
-    async def handle_callback_ping(
+    async def handle_board_data(
         self,
-        _: Event[None],
+        event: Event[tuple[int, NDArray[int8]]],
     ) -> None:
-        """Reraise as server[write]->callback_ping."""
-        await self.write_callback_ping()
+        """Reraise as server[write]->board_data."""
+        player_id, array = event.data
 
-    async def start_encryption_request(self) -> None:
-        """Start encryption request and raise as `server[write]->encryption_request`."""
-        await super().start_encryption_request()
+        buffer = Buffer()
+        buffer.write_value(StructFormat.UBYTE, player_id)
+        buffer.extend(encode_int8_array(array))
 
-        event = await self.read_event()
-        if event.name != f"client[{self.client_id}]->encryption_response":
-            raise RuntimeError(
-                f"Expected encryption response, got but {event.name!r}",
-            )
-        await self.handle_encryption_response(event)
+        await self.write_event(Event("server[write]->board_data", buffer))
 
 
 class GameServer(network.Server):
-    """Checkers server.
+    """Azul server.
 
     Handles accepting incoming connections from clients and handles
     main game logic via State subclass above.
@@ -213,7 +210,7 @@ class GameServer(network.Server):
         super().__init__("GameServer")
 
         self.client_count: int = 0
-        self.state = State.new_game(0)
+        self.state = State.blank()
 
         self.client_players: dict[int, int] = {}
         self.players_can_interact: bool = False
@@ -410,8 +407,6 @@ class GameServer(network.Server):
         ##                    Event("create_piece->network", (piece_pos, piece_type)),
         ##                )
 
-        await self.transmit_playing_as()
-
         # Raise initial config event with board size and initial turn.
         await self.raise_event(
             Event(
@@ -424,6 +419,24 @@ class GameServer(network.Server):
                 ),
             ),
         )
+
+        print(f"{self.state.player_data = }")
+
+        # Transmit board data for all players
+        async with trio.open_nursery() as nursery:
+            for player_id, player_data in self.state.player_data.items():
+                nursery.start_soon(
+                    self.raise_event,
+                    Event(
+                        "board_data->network",
+                        (
+                            player_id,
+                            player_data.wall,
+                        ),
+                    ),
+                )
+
+        await self.transmit_playing_as()
 
     async def client_network_loop(
         self,
@@ -555,7 +568,8 @@ class GameServer(network.Server):
             assert client.encryption_enabled
 
             if can_start and game_active:
-                await self.send_spectator_join_packets(client)
+                print("TODO: Joined as spectator")
+                # await self.send_spectator_join_packets(client)
             with self.temporary_component(client):
                 if can_start and not game_active and is_zee_capitan:
                     varient_play = False

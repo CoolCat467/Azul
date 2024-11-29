@@ -40,6 +40,7 @@ from azul.network_shared import (
     ADVERTISEMENT_PORT,
     ClientBoundEvents,
     ServerBoundEvents,
+    decode_int8_array,
 )
 
 if TYPE_CHECKING:
@@ -168,11 +169,12 @@ class GameClient(ClientNetworkEventComponent):
         cbe = ClientBoundEvents
         self.register_read_network_events(
             {
+                cbe.encryption_request: "server->encryption_request",
                 cbe.callback_ping: "server->callback_ping",
-                cbe.game_over: "server->game_over",
                 cbe.initial_config: "server->initial_config",
                 cbe.playing_as: "server->playing_as",
-                cbe.encryption_request: "server->encryption_request",
+                cbe.game_over: "server->game_over",
+                cbe.board_data: "server->board_data",
             },
         )
 
@@ -184,14 +186,14 @@ class GameClient(ClientNetworkEventComponent):
         super().bind_handlers()
         self.register_handlers(
             {
+                "server->encryption_request": self.read_encryption_request,
                 "server->callback_ping": self.read_callback_ping,
-                "server->game_over": self.read_game_over,
                 "server->initial_config": self.read_initial_config,
                 "server->playing_as": self.read_playing_as,
-                "server->encryption_request": self.read_encryption_request,
-                "network_stop": self.handle_network_stop,
+                "server->game_over": self.read_game_over,
+                "server->board_data": self.read_board_data,
                 "client_connect": self.handle_client_connect,
-                # f"client[{self.name}]_read_event": self.handle_read_event,
+                "network_stop": self.handle_network_stop,
             },
         )
 
@@ -308,15 +310,6 @@ class GameClient(ClientNetworkEventComponent):
                 return
             await self.raise_disconnect("Error connecting to server.")
 
-    async def read_game_over(self, event: Event[bytearray]) -> None:
-        """Read update_piece event from server."""
-        buffer = Buffer(event.data)
-
-        winner: u8 = buffer.read_value(StructFormat.UBYTE)
-
-        await self.raise_event(Event("game_winner", winner))
-        self.running = False
-
     async def read_initial_config(self, event: Event[bytearray]) -> None:
         """Read initial_config event from server."""
         buffer = Buffer(event.data)
@@ -347,6 +340,24 @@ class GameClient(ClientNetworkEventComponent):
         await self.raise_event(
             Event("game_playing_as", playing_as),
         )
+
+    async def read_game_over(self, event: Event[bytearray]) -> None:
+        """Read game_over event from server."""
+        buffer = Buffer(event.data)
+
+        winner: u8 = buffer.read_value(StructFormat.UBYTE)
+
+        await self.raise_event(Event("game_winner", winner))
+        self.running = False
+
+    async def read_board_data(self, event: Event[bytearray]) -> None:
+        """Read board_data event from server."""
+        buffer = Buffer(event.data)
+
+        player_id: u8 = buffer.read_value(StructFormat.UBYTE)
+        array = decode_int8_array(buffer, (5, 5))
+
+        await self.raise_event(Event("game_board_data", (player_id, array)))
 
     async def handle_network_stop(self, event: Event[None]) -> None:
         """Send EOF if connected and close socket."""

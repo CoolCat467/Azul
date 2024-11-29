@@ -26,11 +26,15 @@ __license__ = "GNU General Public License Version 3"
 
 from collections import Counter
 from enum import IntEnum, auto
-from typing import Final, TypeAlias
+from typing import TYPE_CHECKING, Final, TypeAlias
 
 from libcomponent.base_io import StructFormat
 from libcomponent.buffer import Buffer
 from mypy_extensions import u8
+from numpy import int8, zeros
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 ADVERTISEMENT_IP: Final = "224.0.2.60"
 ADVERTISEMENT_PORT: Final = 4445
@@ -47,6 +51,7 @@ def encode_numeric_uint8_counter(counter: Counter[int]) -> Buffer:
     for key, value in counter.items():
         assert isinstance(key, int)
         buffer.write_value(StructFormat.UBYTE, key)
+        assert value >= 0
         buffer.write_value(StructFormat.UBYTE, value)
     return buffer
 
@@ -64,6 +69,26 @@ def decode_numeric_uint8_counter(buffer: Buffer) -> Counter[int]:
     return Counter(data)
 
 
+def encode_int8_array(array: NDArray[int8]) -> Buffer:
+    """Return buffer from int8 array flat values."""
+    buffer = Buffer()
+
+    for value in array.flat:
+        buffer.write_value(StructFormat.BYTE, value)
+
+    return buffer
+
+
+def decode_int8_array(buffer: Buffer, size: tuple[int, ...]) -> NDArray[int8]:
+    """Return flattened int8 array from buffer."""
+    array = zeros(size, dtype=int8)
+
+    for index in range(array.size):
+        array.flat[index] = buffer.read_value(StructFormat.BYTE)
+
+    return array
+
+
 class ClientBoundEvents(IntEnum):
     """Client bound event IDs."""
 
@@ -72,6 +97,7 @@ class ClientBoundEvents(IntEnum):
     initial_config = auto()
     playing_as = auto()
     game_over = auto()
+    board_data = auto()
 
 
 class ServerBoundEvents(IntEnum):
