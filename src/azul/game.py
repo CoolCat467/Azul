@@ -869,32 +869,55 @@ class FloorLine(Row):
             self.text.render(surface)
 
 
-class Factory(Grid):
+class Factory(TileRenderer):
     """Represents a Factory."""
 
+    __slots__ = ("factory_id", "tiles")
     color = WHITE
     outline = BLUE
 
     def __init__(self, factory_id: int) -> None:
         """Initialize factory."""
-        super().__init__(f"Factory_{factory_id}", (2, 2), background=None)
+        super().__init__(f"Factory_{factory_id}", background=None)
 
-        self.number = factory_id
+        self.factory_id = factory_id
+        self.tiles: Counter[int] = Counter()
 
-        self.redraw()
-        self.visible = True
+        self.update_location_on_resize = True
 
     def __repr__(self) -> str:
         """Return representation of self."""
         return f"{self.__class__.__name__}({self.number})"
 
-    def clear_image(
+    def bind_handlers(self) -> None:
+        """Register event handlers."""
+        self.register_handlers(
+            {
+                "game_factory_data": self.handle_factory_data,
+            },
+        )
+
+    async def handle_factory_data(
         self,
-        tile_size: tuple[int, int],
-        extra_space: tuple[int, int] | None,
+        event: Event[tuple[int, Counter[int]]],
     ) -> None:
-        """Clear self.image and draw circles."""
-        super().clear_image(tile_size, extra_space)
+        """Handle `game_factory_data` event."""
+        factory_id, tiles = event.data
+
+        if factory_id != self.factory_id:
+            await trio.lowlevel.checkpoint()
+            return
+
+        self.tiles = tiles
+        self.update_image()
+        self.visible = True
+
+        await trio.lowlevel.checkpoint()
+
+    def update_image(self) -> None:
+        """Update image."""
+        self.clear_image((2, 2), extra=(16, 16))
+
         radius = 29
         pygame.draw.circle(
             self.image,
@@ -909,9 +932,9 @@ class Factory(Grid):
             math.ceil(radius * 0.9),
         )
 
-    def redraw(self) -> None:
-        """Redraw this factory."""
-        super().update_image(offset=(8, 8), extra_space=(16, 16))
+        for index, tile_color in enumerate(self.tiles.elements()):
+            y, x = divmod(index, 2)
+            self.blit_tile(tile_color, (x, y), (8, 8))
 
     def get_tile_point(
         self,
@@ -1839,11 +1862,13 @@ class PlayJoiningState(GameState):
 class PlayState(GameState):
     """Game Play State."""
 
-    __slots__ = ("exit_data",)
+    __slots__ = ("current_turn", "exit_data")
 
     def __init__(self) -> None:
         """Initialize Play State."""
         super().__init__("play")
+
+        self.current_turn: int = 0
 
         # (0: normal | 1: error) <error message> <? handled>
         self.exit_data: tuple[int, str, bool] | None = None
@@ -1887,10 +1912,9 @@ class PlayState(GameState):
         event: Event[tuple[bool, int, int, int]],
     ) -> None:
         """Handle `game_initial_config` event."""
-        varient_play, player_count, factory_count, current_turn = event.data
-
-        print("handle_game_initial_config")
-        print((varient_play, player_count, factory_count, current_turn))
+        varient_play, player_count, factory_count, self.current_turn = (
+            event.data
+        )
 
         center = Vector2.from_iter(SCREEN_SIZE) // 2
 
@@ -1907,7 +1931,6 @@ class PlayState(GameState):
             self.group_add(factory)
 
         # Add players
-        # TODO: Do it properly
         for index, degrees in enumerate(range(0, 360, 360 // player_count)):
             board = Board(index)
             board.location = (

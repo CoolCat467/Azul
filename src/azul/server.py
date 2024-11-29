@@ -53,10 +53,12 @@ from azul.network_shared import (
     ClientBoundEvents,
     ServerBoundEvents,
     encode_int8_array,
+    encode_numeric_uint8_counter,
 )
 from azul.state import Phase, State
 
 if TYPE_CHECKING:
+    from collections import Counter
     from collections.abc import Awaitable, Callable
 
     from numpy import int8
@@ -93,6 +95,7 @@ class ServerClient(ServerClientNetworkEventComponent):
                 "server[write]->playing_as": cbe.playing_as,
                 "server[write]->game_over": cbe.game_over,
                 "server[write]->board_data": cbe.board_data,
+                "server[write]->factory_data": cbe.factory_data,
             },
         )
         sbe = ServerBoundEvents
@@ -113,6 +116,7 @@ class ServerClient(ServerClientNetworkEventComponent):
                 f"playing_as->network[{self.client_id}]": self.handle_playing_as,
                 "game_over->network": self.handle_game_over,
                 "board_data->network": self.handle_board_data,
+                "factory_data->network": self.handle_factory_data,
             },
         )
 
@@ -183,6 +187,19 @@ class ServerClient(ServerClientNetworkEventComponent):
         buffer.extend(encode_int8_array(array))
 
         await self.write_event(Event("server[write]->board_data", buffer))
+
+    async def handle_factory_data(
+        self,
+        event: Event[tuple[int, Counter[int]]],
+    ) -> None:
+        """Reraise as server[write]->factory_data."""
+        factory_id, tiles = event.data
+
+        buffer = Buffer()
+        buffer.write_value(StructFormat.UBYTE, factory_id)
+        buffer.extend(encode_numeric_uint8_counter(tiles))
+
+        await self.write_event(Event("server[write]->factory_data", buffer))
 
 
 class GameServer(network.Server):
@@ -420,10 +437,8 @@ class GameServer(network.Server):
             ),
         )
 
-        print(f"{self.state.player_data = }")
-
-        # Transmit board data for all players
         async with trio.open_nursery() as nursery:
+            # Transmit board data
             for player_id, player_data in self.state.player_data.items():
                 nursery.start_soon(
                     self.raise_event,
@@ -432,6 +447,21 @@ class GameServer(network.Server):
                         (
                             player_id,
                             player_data.wall,
+                        ),
+                    ),
+                )
+            # Transmit factory data
+            for (
+                factory_id,
+                factory_tiles,
+            ) in self.state.factory_displays.items():
+                nursery.start_soon(
+                    self.raise_event,
+                    Event(
+                        "factory_data->network",
+                        (
+                            factory_id,
+                            factory_tiles,
                         ),
                     ),
                 )

@@ -41,6 +41,7 @@ from azul.network_shared import (
     ClientBoundEvents,
     ServerBoundEvents,
     decode_int8_array,
+    decode_numeric_uint8_counter,
 )
 
 if TYPE_CHECKING:
@@ -175,6 +176,7 @@ class GameClient(ClientNetworkEventComponent):
                 cbe.playing_as: "server->playing_as",
                 cbe.game_over: "server->game_over",
                 cbe.board_data: "server->board_data",
+                cbe.factory_data: "server->factory_data",
             },
         )
 
@@ -192,6 +194,7 @@ class GameClient(ClientNetworkEventComponent):
                 "server->playing_as": self.read_playing_as,
                 "server->game_over": self.read_game_over,
                 "server->board_data": self.read_board_data,
+                "server->factory_data": self.read_factory_data,
                 "client_connect": self.handle_client_connect,
                 "network_stop": self.handle_network_stop,
             },
@@ -351,13 +354,22 @@ class GameClient(ClientNetworkEventComponent):
         self.running = False
 
     async def read_board_data(self, event: Event[bytearray]) -> None:
-        """Read board_data event from server."""
+        """Read board_data event from server, reraise as `game_board_data`."""
         buffer = Buffer(event.data)
 
         player_id: u8 = buffer.read_value(StructFormat.UBYTE)
         array = decode_int8_array(buffer, (5, 5))
 
         await self.raise_event(Event("game_board_data", (player_id, array)))
+
+    async def read_factory_data(self, event: Event[bytearray]) -> None:
+        """Read factory_data event from server, reraise as `game_factory_data`."""
+        buffer = Buffer(event.data)
+
+        factory_id: u8 = buffer.read_value(StructFormat.UBYTE)
+        tiles = decode_numeric_uint8_counter(buffer)
+
+        await self.raise_event(Event("game_factory_data", (factory_id, tiles)))
 
     async def handle_network_stop(self, event: Event[None]) -> None:
         """Send EOF if connected and close socket."""

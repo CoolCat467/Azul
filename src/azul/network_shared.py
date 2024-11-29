@@ -44,25 +44,44 @@ DEFAULT_PORT: Final = 31613
 Pos: TypeAlias = tuple[u8, u8]
 
 
-def encode_numeric_uint8_counter(counter: Counter[int]) -> Buffer:
-    """Return buffer from uint8 counter (both keys and values)."""
+def encode_tile_count(tile_color: int, tile_count: int) -> Buffer:
+    """Return buffer from tile color and count."""
     buffer = Buffer()
 
+    buffer.write_value(StructFormat.UBYTE, tile_color)
+    buffer.write_value(StructFormat.UBYTE, tile_count)
+
+    return buffer
+
+
+def decode_tile_count(buffer: Buffer) -> tuple[int, int]:
+    """Read and return tile color and count from buffer."""
+    tile_color = buffer.read_value(StructFormat.UBYTE)
+    tile_count = buffer.read_value(StructFormat.UBYTE)
+
+    return (tile_color, tile_count)
+
+
+def encode_numeric_uint8_counter(counter: Counter[int]) -> Buffer:
+    """Return buffer from uint8 counter."""
+    buffer = Buffer()
+
+    buffer.write_value(StructFormat.UBYTE, len(counter))
     for key, value in counter.items():
         assert isinstance(key, int)
-        buffer.write_value(StructFormat.UBYTE, key)
         assert value >= 0
-        buffer.write_value(StructFormat.UBYTE, value)
+        buffer.extend(encode_tile_count(key, value))
+
     return buffer
 
 
 def decode_numeric_uint8_counter(buffer: Buffer) -> Counter[int]:
-    """Return buffer from uint8 counter (both keys and values)."""
+    """Read and return uint8 counter from buffer."""
     data: dict[int, int] = {}
 
-    for _ in range(0, len(buffer), 2):
-        key = buffer.read_value(StructFormat.UBYTE)
-        value = buffer.read_value(StructFormat.UBYTE)
+    pair_count = buffer.read_value(StructFormat.UBYTE)
+    for _ in range(pair_count):
+        key, value = decode_tile_count(buffer)
         assert key not in data
         data[key] = value
 
@@ -74,7 +93,7 @@ def encode_int8_array(array: NDArray[int8]) -> Buffer:
     buffer = Buffer()
 
     for value in array.flat:
-        buffer.write_value(StructFormat.BYTE, value)
+        buffer.write_value(StructFormat.BYTE, int(value))
 
     return buffer
 
@@ -98,6 +117,7 @@ class ClientBoundEvents(IntEnum):
     playing_as = auto()
     game_over = auto()
     board_data = auto()
+    factory_data = auto()
 
 
 class ServerBoundEvents(IntEnum):
