@@ -634,14 +634,26 @@ class TileRenderer(sprite.Sprite):
 
         self.background = background
 
-    def clear_image(self, tile_dimensions: tuple[int, int]) -> None:
+    def clear_image(
+        self,
+        tile_dimensions: tuple[int, int],
+        extra: tuple[int, int] | None = None,
+    ) -> None:
         """Reset self.image using tile_dimensions tuple and fills with self.background. Also updates self.width_height."""
         tile_width, tile_height = tile_dimensions
         tile_full = self.tile_size + self.tile_separation
+
+        ox = self.tile_separation
+        oy = self.tile_separation
+
+        if extra is not None:
+            ox += extra[0]
+            oy += extra[1]
+
         self.image = get_tile_container_image(
             (
-                round(tile_width * tile_full + self.tile_separation),
-                round(tile_height * tile_full + self.tile_separation),
+                round(tile_width * tile_full + ox),
+                round(tile_height * tile_full + oy),
             ),
             self.background,
         )
@@ -731,7 +743,10 @@ class Cursor(TileRenderer):
     - cursor_drag
     - cursor_reached_destination
     - cursor_set_destination
-    - cursor_set_location
+    - cursor_set_movement_mode
+
+    Sometimes registered:
+    - PygameMouseMotion
     """
 
     __slots__ = ("tiles",)
@@ -771,7 +786,7 @@ class Cursor(TileRenderer):
                 "cursor_drag": self.handle_cursor_drag,
                 "cursor_reached_destination": self.handle_cursor_reached_destination,
                 "cursor_set_destination": self.handle_cursor_set_destination,
-                "cursor_set_location": self.handle_cursor_set_location,
+                "cursor_set_movement_mode": self.handle_cursor_set_movement_mode,
             },
         )
 
@@ -813,13 +828,28 @@ class Cursor(TileRenderer):
         self.move_to_front()
         await trio.lowlevel.checkpoint()
 
-    async def handle_cursor_set_location(
+    async def handle_pygame_mouse_motion(
         self,
-        event: Event[tuple[int, int]],
+        event: Event[sprite.PygameMouseMotion],
     ) -> None:
         """Set location to event data."""
         self.move_to_front()
-        self.location = event.data
+        self.location = event.data["pos"]
+        await trio.lowlevel.checkpoint()
+
+    async def handle_cursor_set_movement_mode(
+        self,
+        event: Event[bool],
+    ) -> None:
+        """Change cursor movement mode. True if client mode, False if server mode."""
+        client_mode = event.data
+        if client_mode:
+            self.register_handler(
+                "PygameMouseMotion",
+                self.handle_pygame_mouse_motion,
+            )
+        else:
+            self.unregister_handler_type("PygameMouseMotion")
         await trio.lowlevel.checkpoint()
 
     def get_held_count(self) -> int:
@@ -881,16 +911,20 @@ class Grid(TileRenderer):
         x, y = xy
         return int(self.data[y, x])
 
-    def update_image(self) -> None:
+    def update_image(
+        self,
+        offset: tuple[int, int] | None = None,
+        extra_space: tuple[int, int] | None = None,
+    ) -> None:
         """Update self.image."""
-        self.clear_image(self.size)
+        self.clear_image(self.size, extra_space)
 
         width, height = self.size
 
         for y in range(height):
             for x in range(width):
                 pos = (x, y)
-                self.blit_tile(self.get_tile(pos), pos)
+                self.blit_tile(self.get_tile(pos), pos, offset)
 
     def fake_tile_exists(self, xy: tuple[int, int]) -> bool:
         """Return if tile at given position is a fake tile."""
@@ -928,9 +962,9 @@ class Board(Grid):
 
     __slots__ = ("additions", "variant_play", "wall_tiling")
 
-    def __init__(self, variant_play: bool = False) -> None:
+    def __init__(self, name: str, variant_play: bool = False) -> None:
         """Initialize player's board."""
-        super().__init__("Board", (5, 5), background=ORANGE)
+        super().__init__(name, (5, 5), background=ORANGE)
 
         self.variant_play = variant_play
         self.additions: dict[int, int | None] = {}
@@ -1504,98 +1538,55 @@ class FloorLine(Row):
 class Factory(Grid):
     """Represents a Factory."""
 
-    size = (2, 2)
     color = WHITE
     outline = BLUE
-    out_size = 0.1
 
     def __init__(self, factory_id: int) -> None:
         """Initialize factory."""
-        super().__init__(self.size, background=None)
-        self.number = factory_id
-        self.name = f"Factory{self.number}"
+        super().__init__(f"Factory_{factory_id}", (2, 2), background=None)
 
-        self.radius = math.ceil(
-            self.tile_full * self.size[0] * self.size[1] / 3 + 3,
-        )
+        self.number = factory_id
+
+        self.redraw()
+        self.visible = True
 
     def __repr__(self) -> str:
         """Return representation of self."""
         return f"{self.__class__.__name__}({self.number})"
 
-    def add_circle(self, surface: pygame.surface.Surface) -> None:
-        """Add circle to self.image."""
-        rad = math.ceil(self.radius)
-        surf = pygame.surface.Surface((2 * rad, 2 * rad), SRCALPHA)
-        pygame.draw.circle(surf, self.outline, (rad, rad), rad)
+    def clear_image(
+        self,
+        tile_size: tuple[int, int],
+        extra_space: tuple[int, int] | None,
+    ) -> None:
+        """Clear self.image and draw circles."""
+        super().clear_image(tile_size, extra_space)
+        radius = 29
         pygame.draw.circle(
-            surf,
+            self.image,
+            self.outline,
+            (radius, radius),
+            radius,
+        )
+        pygame.draw.circle(
+            self.image,
             self.color,
-            (rad, rad),
-            math.ceil(rad * (1 - self.out_size)),
+            (radius, radius),
+            math.ceil(radius * 0.9),
         )
 
-        surface.blit(
-            surf,
-            (
-                round(self.location[0] - self.radius),
-                round(self.location[1] - self.radius),
-            ),
+    def redraw(self) -> None:
+        """Redraw this factory."""
+        super().update_image(offset=(8, 8), extra_space=(16, 16))
+
+    def get_tile_point(
+        self,
+        screen_location: tuple[int, int] | Vector2,
+    ) -> tuple[int, int] | None:
+        """Get tile point accounting for offset."""
+        return super().get_tile_point(
+            Vector2.from_iter(screen_location) - (8, 8),
         )
-
-    def render(self, surface: pygame.surface.Surface) -> None:
-        """Render Factory."""
-        if not self.hidden:
-            self.add_circle(surface)
-        super().render(surface)
-
-    def fill(self, tiles: list[int]) -> None:
-        """Fill self with tiles. Will raise exception if insufficiant tiles."""
-        if len(tiles) < self.size[0] * self.size[1]:
-            size = self.size[0] * self.size[1]
-            raise RuntimeError(
-                f"Insufficiant quantity of tiles! Needs {size}!",
-            )
-        for y in range(self.size[1]):
-            for tile, x in zip(
-                (tiles.pop() for i in range(self.size[0])),
-                range(self.size[0]),
-                strict=True,
-            ):
-                self.place_tile((x, y), tile)
-        if tiles:
-            raise RuntimeError("Too many tiles!")
-
-    def grab(self) -> list[int]:
-        """Return all tiles on this factory."""
-        return [
-            tile
-            for tile in (
-                self.get_tile((x, y), Tile.blank)
-                for x in range(self.size[0])
-                for y in range(self.size[1])
-            )
-            if tile is not None and tile.color != Tile.blank
-        ]
-
-    def grab_color(self, color: int) -> tuple[list[int], list[int]]:
-        """Return all tiles of color given in the first list, and all non-matches in the second list."""
-        tiles = self.grab()
-        right, wrong = [], []
-        for tile in tiles:
-            if tile.color == color:
-                right.append(tile)
-            else:
-                wrong.append(tile)
-        return right, wrong
-
-    def process(self, time_passed: float) -> None:
-        """Process self."""
-        if self.image_update:
-            self.radius = int(
-                self.tile_full * self.size[0] * self.size[1] // 3 + 3,
-            )
-        super().process(time_passed)
 
 
 class Factories(MultipartObject):
@@ -1643,7 +1634,7 @@ class Factories(MultipartObject):
             self.objects[index].location = (
                 Vector2.from_degrees(
                     degrees,
-                    self.size,
+                    29 * 5,
                 )
                 + self.location
             )
@@ -2354,55 +2345,6 @@ class InitializeState(AsyncState["AzulClient"]):
     async def check_conditions(self) -> str:
         """Go to title state."""
         return "title"
-
-
-class InitializeState(GameState):
-    """Initialize state."""
-
-    __slots__ = ()
-
-    def __init__(self) -> None:
-        """Initialize self."""
-        super().__init__("initialize")
-
-    async def entry_actions(self) -> None:
-        """Set up buttons."""
-        assert self.machine is not None
-        self.id = self.machine.new_group("initialize")
-
-        self.group_add(Cursor())
-        await self.manager.raise_event(Event("cursor_drag", [3, 5]))
-        self.manager.register_handler("PygameMouseMotion", self.mouse_moved)
-
-        ##        board = Board()
-        ####        board.place_tile((2, 2), Tile.red)
-        ##        board.location = Vector2.from_iter(SCREEN_SIZE) // 2
-        ##        self.group_add(board)
-
-        center = TableCenter()
-        center.location = Vector2.from_iter(SCREEN_SIZE) // 2
-        self.group_add(center)
-        center.add_tiles((0, 1, 2, 3, 5))
-
-    async def mouse_moved(
-        self,
-        event: Event[sprite.PygameMouseMotion],
-    ) -> None:
-        """Handle PygameMouseMotion event."""
-        ##        print(f'{event = }')
-        await self.manager.raise_event(
-            Event("cursor_set_location", event.data["pos"]),
-        )
-
-
-##        await self.manager.raise_event(
-##            Event("cursor_set_destination", event.data["pos"]),
-##        )
-
-
-##    async def check_conditions(self) -> str:
-##        """Go to title state."""
-##        return "title"
 
 
 class TitleState(MenuState):
@@ -3267,6 +3209,23 @@ class PlayJoiningState(GameState):
 # return None
 
 
+##    async def entry_actions(self) -> None:
+##        """Set up buttons."""
+##        assert self.machine is not None
+##        self.id = self.machine.new_group("initialize")
+##
+##        self.group_add(Cursor())
+##        await self.manager.raise_event(Event("cursor_drag", [3, 5]))
+##        self.manager.register_handler("PygameMouseMotion", self.mouse_moved)
+##
+##        ##        board = Board()
+##        ####        board.place_tile((2, 2), Tile.red)
+##        ##        board.location = Vector2.from_iter(SCREEN_SIZE) // 2
+##        ##        self.group_add(board)
+##
+##        center.add_tiles((0, 1, 2, 3, 5))
+
+
 class PlayState(GameState):
     """Game Play State."""
 
@@ -3283,6 +3242,7 @@ class PlayState(GameState):
         """Register event handlers."""
         self.manager.register_handlers(
             {
+                "game_initial_config": self.handle_game_initial_config,
                 "client_disconnected": self.handle_client_disconnected,
                 "game_winner": self.handle_game_over,
             },
@@ -3295,11 +3255,15 @@ class PlayState(GameState):
 
     async def entry_actions(self) -> None:
         """Add GameBoard and raise init event."""
-        self.exit_data = None
-
         assert self.machine is not None
         if self.id == 0:
             self.id = self.machine.new_group("play")
+
+        self.group_add(Cursor())
+
+        center = TableCenter()
+        center.location = Vector2.from_iter(SCREEN_SIZE) // 2
+        self.group_add(center)
 
         # self.group_add(())
         ##        gameboard = GameBoard(
@@ -3308,7 +3272,42 @@ class PlayState(GameState):
         ##        gameboard.location = [x // 2 for x in SCREEN_SIZE]
         ##        self.group_add(gameboard)
 
-        await self.machine.raise_event(Event("init", None))
+    async def handle_game_initial_config(
+        self,
+        event: Event[tuple[bool, int, int, int]],
+    ) -> None:
+        """Handle `game_initial_config` event."""
+        varient_play, player_count, factory_count, current_turn = event.data
+
+        print("handle_game_initial_config")
+        print((varient_play, player_count, factory_count, current_turn))
+
+        center = Vector2.from_iter(SCREEN_SIZE) // 2
+
+        # Add factories
+        for index, degrees in enumerate(range(0, 360, 360 // factory_count)):
+            factory = Factory(index)
+            factory.location = (
+                Vector2.from_degrees(
+                    degrees - 90,
+                    145,
+                )
+                + center
+            )
+            self.group_add(factory)
+
+        # Add players
+        # TODO: Do it properly
+        for index, degrees in enumerate(range(0, 360, 360 // player_count)):
+            board = Board(f"Board_{index}", varient_play)
+            board.location = (
+                Vector2.from_degrees(
+                    degrees - 45,
+                    300,
+                )
+                + center
+            )
+            self.group_add(board)
 
     async def check_conditions(self) -> str | None:
         """Return to title if client component doesn't exist."""

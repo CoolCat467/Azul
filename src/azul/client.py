@@ -162,8 +162,6 @@ class GameClient(ClientNetworkEventComponent):
         sbe = ServerBoundEvents
         self.register_network_write_events(
             {
-                "select_piece->server": sbe.select_piece,
-                "select_tile->server": sbe.select_tile,
                 "encryption_response->server": sbe.encryption_response,
             },
         )
@@ -171,16 +169,7 @@ class GameClient(ClientNetworkEventComponent):
         self.register_read_network_events(
             {
                 cbe.callback_ping: "server->callback_ping",
-                cbe.create_piece: "server->create_piece",
-                cbe.select_piece: "server->select_piece",
-                cbe.create_tile: "server->create_tile",
-                cbe.delete_tile: "server->delete_tile",
-                cbe.delete_piece_animation: "server->delete_piece_animation",
-                cbe.update_piece_animation: "server->update_piece_animation",
-                cbe.move_piece_animation: "server->move_piece_animation",
-                cbe.animation_state: "server->animation_state",
                 cbe.game_over: "server->game_over",
-                cbe.action_complete: "server->action_complete",
                 cbe.initial_config: "server->initial_config",
                 cbe.playing_as: "server->playing_as",
                 cbe.encryption_request: "server->encryption_request",
@@ -332,11 +321,21 @@ class GameClient(ClientNetworkEventComponent):
         """Read initial_config event from server."""
         buffer = Buffer(event.data)
 
-        board_size: u8 = buffer.read_value(StructFormat.UBYTE)
+        varient_play: u8 = buffer.read_value(StructFormat.BOOL)
+        player_count: u8 = buffer.read_value(StructFormat.UBYTE)
+        factory_count: u8 = buffer.read_value(StructFormat.UBYTE)
         current_turn: u8 = buffer.read_value(StructFormat.UBYTE)
 
         await self.raise_event(
-            Event("game_initial_config", (board_size, current_turn)),
+            Event(
+                "game_initial_config",
+                (
+                    varient_play,
+                    player_count,
+                    factory_count,
+                    current_turn,
+                ),
+            ),
         )
 
     async def read_playing_as(self, event: Event[bytearray]) -> None:

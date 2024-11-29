@@ -60,6 +60,10 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
 
+# cursor_set_movement_mode
+# cursor_set_destination
+
+
 class ServerClient(ServerClientNetworkEventComponent):
     """Server Client Network Event Component.
 
@@ -119,16 +123,17 @@ class ServerClient(ServerClientNetworkEventComponent):
 
     async def handle_initial_config(
         self,
-        event: Event[tuple[None, int]],
+        event: Event[tuple[bool, int, int, int]],
     ) -> None:
         """Read initial config event and reraise as server[write]->initial_config."""
-        board_size, player_turn = event.data
+        varient_play, player_count, factory_count, current_turn = event.data
 
         buffer = Buffer()
 
-        ##        write_position(buffer, board_size)
-        buffer.write_value(StructFormat.UBYTE, 0)
-        buffer.write_value(StructFormat.UBYTE, player_turn)
+        buffer.write_value(StructFormat.BOOL, varient_play)
+        buffer.write_value(StructFormat.UBYTE, player_count)
+        buffer.write_value(StructFormat.UBYTE, factory_count)
+        buffer.write_value(StructFormat.UBYTE, current_turn)
 
         await self.write_event(Event("server[write]->initial_config", buffer))
 
@@ -330,6 +335,7 @@ class GameServer(network.Server):
 
     def new_game_init(self, varient_play: bool = False) -> None:
         """Start new game."""
+        print("server new_game_init")
         self.client_players.clear()
 
         self.state = State.new_game(
@@ -410,7 +416,12 @@ class GameServer(network.Server):
         await self.raise_event(
             Event(
                 "initial_config->network",
-                (None, self.state.turn),
+                (
+                    self.state.varient_play,
+                    len(self.state.player_data),
+                    len(self.state.factory_displays),
+                    self.state.current_turn,
+                ),
             ),
         )
 
@@ -493,7 +504,12 @@ class GameServer(network.Server):
                 await client.raise_event(
                     Event(
                         "initial_config->network",
-                        (self.state.varient_play, self.state.current_turn),
+                        (
+                            self.state.varient_play,
+                            len(self.state.player_data),
+                            len(self.state.factory_displays),
+                            self.state.current_turn,
+                        ),
                     ),
                 )
 
@@ -506,6 +522,7 @@ class GameServer(network.Server):
         if self.client_count == 0 and self.game_active():
             # Old game was running but everyone left, restart
             print("TODO: restart")
+            self.new_game_init()
         new_client_id = self.client_count
 
         # Is controlling player?

@@ -36,7 +36,7 @@ keywords = [
     "ai", "multi-player", "azul", "ai-support", "networked-game"
 ]
 dependencies = [
-    "libcomponent~=0.0.0",
+    "libcomponent @ git+https://github.com/CoolCat467/LibComponent",
     "pygame~=2.6.0",
     "typing_extensions>=4.12.2",
     "mypy_extensions>=1.0.0",
