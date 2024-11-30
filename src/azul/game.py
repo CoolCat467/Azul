@@ -413,26 +413,19 @@ class TileRenderer(sprite.Sprite):
         offset: tuple[int, int] | None = None,
     ) -> None:
         """Blit the surface of a given tile object onto self.image at given tile location. It is assumed that all tile locations are xy tuples."""
-        x, y = tile_location
-        if offset is None:
-            ox, oy = 0, 0
-        else:
-            ox, oy = offset
+        tile_full = self.tile_size + self.tile_separation
 
-        ox += self.tile_separation
-        oy += self.tile_separation
+        position = Vector2.from_iter(tile_location) * tile_full
+        if offset is not None:
+            position += offset
+        position += (self.tile_separation, self.tile_separation)
 
         surf = get_tile_image(tile_color, self.tile_size, self.greyshift)
         assert self.image is not None
 
-        tile_full = self.tile_size + self.tile_separation
-
         self.image.blit(
             surf,
-            (
-                round(x * tile_full + ox),
-                round(y * tile_full + oy),
-            ),
+            vec2_to_location(position),
         )
 
     def to_image_surface_location(
@@ -774,16 +767,6 @@ class Row(TileRenderer):
             self.blit_tile(self.color, (self.size - x, 0))
         self.dirty = 1
 
-    def get_tile_point(
-        self,
-        screen_location: tuple[int, int] | Vector2,
-    ) -> int | None:
-        """Return the x choordinate of which tile intersects given a point. Returns None if no intersections."""
-        pos = super().get_tile_point(screen_location)
-        if pos is None:
-            return None
-        return pos[0]
-
     def get_placed(self) -> int:
         """Return the number of tiles in self that are not fake tiles, like grey ones."""
         return self.count
@@ -858,7 +841,7 @@ class PatternRows(TileRenderer):
     def get_tile_point(
         self,
         screen_location: tuple[int, int] | Vector2,
-    ) -> int | None:
+    ) -> tuple[int, int] | None:
         """Return the x choordinate of which tile intersects given a point. Returns None if no intersections."""
         point = super().get_tile_point(screen_location)
         if point is None:
