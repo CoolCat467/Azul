@@ -104,7 +104,9 @@ def generate_bag_contents() -> Counter[int]:
 
 def bag_draw_tile(bag: Counter[int]) -> int:
     """Return drawn tile from bag. Mutates bag."""
-    tile = random.choice(tuple(bag.elements()))
+    # S311 Standard pseudo-random generators are not suitable for
+    # cryptographic purposes
+    tile = random.choice(tuple(bag.elements()))  # noqa: S311
     bag[tile] -= 1
     return tile
 
@@ -651,6 +653,7 @@ class State(NamedTuple):
 
     @classmethod
     def blank(cls) -> Self:
+        """Return new blank state."""
         return cls(
             varient_play=False,
             current_phase=Phase.end,
@@ -1230,7 +1233,7 @@ class State(NamedTuple):
         result = new_state.get_manual_wall_tiling_locations_for_player(
             player_id,
         )
-        if isinstance(result, tuple) or result is None:
+        if not isinstance(result, self.__class__):
             return new_state._manual_wall_tiling_maybe_next_turn()
         return result._manual_wall_tiling_maybe_next_turn()
 
@@ -1249,7 +1252,9 @@ def run() -> None:
             ##            last_turn = state.current_turn
             actions = tuple(state.yield_actions())
             print(f"{len(actions) = }")
-            action = random.choice(actions)
+            # S311 Standard pseudo-random generators are not suitable
+            # for cryptographic purposes
+            action = random.choice(actions)  # noqa: S311
             ##            pprint(action)
             state = state.preform_action(action)
 

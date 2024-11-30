@@ -56,6 +56,7 @@ from pygame.locals import (
     WINDOWRESIZED,
 )
 from pygame.rect import Rect
+from pygame.sprite import LayeredDirty
 
 from azul import element_list, objects, sprite
 from azul.async_clock import Clock
@@ -84,7 +85,6 @@ if TYPE_CHECKING:
     )
 
     from numpy.typing import NDArray
-    from pygame.sprite import LayeredDirty
     from typing_extensions import TypeVarTuple
 
     P = TypeVarTuple("P")
@@ -438,9 +438,11 @@ class TileRenderer(sprite.Sprite):
     def get_tile_point(
         self,
         screen_location: tuple[int, int] | Vector2,
-    ) -> tuple[int, int] | None:
+    ) -> Vector2 | None:
         """Return the xy choordinates of which tile intersects given a point or None."""
         # Can't get tile if screen location doesn't intersect our hitbox!
+        if isinstance(screen_location, Vector2):
+            screen_location = vec2_to_location(screen_location)
         if not self.is_selected(screen_location):
             return None
 
@@ -536,7 +538,8 @@ class Cursor(TileRenderer):
 
     def move_to_front(self) -> None:
         """Move this sprite to front."""
-        group: LayeredDirty = self.groups()[-1]
+        group = self.groups()[-1]
+        assert isinstance(group, LayeredDirty)
         group.move_to_front(self)
 
     async def handle_cursor_set_destination(
@@ -656,7 +659,7 @@ class Grid(TileRenderer):
         """Return if tile at given position is a fake tile."""
         return self.get_tile(xy) < 0
 
-    def place_tile(self, xy: tuple[int, int], tile_color: int) -> bool:
+    def place_tile(self, xy: tuple[int, int], tile_color: int) -> None:
         """Place tile at given position."""
         x, y = xy
         self.data[y, x] = tile_color
@@ -841,14 +844,13 @@ class PatternRows(TileRenderer):
     def get_tile_point(
         self,
         screen_location: tuple[int, int] | Vector2,
-    ) -> tuple[int, int] | None:
+    ) -> Vector2 | None:
         """Return the x choordinate of which tile intersects given a point. Returns None if no intersections."""
         point = super().get_tile_point(screen_location)
         if point is None:
             return None
-        x, y = point
         # If point is not valid for that row, say invalid
-        if (4 - x) > y:
+        if (4 - point.x) > point.y:
             return None
         return point
 
@@ -869,34 +871,31 @@ class FloorLine(Row):
 
         # self.font = Font(FONT, round(self.tile_size*1.2), color=BLACK, cx=False, cy=False)
         self.text = objects.Text(
-            round(self.tile_size * 1.2),
-            BLACK,
-            cx=False,
-            cy=False,
+            "text object",
+            pygame.font.Font(FONT, round(self.tile_size * 1.2)),
         )
+        self.text.color = BLACK
 
         self.numbers = [-255 for _ in range(self.size)]
 
     def __repr__(self) -> str:
         """Return representation of self."""
-        return f"{self.__class__.__name__}({self.player!r})"
+        return f"{self.__class__.__name__}(<>)"
 
     def render(self, surface: pygame.surface.Surface) -> None:
         """Update self.image."""
-        super().render(surface)
-
         sx, sy = self.location
-        assert self.width_height is not None, "Should be impossible."
-        w, h = self.width_height
+        w, h = self.rect.size
+        tile_full = self.tile_separation + self.tile_size
         for x in range(self.size):
             xy = round(
-                x * self.tile_full + self.tile_separation + sx - w / 2,
+                x * tile_full + self.tile_separation + sx - w / 2,
             ), round(
                 self.tile_separation + sy - h / 2,
             )
-            self.text.update_value(str(self.numbers[x]))
+            self.text.text = str(self.numbers[x])
             self.text.location = Vector2(*xy)
-            self.text.render(surface)
+            # self.text.render(surface)
 
 
 class Factory(TileRenderer):
@@ -972,7 +971,7 @@ class Factory(TileRenderer):
     def get_tile_point(
         self,
         screen_location: tuple[int, int] | Vector2,
-    ) -> tuple[int, int] | None:
+    ) -> Vector2 | None:
         """Get tile point accounting for offset."""
         return super().get_tile_point(
             Vector2.from_iter(screen_location) - (8, 8),
@@ -1342,132 +1341,6 @@ class CreditsState(MenuState):
     def check_state(self) -> str:
         """Return to title."""
         return "title"
-
-
-class SettingsState(MenuState):
-    """Game state when user is defining game type, players, etc."""
-
-    def __init__(self) -> None:
-        """Initialize settings."""
-        super().__init__("settings")
-
-        self.player_count = 0  # 2
-        self.host_mode = True
-        self.variant_play = False
-
-    async def entry_actions(self) -> None:
-        """Add cursor object and tons of button and text objects to the game."""
-        await super().entry_actions()
-
-        def add_numbers(
-            start: int,
-            end: int,
-            width_each: int,
-            cx: int,
-            cy: int,
-        ) -> None:
-            """Add numbers."""
-            count = end - start + 1
-            evencount = count % 2 == 0
-            mid = count // 2
-
-            def add_number(
-                number: int,
-                display: str | int,
-            ) -> None:
-                """Add number."""
-                if evencount:
-                    if number < mid:
-                        x = number - start - 0.5
-                    else:
-                        x = number - mid + 0.5
-                else:
-                    if number < mid:
-                        x = number - start + 1
-                    elif number == mid:
-                        x = 0
-                    else:
-                        x = number - mid
-
-                @self.with_update(
-                    self.update_text(
-                        "Players",
-                        lambda: f"Players: {self.player_count}",
-                    ),
-                )
-                def set_player_count() -> None:
-                    """Set variable player_count to {display} while updating text."""
-                    return self.set_var("player_count", display)
-
-                self.add_button(
-                    f"SetCount{number}",
-                    str(display),
-                    set_player_count,
-                    (int(cx + (width_each * x)), int(cy)),
-                    size=int(self.fontsize / 1.5),
-                    minlen=3,
-                )
-
-            for i in range(count):
-                add_number(i, start + i)
-
-        sw, sh = SCREEN_SIZE
-        cx = sw // 2
-        cy = sh // 2
-
-        def host_text(x: object) -> str:
-            return f"Host Mode: {x}"
-
-        self.add_text(
-            "Host",
-            host_text(self.host_mode),
-            (cx, cy - 30 * 3),
-        )
-        self.add_button(
-            "ToggleHost",
-            "Toggle",
-            self.toggle_button_state("Host", "host_mode", host_text),
-            (cx, cy - 30 * 2),
-            size=int(self.fontsize / 1.5),
-        )
-
-        ##        # TEMPORARY: Hide everything to do with "Host Mode", networked games aren't done yet.
-        ##        assert self.game is not None
-        ##        self.game.set_attr_all("visible", False)
-
-        def varient_text(x: object) -> str:
-            return f"Variant Play: {x}"
-
-        self.add_text(
-            "Variant",
-            varient_text(self.variant_play),
-            (cx, cy - 30),
-        )
-        self.add_button(
-            "ToggleVarient",
-            "Toggle",
-            self.toggle_button_state("Variant", "variant_play", varient_text),
-            (cx, cy),
-            size=int(self.fontsize / 1.5),
-        )
-
-        self.add_text(
-            "Players",
-            f"Players: {self.player_count}",
-            (cx, cy + 30),
-        )
-        add_numbers(2, 4, 70, cx, int(cy + 30 * 2))
-
-        var_to_state = self.var_dependant_to_state(
-            FactoryOffer=("host_mode", True),
-            FactoryOfferNetworked=("host_mode", False),
-        )
-        self.add_button(
-            "StartGame",
-            "Start Game",
-            var_to_state,
-            (cx, cy + 30 * 3),
-        )
 
 
 class EndScreen(MenuState):
@@ -1888,7 +1761,6 @@ class AzulClient(sprite.GroupProcessor):
                 InitializeState(),
                 TitleState(),
                 CreditsState(),
-                SettingsState(),
                 PlayHostingState(),
                 PlayInternalHostingState(),
                 PlayJoiningState(),
