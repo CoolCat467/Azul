@@ -47,6 +47,9 @@ from azul.network_shared import (
 if TYPE_CHECKING:
     from mypy_extensions import u8
 
+    from azul.state import Tile
+    from azul.vector import Vector2
+
 
 async def read_advertisements(
     timeout: int = 3,  # noqa: ASYNC109
@@ -165,6 +168,9 @@ class GameClient(ClientNetworkEventComponent):
         self.register_network_write_events(
             {
                 "encryption_response->server": sbe.encryption_response,
+                "factory_clicked->server[write]": sbe.factory_clicked,
+                "cursor_location->server[write]": sbe.cursor_location,
+                "pattern_row_clicked->server[write]": sbe.pattern_row_clicked,
             },
         )
         cbe = ClientBoundEvents
@@ -177,6 +183,9 @@ class GameClient(ClientNetworkEventComponent):
                 cbe.game_over: "server->game_over",
                 cbe.board_data: "server->board_data",
                 cbe.factory_data: "server->factory_data",
+                cbe.cursor_data: "server->cursor_data",
+                cbe.table_data: "server->table_data",
+                cbe.cursor_movement_mode: "server->cursor_movement_mode",
             },
         )
 
@@ -195,8 +204,14 @@ class GameClient(ClientNetworkEventComponent):
                 "server->game_over": self.read_game_over,
                 "server->board_data": self.read_board_data,
                 "server->factory_data": self.read_factory_data,
+                "server->cursor_data": self.read_cursor_data,
+                "server->table_data": self.read_table_data,
+                "server->cursor_movement_mode": self.read_cursor_movement_mode,
                 "client_connect": self.handle_client_connect,
                 "network_stop": self.handle_network_stop,
+                "game_factory_clicked": self.write_game_factory_clicked,
+                "game_cursor_location_transmit": self.write_game_cursor_location_transmit,
+                "game_pattern_row_clicked": self.write_game_pattern_row_clicked,
             },
         )
 
@@ -370,6 +385,75 @@ class GameClient(ClientNetworkEventComponent):
         tiles = decode_numeric_uint8_counter(buffer)
 
         await self.raise_event(Event("game_factory_data", (factory_id, tiles)))
+
+    async def read_cursor_data(self, event: Event[bytearray]) -> None:
+        """Read cursor_data event from server, reraise as `game_cursor_data`."""
+        buffer = Buffer(event.data)
+
+        tiles = decode_numeric_uint8_counter(buffer)
+
+        await self.raise_event(Event("game_cursor_data", tiles))
+
+    async def read_table_data(self, event: Event[bytearray]) -> None:
+        """Read table_data event from server, reraise as `game_table_data`."""
+        buffer = Buffer(event.data)
+
+        tiles = decode_numeric_uint8_counter(buffer)
+
+        await self.raise_event(Event("game_table_data", tiles))
+
+    async def read_cursor_movement_mode(self, event: Event[bytearray]) -> None:
+        """Read cursor_movement_mode event from server, reraise as `game_cursor_set_movement_mode`."""
+        buffer = Buffer(event.data)
+
+        client_mode = buffer.read_value(StructFormat.BOOL)
+
+        await self.raise_event(
+            Event("game_cursor_set_movement_mode", client_mode),
+        )
+
+    async def write_game_factory_clicked(
+        self,
+        event: Event[tuple[int, Tile]],
+    ) -> None:
+        """Write factory_clicked event to server."""
+        factory_id, tile = event.data
+        buffer = Buffer()
+
+        buffer.write_value(StructFormat.UBYTE, factory_id)
+        buffer.write_value(StructFormat.UBYTE, tile)
+
+        await self.raise_event(Event("factory_clicked->server[write]", buffer))
+
+    async def write_game_cursor_location_transmit(
+        self,
+        event: Event[Vector2],
+    ) -> None:
+        """Write cursor_location_transmit event to server."""
+        scaled_location = event.data
+
+        x, y = map(int, (scaled_location * 4096).rounded())  # 2 ** 12
+
+        position = (x & 0xFFF) << 3 | (y & 0xFFF)
+        buffer = position.to_bytes(3, "big")
+
+        await self.raise_event(Event("cursor_location->server[write]", buffer))
+
+    async def write_game_pattern_row_clicked(
+        self,
+        event: Event[tuple[int, Vector2]],
+    ) -> None:
+        """Write factory_clicked event to server."""
+        row_id, location = event.data
+        buffer = Buffer()
+
+        buffer.write_value(StructFormat.UBYTE, row_id)
+        buffer.write_value(StructFormat.UBYTE, int(location.x))
+        buffer.write_value(StructFormat.UBYTE, int(location.y))
+
+        await self.raise_event(
+            Event("pattern_row_clicked->server[write]", buffer),
+        )
 
     async def handle_network_stop(self, event: Event[None]) -> None:
         """Send EOF if connected and close socket."""

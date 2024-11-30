@@ -461,7 +461,7 @@ class TileRenderer(sprite.Sprite):
             if value > self.tile_size:
                 return None
         # Otherwise, not in separation region, so we should be good
-        return tile_position
+        return tile_position.floored()
 
 
 class Cursor(TileRenderer):
@@ -511,22 +511,23 @@ class Cursor(TileRenderer):
         """Register handlers."""
         self.register_handlers(
             {
-                "cursor_drag": self.handle_cursor_drag,
+                "game_cursor_data": self.handle_cursor_drag,
                 "cursor_reached_destination": self.handle_cursor_reached_destination,
-                "cursor_set_destination": self.handle_cursor_set_destination,
-                "cursor_set_movement_mode": self.handle_cursor_set_movement_mode,
+                "game_cursor_set_destination": self.handle_cursor_set_destination,
+                "game_cursor_set_movement_mode": self.handle_cursor_set_movement_mode,
             },
         )
 
-    async def handle_cursor_drag(self, event: Event[Iterable[int]]) -> None:
+    async def handle_cursor_drag(self, event: Event[Counter[int]]) -> None:
         """Drag one or more tiles."""
-        await trio.lowlevel.checkpoint()
-        for tile_color in event.data:
+        self.tiles.clear()
+        for tile_color in event.data.elements():
             if tile_color == Tile.one:
                 self.tiles.insert(0, tile_color)
             else:
                 self.tiles.append(tile_color)
         self.update_image()
+        await trio.lowlevel.checkpoint()
 
     async def handle_cursor_reached_destination(
         self,
@@ -564,7 +565,20 @@ class Cursor(TileRenderer):
         """Set location to event data."""
         self.move_to_front()
         self.location = event.data["pos"]
-        await trio.lowlevel.checkpoint()
+
+        ##transmit_location = Vector2.from_iter(
+        ##    x / y for x, y in zip(self.location, SCREEN_SIZE, strict=False)
+        ##)
+        ##
+        ### Transmit to server
+        ### Event level to so reaches client
+        ##await self.raise_event(
+        ##    Event(
+        ##        "game_cursor_location_transmit",
+        ##        transmit_location,
+        ##        2,
+        ##    )
+        ##)
 
     async def handle_cursor_set_movement_mode(
         self,
@@ -818,6 +832,10 @@ class PatternRows(TileRenderer):
         """Return representation of self."""
         return f"{self.__class__.__name__}({self.rows_id})"
 
+    def bind_handlers(self) -> None:
+        """Register click event handler."""
+        self.register_handler("click", self.handle_click)
+
     def update_image(self) -> None:
         """Update self.image."""
         self.clear_image((5, 5))
@@ -858,6 +876,28 @@ class PatternRows(TileRenderer):
         """Set the background color for this row."""
         self.background = color
         self.update_image()
+
+    async def handle_click(
+        self,
+        event: Event[sprite.PygameMouseButtonEventData],
+    ) -> None:
+        """Handle click event."""
+        point = self.get_tile_point(event.data["pos"])
+        if point is None:
+            await trio.lowlevel.checkpoint()
+            return
+
+        # Transmit to server
+        await self.raise_event(
+            Event(
+                "game_pattern_row_clicked",
+                (
+                    self.rows_id,
+                    point.floored(),
+                ),
+                2,
+            ),
+        )
 
 
 class FloorLine(Row):
@@ -925,25 +965,9 @@ class Factory(TileRenderer):
         self.register_handlers(
             {
                 "game_factory_data": self.handle_factory_data,
+                "click": self.handle_click,
             },
         )
-
-    async def handle_factory_data(
-        self,
-        event: Event[tuple[int, Counter[int]]],
-    ) -> None:
-        """Handle `game_factory_data` event."""
-        factory_id, tiles = event.data
-
-        if factory_id != self.factory_id:
-            await trio.lowlevel.checkpoint()
-            return
-
-        self.tiles = tiles
-        self.update_image()
-        self.visible = True
-
-        await trio.lowlevel.checkpoint()
 
     def update_image(self) -> None:
         """Update image."""
@@ -973,8 +997,61 @@ class Factory(TileRenderer):
         screen_location: tuple[int, int] | Vector2,
     ) -> Vector2 | None:
         """Get tile point accounting for offset."""
-        return super().get_tile_point(
+        point = super().get_tile_point(
             Vector2.from_iter(screen_location) - (8, 8),
+        )
+        if point is None:
+            return None
+        if any(x >= 2 for x in point):
+            return None
+        return point
+
+    async def handle_factory_data(
+        self,
+        event: Event[tuple[int, Counter[int]]],
+    ) -> None:
+        """Handle `game_factory_data` event."""
+        factory_id, tiles = event.data
+
+        if factory_id != self.factory_id:
+            await trio.lowlevel.checkpoint()
+            return
+
+        self.tiles = tiles
+        self.update_image()
+        self.visible = True
+
+        await trio.lowlevel.checkpoint()
+
+    async def handle_click(
+        self,
+        event: Event[sprite.PygameMouseButtonEventData],
+    ) -> None:
+        """Handle click event."""
+        point = self.get_tile_point(event.data["pos"])
+        if point is None:
+            await trio.lowlevel.checkpoint()
+            return
+
+        index = int(point.y * 2 + point.x)
+        tile_color = tuple(self.tiles.elements())[index]
+
+        if tile_color < 0:
+            # Do not send non-real tiles
+            await trio.lowlevel.checkpoint()
+            return
+
+        # Transmit to server
+        # Needs level 2 to reach server client
+        await self.raise_event(
+            Event(
+                "game_factory_clicked",
+                (
+                    self.factory_id,
+                    Tile(tile_color),
+                ),
+                2,
+            ),
         )
 
 
@@ -995,6 +1072,10 @@ class TableCenter(TileRenderer):
     def __repr__(self) -> str:
         """Return representation of self."""
         return f"{self.__class__.__name__}()"
+
+    def bind_handlers(self) -> None:
+        """Register event handlers."""
+        self.register_handler("game_table_data", self.update_board_data)
 
     def iter_tiles(self) -> Generator[int, None, None]:
         """Yield tile colors."""
@@ -1043,6 +1124,12 @@ class TableCenter(TileRenderer):
         """Pop all of tile_color. Raises KeyError if not exists."""
         tile_count = self.tiles.pop(tile_color)
         return [tile_color] * tile_count
+
+    async def update_board_data(self, event: Event[Counter[int]]) -> None:
+        """Update table center board data."""
+        self.tiles = event.data
+        self.update_image()
+        await trio.lowlevel.checkpoint()
 
 
 class HaltState(AsyncState["AzulClient"]):
@@ -1647,6 +1734,8 @@ class PlayState(GameState):
 
             pattern_rows = PatternRows(index)
             pattern_rows.rect.bottomright = board.rect.bottomleft
+            if index == self.current_turn:
+                pattern_rows.set_background(DARKGREEN)
             self.group_add(pattern_rows)
 
             degrees += each

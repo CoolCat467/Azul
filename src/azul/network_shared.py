@@ -118,9 +118,15 @@ class ClientBoundEvents(IntEnum):
     game_over = auto()
     board_data = auto()
     factory_data = auto()
+    cursor_data = auto()
+    table_data = auto()
+    cursor_movement_mode = auto()
 
 
 class ServerBoundEvents(IntEnum):
     """Server bound event IDs."""
 
     encryption_response = 0
+    factory_clicked = auto()
+    cursor_location = auto()
+    pattern_row_clicked = auto()

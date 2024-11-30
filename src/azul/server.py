@@ -29,6 +29,7 @@ __version__ = "0.0.0"
 
 import traceback
 from collections import deque
+from enum import IntEnum, auto
 from functools import partial
 from typing import TYPE_CHECKING, NoReturn
 
@@ -55,7 +56,7 @@ from azul.network_shared import (
     encode_int8_array,
     encode_numeric_uint8_counter,
 )
-from azul.state import Phase, State
+from azul.state import Phase, State, Tile
 
 if TYPE_CHECKING:
     from collections import Counter
@@ -96,12 +97,18 @@ class ServerClient(ServerClientNetworkEventComponent):
                 "server[write]->game_over": cbe.game_over,
                 "server[write]->board_data": cbe.board_data,
                 "server[write]->factory_data": cbe.factory_data,
+                "server[write]->cursor_data": cbe.cursor_data,
+                "server[write]->table_data": cbe.table_data,
+                "server[write]->cursor_movement_mode": cbe.cursor_movement_mode,
             },
         )
         sbe = ServerBoundEvents
         self.register_read_network_events(
             {
                 sbe.encryption_response: f"client[{self.client_id}]->encryption_response",
+                sbe.factory_clicked: f"client[{self.client_id}]->factory_clicked",
+                sbe.cursor_location: f"client[{self.client_id}]->cursor_location",
+                sbe.pattern_row_clicked: f"client[{self.client_id}]->pattern_row_clicked",
             },
         )
 
@@ -111,12 +118,18 @@ class ServerClient(ServerClientNetworkEventComponent):
         self.register_handlers(
             {
                 f"client[{self.client_id}]->encryption_response": self.handle_encryption_response,
+                f"client[{self.client_id}]->factory_clicked": self.read_factory_clicked,
+                f"client[{self.client_id}]->cursor_location": self.read_cursor_location,
+                f"client[{self.client_id}]->pattern_row_clicked": self.read_pattern_row_clicked,
                 f"callback_ping->network[{self.client_id}]": self.handle_callback_ping,
-                "initial_config->network": self.handle_initial_config,
-                f"playing_as->network[{self.client_id}]": self.handle_playing_as,
-                "game_over->network": self.handle_game_over,
-                "board_data->network": self.handle_board_data,
-                "factory_data->network": self.handle_factory_data,
+                "initial_config->network": self.write_factory_clicked,
+                f"playing_as->network[{self.client_id}]": self.write_playing_as,
+                "game_over->network": self.write_game_over,
+                "board_data->network": self.write_board_data,
+                "factory_data->network": self.write_factory_data,
+                "cursor_data->network": self.write_cursor_data,
+                "table_data->network": self.write_table_data,
+                f"cursor_movement_mode->network[{self.client_id}]": self.write_cursor_movement_mode,
             },
         )
 
@@ -131,6 +144,47 @@ class ServerClient(ServerClientNetworkEventComponent):
             )
         await self.handle_encryption_response(event)
 
+    async def read_factory_clicked(self, event: Event[bytearray]) -> None:
+        """Read factory_clicked event from client. Raise as `factory_clicked->server`."""
+        buffer = Buffer(event.data)
+
+        factory_id = buffer.read_value(StructFormat.UBYTE)
+        tile_color = Tile(buffer.read_value(StructFormat.UBYTE))
+
+        await self.raise_event(
+            Event(
+                "factory_clicked->server",
+                (
+                    self.client_id,
+                    factory_id,
+                    tile_color,
+                ),
+            ),
+        )
+
+    async def read_cursor_location(self, event: Event[bytearray]) -> None:
+        """Read factory_clicked event from client. Raise as `factory_clicked->server`."""
+        print(f"read_cursor_location {event.data = }")
+
+    async def read_pattern_row_clicked(self, event: Event[bytearray]) -> None:
+        """Read pattern_row_clicked event from client. Raise as `pattern_row_clicked->server`."""
+        buffer = Buffer(event.data)
+
+        row_id = buffer.read_value(StructFormat.UBYTE)
+        row_pos_x = buffer.read_value(StructFormat.UBYTE)
+        row_pos_y = buffer.read_value(StructFormat.UBYTE)
+
+        await self.raise_event(
+            Event(
+                "pattern_row_clicked->server",
+                (
+                    self.client_id,
+                    row_id,
+                    (row_pos_x, row_pos_y),
+                ),
+            ),
+        )
+
     async def handle_callback_ping(
         self,
         _: Event[None],
@@ -138,7 +192,7 @@ class ServerClient(ServerClientNetworkEventComponent):
         """Reraise as server[write]->callback_ping."""
         await self.write_callback_ping()
 
-    async def handle_initial_config(
+    async def write_factory_clicked(
         self,
         event: Event[tuple[bool, int, int, int]],
     ) -> None:
@@ -154,7 +208,7 @@ class ServerClient(ServerClientNetworkEventComponent):
 
         await self.write_event(Event("server[write]->initial_config", buffer))
 
-    async def handle_playing_as(
+    async def write_playing_as(
         self,
         event: Event[int],
     ) -> None:
@@ -165,7 +219,7 @@ class ServerClient(ServerClientNetworkEventComponent):
         buffer.write_value(StructFormat.UBYTE, playing_as)
         await self.write_event(Event("server[write]->playing_as", buffer))
 
-    async def handle_game_over(self, event: Event[int]) -> None:
+    async def write_game_over(self, event: Event[int]) -> None:
         """Read game over event and reraise as server[write]->game_over."""
         winner = event.data
 
@@ -175,7 +229,7 @@ class ServerClient(ServerClientNetworkEventComponent):
 
         await self.write_event(Event("server[write]->game_over", buffer))
 
-    async def handle_board_data(
+    async def write_board_data(
         self,
         event: Event[tuple[int, NDArray[int8]]],
     ) -> None:
@@ -188,7 +242,7 @@ class ServerClient(ServerClientNetworkEventComponent):
 
         await self.write_event(Event("server[write]->board_data", buffer))
 
-    async def handle_factory_data(
+    async def write_factory_data(
         self,
         event: Event[tuple[int, Counter[int]]],
     ) -> None:
@@ -200,6 +254,53 @@ class ServerClient(ServerClientNetworkEventComponent):
         buffer.extend(encode_numeric_uint8_counter(tiles))
 
         await self.write_event(Event("server[write]->factory_data", buffer))
+
+    async def write_cursor_data(
+        self,
+        event: Event[Counter[int]],
+    ) -> None:
+        """Reraise as server[write]->cursor_data."""
+        tiles = event.data
+
+        buffer = encode_numeric_uint8_counter(tiles)
+
+        await self.write_event(Event("server[write]->cursor_data", buffer))
+
+    async def write_table_data(
+        self,
+        event: Event[Counter[int]],
+    ) -> None:
+        """Reraise as server[write]->table_data."""
+        tiles = event.data
+
+        buffer = encode_numeric_uint8_counter(tiles)
+
+        await self.write_event(Event("server[write]->table_data", buffer))
+
+    async def write_cursor_movement_mode(
+        self,
+        event: Event[bool],
+    ) -> None:
+        """Reraise as server[write]->table_data."""
+        client_mode = event.data
+
+        buffer = Buffer()
+        buffer.write_value(StructFormat.BOOL, client_mode)
+
+        await self.write_event(
+            Event("server[write]->cursor_movement_mode", buffer),
+        )
+
+
+class ServerPlayer(IntEnum):
+    """Server Player enum."""
+
+    one = 0
+    two = auto()
+    three = auto()
+    four = auto()
+    singleplayer_all = auto()
+    spectator = auto()
 
 
 class GameServer(network.Server):
@@ -243,6 +344,8 @@ class GameServer(network.Server):
                 "server_start": self.start_server,
                 "network_stop": self.stop_server,
                 "server_send_game_start": self.handle_server_start_new_game,
+                "factory_clicked->server": self.handle_client_factory_clicked,
+                "pattern_row_clicked->server": self.handle_client_pattern_row_clicked,
             },
         )
 
@@ -331,9 +434,9 @@ class GameServer(network.Server):
         players: dict[int, int] = {}
         for idx, client_id in enumerate(client_ids):
             if idx == 0:
-                players[client_id] = 2
+                players[client_id] = ServerPlayer.singleplayer_all
             else:
-                players[client_id] = 0xFF  # Spectator
+                players[client_id] = ServerPlayer.spectator
         return players
 
     @staticmethod
@@ -342,9 +445,9 @@ class GameServer(network.Server):
         players: dict[int, int] = {}
         for idx, client_id in enumerate(client_ids):
             if idx < 4:
-                players[client_id] = idx % 4
+                players[client_id] = ServerPlayer(idx % 4)
             else:
-                players[client_id] = 0xFF  # Spectator
+                players[client_id] = ServerPlayer.spectator
         return players
 
     def new_game_init(self, varient_play: bool = False) -> None:
@@ -465,6 +568,25 @@ class GameServer(network.Server):
                         ),
                     ),
                 )
+        # Transmit table center data
+        await self.raise_event(
+            Event(
+                "table_data->network",
+                self.state.table_center,
+            ),
+        )
+
+        rev_map = {v: k for k, v in self.client_players.items()}
+        if self.internal_singleplayer_mode:
+            client_id = rev_map[ServerPlayer.singleplayer_all]
+        else:
+            client_id = rev_map[ServerPlayer(self.state.current_turn)]
+        await self.raise_event(
+            Event(
+                f"cursor_movement_mode->network[{client_id}]",
+                True,
+            ),
+        )
 
         await self.transmit_playing_as()
 
@@ -614,6 +736,104 @@ class GameServer(network.Server):
                     )
                     self.client_count -= 1
         # ServerClient's `with` block handles closing stream.
+
+    async def handle_client_factory_clicked(
+        self,
+        event: Event[tuple[int, int, Tile]],
+    ) -> None:
+        """Handle client clicked a factory tile."""
+        if not self.players_can_interact:
+            print("Players are not allowed to interact.")
+            await trio.lowlevel.checkpoint()
+            return
+
+        client_id, factory_id, tile = event.data
+
+        server_player_id = self.client_players[client_id]
+
+        if server_player_id == ServerPlayer.spectator:
+            print(f"Spectator cannot select {factory_id = } {tile}")
+            await trio.lowlevel.checkpoint()
+            return
+
+        player_id = int(server_player_id)
+        if server_player_id == ServerPlayer.singleplayer_all:
+            player_id = self.state.current_turn
+
+        if player_id != self.state.current_turn:
+            print(
+                "Player {player_id} (client ID {client_id}) cannot select factory tile, not their turn.",
+            )
+            await trio.lowlevel.checkpoint()
+            return
+
+        if self.state.current_phase != Phase.factory_offer:
+            print(
+                "Player {player_id} (client ID {client_id}) cannot select factory tile, not in factory offer phase.",
+            )
+            await trio.lowlevel.checkpoint()
+            return
+
+        factory_display = self.state.factory_displays.get(factory_id)
+        if factory_display is None:
+            print(
+                "Player {player_id} (client ID {client_id}) cannot select invalid factory {factory_id!r}.",
+            )
+            await trio.lowlevel.checkpoint()
+            return
+
+        if tile < 0 or tile not in factory_display:
+            print(
+                "Player {player_id} (client ID {client_id}) cannot select nonexistent color {tile}.",
+            )
+            await trio.lowlevel.checkpoint()
+            return
+
+        if not self.state.can_cursor_select_factory_color(
+            factory_id,
+            int(tile),
+        ):
+            print(
+                "Player {player_id} (client ID {client_id}) cannot select factory tile, state says no.",
+            )
+            await trio.lowlevel.checkpoint()
+            return
+
+        # Perform move
+        self.state = self.state.cursor_selects_factory(factory_id, int(tile))
+
+        # Send updates to client
+        # Send factory display changes
+        await self.raise_event(
+            Event(
+                "factory_data->network",
+                (
+                    factory_id,
+                    self.state.factory_displays[factory_id],
+                ),
+            ),
+        )
+        await self.raise_event(
+            Event(
+                "cursor_data->network",
+                self.state.cursor_contents,
+            ),
+        )
+        await self.raise_event(
+            Event(
+                "table_data->network",
+                self.state.table_center,
+            ),
+        )
+
+    async def handle_client_pattern_row_clicked(
+        self,
+        event: Event[tuple[int, int, tuple[int, int]]],
+    ) -> None:
+        """Handle client clicking on pattern row."""
+        client_id, row_id, row_pos = event.data
+        print(f"handle_client_pattern_row_clicked {event.data = }")
+        await trio.lowlevel.checkpoint()
 
     def __del__(self) -> None:
         """Debug print."""

@@ -684,7 +684,7 @@ class State(NamedTuple):
             current_phase=Phase.factory_offer,
             bag=bag,
             box_lid=Counter(),
-            table_center=Counter({Tile.one, 1}),
+            table_center=Counter({Tile.one: 1}),
             factory_displays=factory_displays,
             cursor_contents=Counter(),
             current_turn=0,
