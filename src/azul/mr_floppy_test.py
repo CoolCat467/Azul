@@ -257,7 +257,7 @@ class MrFloppy(sprite.Sprite):
 
     async def drag(self, event: Event[sprite.DragEvent]) -> None:
         """Move by relative from drag."""
-        if event.data.button != 1:
+        if not event.data.buttons[1]:
             return
         self.location += event.data.rel
         self.dirty = 1

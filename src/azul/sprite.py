@@ -597,7 +597,7 @@ class DragEvent(NamedTuple):
 
     pos: tuple[int, int]
     rel: tuple[int, int]
-    button: int
+    buttons: dict[int, bool]
 
 
 class DragClickEventComponent(Component):
@@ -672,20 +672,17 @@ class DragClickEventComponent(Component):
         if not self.manager_exists:
             return
         async with trio.open_nursery() as nursery:
-            for button, pressed in self.pressed.items():
-                if not pressed:
-                    continue
-                nursery.start_soon(
-                    self.raise_event,
-                    Event(
-                        "drag",
-                        DragEvent(
-                            event.data["pos"],
-                            event.data["rel"],
-                            button,
-                        ),
+            nursery.start_soon(
+                self.raise_event,
+                Event(
+                    "drag",
+                    DragEvent(
+                        event.data["pos"],
+                        event.data["rel"],
+                        self.pressed,
                     ),
-                )
+                ),
+            )
 
 
 class GroupProcessor(AsyncStateMachine):

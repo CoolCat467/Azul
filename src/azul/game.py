@@ -32,7 +32,7 @@ import sys
 import time
 import traceback
 from collections import Counter
-from functools import lru_cache, wraps
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, TypeVar
 
@@ -60,6 +60,7 @@ from pygame.rect import Rect
 from azul import element_list, objects, sprite
 from azul.async_clock import Clock
 from azul.client import GameClient, read_advertisements
+from azul.crop import auto_crop_clear
 from azul.network_shared import DEFAULT_PORT
 from azul.server import GameServer
 from azul.sound import SoundData, play_sound as base_play_sound
@@ -83,6 +84,7 @@ if TYPE_CHECKING:
     )
 
     from numpy.typing import NDArray
+    from pygame.sprite import LayeredDirty
     from typing_extensions import TypeVarTuple
 
     P = TypeVarTuple("P")
@@ -169,7 +171,12 @@ SOUND_DATA: Final = {
 }
 
 
-@lru_cache
+def vec2_to_location(vec: Vector2) -> tuple[int, int]:
+    """Return rounded location tuple from Vector2."""
+    x, y = map(int, vec.rounded())
+    return x, y
+
+
 def make_square_surf(
     color: (
         pygame.color.Color
@@ -227,41 +234,6 @@ def outline_rectangle(
         (math.floor(w * percent / 2), math.floor(h * percent / 2)),
     )
     return surface
-
-
-def auto_crop_clear(
-    surface: pygame.surface.Surface,
-    clear: pygame.color.Color | None = None,
-) -> pygame.surface.Surface:
-    """Remove unneccicary pixels from image."""
-    if clear is None:
-        clear = pygame.color.Color(0, 0, 0, 0)
-    surface = surface.convert_alpha()
-    w, h = surface.get_size()
-    surface.lock()
-
-    def find_end(
-        iterfunc: Callable[[int], Iterable[pygame.color.Color]],
-        rangeobj: Iterable[int],
-    ) -> int:
-        for x in rangeobj:
-            if not all(y == clear for y in iterfunc(x)):
-                return x
-        return x
-
-    def column(x: int) -> Generator[pygame.color.Color, None, None]:
-        return (surface.get_at((x, y)) for y in range(h))
-
-    def row(y: int) -> Generator[pygame.color.Color, None, None]:
-        return (surface.get_at((x, y)) for x in range(w))
-
-    leftc = find_end(column, range(w))
-    rightc = find_end(column, range(w - 1, -1, -1))
-    topc = find_end(row, range(h))
-    floorc = find_end(row, range(h - 1, -1, -1))
-    surface.unlock()
-    dim = pygame.rect.Rect(leftc, topc, rightc - leftc, floorc - topc)
-    return surface.subsurface(dim)
 
 
 @lru_cache
@@ -338,9 +310,6 @@ def add_symbol_to_tile_surf(
     surf.blit(symbolsurf, (int(x), int(y)))
 
 
-# surf.blit(symbolsurf, (0, 0))
-
-
 def get_tile_image(
     tile_color: int,
     tilesize: int,
@@ -364,6 +333,7 @@ def get_tile_image(
         add_symbol_to_tile_surf(surf, tile_color, tilesize, greyshift)
 
         return surf
+    assert isinstance(color[0], int)
     surf = make_square_surf(color, tilesize)
     # Add tile symbol
     add_symbol_to_tile_surf(surf, tile_color, tilesize, greyshift)
@@ -432,7 +402,7 @@ class TileRenderer(sprite.Sprite):
         size += offset
 
         self.image = get_tile_container_image(
-            round(size),
+            vec2_to_location(size),
             self.background,
         )
 
@@ -573,7 +543,7 @@ class Cursor(TileRenderer):
 
     def move_to_front(self) -> None:
         """Move this sprite to front."""
-        group: sprite.LayeredDirty = self.groups()[-1]
+        group: LayeredDirty = self.groups()[-1]
         group.move_to_front(self)
 
     async def handle_cursor_set_destination(
@@ -733,9 +703,12 @@ class Board(Grid):
 
         self.update_location_on_resize = True
 
+        # Clear image so rect is set
+        self.clear_image((5, 5))
+
     def __repr__(self) -> str:
         """Return representation of self."""
-        return f"{self.__class__.__name__}({self.variant_play})"
+        return f"{self.__class__.__name__}({self.board_id})"
 
     def bind_handlers(self) -> None:
         """Register event handlers."""
@@ -766,7 +739,7 @@ class Board(Grid):
 class Row(TileRenderer):
     """Represents one of the five rows each player has."""
 
-    __slots__ = ("color", "size", "tiles")
+    __slots__ = ("color", "count", "size")
     greyshift = GREYSHIFT
 
     def __init__(
@@ -795,16 +768,17 @@ class Row(TileRenderer):
         """Update self.image."""
         self.clear_image((self.size, 1))
 
-        for x in range(self.count):
-            self.blit_tile(self.color, (x, 0))
         for x in range(self.count, self.size):
-            self.blit_tile(Tile.blank, (x, 0))
+            self.blit_tile(Tile.blank, (self.size - x, 0))
+        for x in range(self.count):
+            self.blit_tile(self.color, (self.size - x, 0))
+        self.dirty = 1
 
     def get_tile_point(
         self,
         screen_location: tuple[int, int] | Vector2,
     ) -> int | None:
-        """Return the xy choordinates of which tile intersects given a point. Returns None if no intersections."""
+        """Return the x choordinate of which tile intersects given a point. Returns None if no intersections."""
         pos = super().get_tile_point(screen_location)
         if pos is None:
             return None
@@ -821,6 +795,79 @@ class Row(TileRenderer):
     def is_full(self) -> bool:
         """Return True if this row is full."""
         return self.get_placeable() == 0
+
+    def set_background(self, color: tuple[int, int, int] | None) -> None:
+        """Set the background color for this row."""
+        self.background = color
+        self.update_image()
+
+
+class PatternRows(TileRenderer):
+    """Represents one of the five rows each player has."""
+
+    __slots__ = (
+        "rows",
+        "rows_id",
+    )
+    greyshift = GREYSHIFT
+
+    def __init__(
+        self,
+        rows_id: int,
+    ) -> None:
+        """Initialize row."""
+        super().__init__(f"Pattern_Rows_{rows_id}", background=None)
+
+        self.add_component(sprite.DragClickEventComponent())
+
+        self.rows_id = rows_id
+        self.rows: dict[int, tuple[int, int]] = {
+            i: (Tile.blank, 0) for i in range(5)
+        }
+
+        self.update_image()
+        self.visible = True
+
+    def __repr__(self) -> str:
+        """Return representation of self."""
+        return f"{self.__class__.__name__}({self.rows_id})"
+
+    def update_image(self) -> None:
+        """Update self.image."""
+        self.clear_image((5, 5))
+
+        for y in range(5):
+            tile_color, count = self.rows[y]
+            for x in range(count, (y + 1)):
+                self.blit_tile(Tile.blank, (4 - x, y))
+            for x in range(count):
+                self.blit_tile(tile_color, (4 - x, y))
+        self.dirty = 1
+
+    def set_row_data(
+        self,
+        row_id: int,
+        tile_color: Tile,
+        tile_count: int,
+    ) -> None:
+        """Set row data and update image."""
+        assert row_id in self.rows
+        self.rows[row_id] = (tile_color, tile_count)
+        self.update_image()
+
+    def get_tile_point(
+        self,
+        screen_location: tuple[int, int] | Vector2,
+    ) -> int | None:
+        """Return the x choordinate of which tile intersects given a point. Returns None if no intersections."""
+        point = super().get_tile_point(screen_location)
+        if point is None:
+            return None
+        x, y = point
+        # If point is not valid for that row, say invalid
+        if (4 - x) > y:
+            return None
+        return point
 
     def set_background(self, color: tuple[int, int, int] | None) -> None:
         """Set the background color for this row."""
@@ -885,9 +932,11 @@ class Factory(TileRenderer):
 
         self.update_location_on_resize = True
 
+        self.add_component(sprite.DragClickEventComponent())
+
     def __repr__(self) -> str:
         """Return representation of self."""
-        return f"{self.__class__.__name__}({self.number})"
+        return f"{self.__class__.__name__}({self.factory_id})"
 
     def bind_handlers(self) -> None:
         """Register event handlers."""
@@ -935,6 +984,7 @@ class Factory(TileRenderer):
         for index, tile_color in enumerate(self.tiles.elements()):
             y, x = divmod(index, 2)
             self.blit_tile(tile_color, (x, y), (8, 8))
+        self.dirty = 1
 
     def get_tile_point(
         self,
@@ -1116,7 +1166,7 @@ class MenuState(GameState):
     fontsize = BUTTONFONTSIZE
 
     def __init__(self, name: str) -> None:
-        """Initialize GameState and set up self.bh."""
+        """Initialize GameState and set up 30."""
         super().__init__(name)
 
     def add_button(
@@ -1127,7 +1177,7 @@ class MenuState(GameState):
         location: tuple[int, int] | None = None,
         size: int = fontsize,
         minlen: int = button_minimum,
-    ) -> int:
+    ) -> None:
         """Add a new objects.Button object to group."""
         button = KwargButton(
             name,
@@ -1148,7 +1198,7 @@ class MenuState(GameState):
         color: tuple[int, int, int] = BUTTON_TEXT_COLOR,
         size: int = fontsize,
         outline: tuple[int, int, int] = BUTTON_TEXT_OUTLINE,
-    ) -> int:
+    ) -> None:
         """Add a new objects.Text object to self.game with arguments. Return text id."""
         text = KwargOutlineText(
             name,
@@ -1195,60 +1245,6 @@ class MenuState(GameState):
                     self.next_state = state
 
         return to_state_by_attributes
-
-    def with_update(
-        self,
-        update_function: Callable[[], None],
-    ) -> Callable[[Callable[[], None]], Callable[[], None]]:
-        """Return a wrapper for a function that will call update_function after function."""
-
-        def update_wrapper(function: Callable[[], None]) -> Callable[[], None]:
-            """Wrap anything that might require a screen update."""
-
-            @wraps(function)
-            def function_with_update() -> None:
-                """Call main function, then update function."""
-                function()
-                update_function()
-
-            return function_with_update
-
-        return update_wrapper
-
-    def update_text(
-        self,
-        text_name: str,
-        value_function: Callable[[], str],
-    ) -> Callable[[], None]:
-        """Update text object with text_name's display value."""
-
-        def updater() -> None:
-            """Update text object {text_name}'s value with {value_function}."""
-            assert self.game is not None
-            text = self.game.get_object_by_name(f"objects.Text{text_name}")
-            assert isinstance(text, objects.Text)
-            text.update_value(value_function())
-
-        return updater
-
-    def toggle_button_state(
-        self,
-        textname: str,
-        boolattr: str,
-        textfunc: Callable[[bool], str],
-    ) -> Callable[[], None]:
-        """Return function that will toggle the value of text object <textname>, toggling attribute <boolattr>, and setting text value with textfunc."""
-
-        def valfunc() -> str:
-            """Return the new value for the text object. Gets called AFTER value is toggled."""
-            return textfunc(getattr(self, boolattr))
-
-        @self.with_update(self.update_text(textname, valfunc))
-        def toggle_value() -> None:
-            """Toggle the value of boolattr."""
-            self.set_var(boolattr, not getattr(self, boolattr))
-
-        return toggle_value
 
 
 class InitializeState(AsyncState["AzulClient"]):
@@ -1442,13 +1438,13 @@ class SettingsState(MenuState):
         self.add_text(
             "Host",
             host_text(self.host_mode),
-            (cx, cy - self.bh * 3),
+            (cx, cy - 30 * 3),
         )
         self.add_button(
             "ToggleHost",
             "Toggle",
             self.toggle_button_state("Host", "host_mode", host_text),
-            (cx, cy - self.bh * 2),
+            (cx, cy - 30 * 2),
             size=int(self.fontsize / 1.5),
         )
 
@@ -1462,7 +1458,7 @@ class SettingsState(MenuState):
         self.add_text(
             "Variant",
             varient_text(self.variant_play),
-            (cx, cy - self.bh),
+            (cx, cy - 30),
         )
         self.add_button(
             "ToggleVarient",
@@ -1475,9 +1471,9 @@ class SettingsState(MenuState):
         self.add_text(
             "Players",
             f"Players: {self.player_count}",
-            (cx, cy + self.bh),
+            (cx, cy + 30),
         )
-        add_numbers(2, 4, 70, cx, int(cy + self.bh * 2))
+        add_numbers(2, 4, 70, cx, int(cy + 30 * 2))
 
         var_to_state = self.var_dependant_to_state(
             FactoryOffer=("host_mode", True),
@@ -1487,142 +1483,8 @@ class SettingsState(MenuState):
             "StartGame",
             "Start Game",
             var_to_state,
-            (cx, cy + self.bh * 3),
+            (cx, cy + 30 * 3),
         )
-
-    def exit_actions(self) -> None:
-        """Start game."""
-        assert self.game is not None
-        self.game.start_game(
-            self.player_count,
-            self.variant_play,
-            self.host_mode,
-        )
-        self.game.bag.full_reset()
-
-
-class PhaseFactoryOffer(GameState):
-    """Game state when it's the Factory Offer Stage."""
-
-    __slots__ = ()
-
-    def __init__(self) -> None:
-        """Initialize factory offer phase."""
-        super().__init__("FactoryOffer")
-
-
-class PhaseFactoryOfferNetworked(PhaseFactoryOffer):
-    """Factory offer phase but networked."""
-
-    __slots__ = ()
-
-    def __init__(self) -> None:
-        """Initialize factory offer networked."""
-        GameState.__init__(self, "FactoryOfferNetworked")
-
-    def check_state(self) -> str:
-        """Go to networked wall tiling."""
-        return "WallTilingNetworked"
-
-
-class PhaseWallTiling(GameState):
-    """Wall tiling game phase."""
-
-    # __slots__ = ()
-    def __init__(self) -> None:
-        """Initialize will tiling phase."""
-        super().__init__("WallTiling")
-
-    def entry_actions(self) -> None:
-        """Start wall tiling."""
-        assert self.game is not None
-        self.next_starter: int = 0
-        self.not_processed = []
-
-        self.game.player_turn_over()
-
-        # For each player,
-        for player_id in range(self.game.players):
-            # Activate wall tiling mode.
-            player = self.game.get_player(player_id)
-            player.wall_tiling()
-            # Add that player's player_id to the list of not-processed players.
-            self.not_processed.append(player.player_id)
-
-        # Start processing players.
-        self.game.next_turn()
-
-    def do_actions(self) -> None:
-        """Do game actions."""
-        assert self.game is not None
-        if self.not_processed:
-            if self.game.player_turn in self.not_processed:
-                player = self.game.get_player(self.game.player_turn)
-                if player.done_wall_tiling():
-                    # Once player is done wall tiling, score their moves.
-                    # Also gets if they had the number one tile.
-                    number_one = player.score_phase()
-
-                    if number_one:
-                        # If player had the number one tile, remember that.
-                        self.next_starter = self.game.player_turn
-                        # Then, add the number one tile back to the table center.
-                        table = self.game.get_object_by_name("TableCenter")
-                        assert isinstance(table, TableCenter)
-                        table.add_number_one_tile()
-                    # After calculating their score, delete player from un-processed list
-                    self.not_processed.remove(self.game.player_turn)
-                    # and continue to the next un-processed player.
-                    self.game.next_turn()
-            else:
-                self.game.next_turn()
-
-    def check_state(self) -> str | None:
-        """Go to next state if ready."""
-        assert self.game is not None
-        cursor = self.game.get_object_by_name("Cursor")
-        assert isinstance(cursor, Cursor)
-        if not self.not_processed and not cursor.is_holding():
-            return "PrepareNext"
-        return None
-
-    def exit_actions(self) -> None:
-        """Update who's turn it is."""
-        assert self.game is not None
-        # Set up the player that had the number one tile to be the starting player next round.
-        self.game.player_turn_over()
-        # Goal: make (self.player_turn + 1) % self.players = self.next_starter
-        nturn = self.next_starter - 1
-        if nturn < 0:
-            nturn += self.game.players
-        self.game.player_turn = nturn
-
-
-class PhasePrepareNext(GameState):
-    """Prepare next phase of game."""
-
-    __slots__ = ("new_round",)
-
-    def __init__(self) -> None:
-        """Initialize prepare next state."""
-        super().__init__("PrepareNext")
-        self.new_round = False
-
-    def entry_actions(self) -> None:
-        """Find out if game continues."""
-        assert self.game is not None
-        players = (
-            self.game.get_player(player_id)
-            for player_id in range(self.game.players)
-        )
-        complete = (player.has_horzontal_line() for player in players)
-        self.new_round = not any(complete)
-
-    def check_state(self) -> str:
-        """Go to factory offer if new round else end screen."""
-        if self.new_round:
-            return "FactoryOffer"
-        return "End"
 
 
 class EndScreen(MenuState):
@@ -1838,27 +1700,6 @@ class PlayJoiningState(GameState):
         await self.machine.set_state("title")
 
 
-# async def check_conditions(self) -> str | None:
-# return None
-
-
-##    async def entry_actions(self) -> None:
-##        """Set up buttons."""
-##        assert self.machine is not None
-##        self.id = self.machine.new_group("initialize")
-##
-##        self.group_add(Cursor())
-##        await self.manager.raise_event(Event("cursor_drag", [3, 5]))
-##        self.manager.register_handler("PygameMouseMotion", self.mouse_moved)
-##
-##        ##        board = Board()
-##        ####        board.place_tile((2, 2), Tile.red)
-##        ##        board.location = Vector2.from_iter(SCREEN_SIZE) // 2
-##        ##        self.group_add(board)
-##
-##        center.add_tiles((0, 1, 2, 3, 5))
-
-
 class PlayState(GameState):
     """Game Play State."""
 
@@ -1901,11 +1742,11 @@ class PlayState(GameState):
         self.group_add(center)
 
         # self.group_add(())
-        ##        gameboard = GameBoard(
-        ##            45,
-        ##        )
-        ##        gameboard.location = [x // 2 for x in SCREEN_SIZE]
-        ##        self.group_add(gameboard)
+        ##gameboard = GameBoard(
+        ##    45,
+        ##)
+        ##gameboard.location = [x // 2 for x in SCREEN_SIZE]
+        ##self.group_add(gameboard)
 
     async def handle_game_initial_config(
         self,
@@ -1919,28 +1760,40 @@ class PlayState(GameState):
         center = Vector2.from_iter(SCREEN_SIZE) // 2
 
         # Add factories
-        for index, degrees in enumerate(range(0, 360, 360 // factory_count)):
+        each = 360 / factory_count
+        degrees: float = -90
+        for index in range(factory_count):
             factory = Factory(index)
-            factory.location = (
+            factory.location = vec2_to_location(
                 Vector2.from_degrees(
-                    degrees - 90,
+                    degrees,
                     145,
                 )
-                + center
+                + center,
             )
             self.group_add(factory)
 
+            degrees += each
+
         # Add players
-        for index, degrees in enumerate(range(0, 360, 360 // player_count)):
+        each = 360 / player_count
+        degrees = -(90 / player_count)
+        for index in range(player_count):
             board = Board(index)
-            board.location = (
+            board.rect.midleft = vec2_to_location(
                 Vector2.from_degrees(
-                    degrees - 45,
+                    degrees,
                     300,
                 )
-                + center
+                + center,
             )
             self.group_add(board)
+
+            pattern_rows = PatternRows(index)
+            pattern_rows.rect.bottomright = board.rect.bottomleft
+            self.group_add(pattern_rows)
+
+            degrees += each
 
     async def check_conditions(self) -> str | None:
         """Return to title if client component doesn't exist."""
@@ -1979,8 +1832,6 @@ class PlayState(GameState):
         print(f"handle_client_disconnected  {error = }")
 
         self.exit_data = (1, f"Client Disconnected$${error}", False)
-
-    # await self.do_actions()
 
     async def do_actions(self) -> None:
         """Perform actions for this State."""
@@ -2208,7 +2059,7 @@ def cli_run() -> None:
         run()
     except ExceptionGroup as exc:
         print(exc)
-        exception = traceback.format_exception(exc)
+        exception = "".join(traceback.format_exception(exc))
     ##        raise
     ##    except BaseException as ex:
     ##        screenshot_last_frame()
@@ -2217,7 +2068,7 @@ def cli_run() -> None:
     finally:
         pygame.quit()
         if exception is not None:
-            print("".join(exception), file=sys.stderr)
+            print(exception, file=sys.stderr)
 
 
 if __name__ == "__main__":
