@@ -831,8 +831,51 @@ class GameServer(network.Server):
         event: Event[tuple[int, int, tuple[int, int]]],
     ) -> None:
         """Handle client clicking on pattern row."""
+        if not self.players_can_interact:
+            print("Players are not allowed to interact.")
+            await trio.lowlevel.checkpoint()
+            return
+
         client_id, row_id, row_pos = event.data
-        print(f"handle_client_pattern_row_clicked {event.data = }")
+
+        server_player_id = self.client_players[client_id]
+
+        if server_player_id == ServerPlayer.spectator:
+            print(f"Spectator cannot select {row_id = } {row_pos}")
+            await trio.lowlevel.checkpoint()
+            return
+
+        player_id = int(server_player_id)
+        if server_player_id == ServerPlayer.singleplayer_all:
+            player_id = self.state.current_turn
+
+        if player_id != self.state.current_turn:
+            print(
+                "Player {player_id} (client ID {client_id}) cannot select pattern row, not their turn.",
+            )
+            await trio.lowlevel.checkpoint()
+            return
+
+        if self.state.current_phase != Phase.factory_offer:
+            print(
+                "Player {player_id} (client ID {client_id}) cannot select pattern row, not in factory offer phase.",
+            )
+            await trio.lowlevel.checkpoint()
+            return
+
+        if player_id != row_id:
+            print(
+                "Player {player_id} (client ID {client_id}) cannot select pattern row {row_id} that does not belong to them.",
+            )
+            await trio.lowlevel.checkpoint()
+            return
+
+        column, line_id = row_pos
+        place_count = 5 - column
+
+        print(
+            f"handle_client_pattern_row_clicked {line_id = } {place_count = }",
+        )
         await trio.lowlevel.checkpoint()
 
     def __del__(self) -> None:
