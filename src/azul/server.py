@@ -164,7 +164,19 @@ class ServerClient(ServerClientNetworkEventComponent):
 
     async def read_cursor_location(self, event: Event[bytearray]) -> None:
         """Read factory_clicked event from client. Raise as `factory_clicked->server`."""
-        print(f"read_cursor_location {event.data = }")
+        buffer = int.from_bytes(event.data) & 0xFFFFFF
+        x = (buffer >> 12) & 0xFFF
+        y = buffer & 0xFFF
+
+        await self.raise_event(
+            Event(
+                "cursor_location->server",
+                (
+                    self.client_id,
+                    (x, y),
+                ),
+            ),
+        )
 
     async def read_pattern_row_clicked(self, event: Event[bytearray]) -> None:
         """Read pattern_row_clicked event from client. Raise as `pattern_row_clicked->server`."""
@@ -346,6 +358,7 @@ class GameServer(network.Server):
                 "server_send_game_start": self.handle_server_start_new_game,
                 "factory_clicked->server": self.handle_client_factory_clicked,
                 "pattern_row_clicked->server": self.handle_client_pattern_row_clicked,
+                "cursor_location->server": self.handle_cursor_location,
             },
         )
 
@@ -876,6 +889,16 @@ class GameServer(network.Server):
         print(
             f"handle_client_pattern_row_clicked {line_id = } {place_count = }",
         )
+        await trio.lowlevel.checkpoint()
+
+    async def handle_cursor_location(
+        self,
+        event: Event[tuple[int, tuple[int, int]]],
+    ) -> None:
+        """Handle cursor location sent from client."""
+        client_id, pos = event.data
+
+        print(f"handle_cursor_location {client_id = } {pos = }")
         await trio.lowlevel.checkpoint()
 
     def __del__(self) -> None:

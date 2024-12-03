@@ -567,7 +567,7 @@ class Cursor(TileRenderer):
         self.location = event.data["pos"]
 
         ##transmit_location = Vector2.from_iter(
-        ##    x / y for x, y in zip(self.location, SCREEN_SIZE, strict=False)
+        ##    x / y for x, y in zip(self.location, SCREEN_SIZE, strict=True)
         ##)
         ##
         ### Transmit to server

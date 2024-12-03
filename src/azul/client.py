@@ -432,10 +432,9 @@ class GameClient(ClientNetworkEventComponent):
         """Write cursor_location_transmit event to server."""
         scaled_location = event.data
 
-        x, y = map(int, (scaled_location * 4096).rounded())  # 2 ** 12
-
-        position = (x & 0xFFF) << 3 | (y & 0xFFF)
-        buffer = position.to_bytes(3, "big")
+        x, y = map(int, (scaled_location * 0xFFF).floored())
+        position = ((x & 0xFFF) << 12) | (y & 0xFFF)
+        buffer = (position & 0xFFFFFF).to_bytes(3)
 
         await self.raise_event(Event("cursor_location->server[write]", buffer))
 
