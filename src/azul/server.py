@@ -896,7 +896,30 @@ class GameServer(network.Server):
         event: Event[tuple[int, tuple[int, int]]],
     ) -> None:
         """Handle cursor location sent from client."""
+        if not self.players_can_interact:
+            print("Players are not allowed to interact.")
+            await trio.lowlevel.checkpoint()
+            return
+
         client_id, pos = event.data
+
+        server_player_id = self.client_players[client_id]
+
+        if server_player_id == ServerPlayer.spectator:
+            print(f"Spectator cannot select {pos = }")
+            await trio.lowlevel.checkpoint()
+            return
+
+        player_id = int(server_player_id)
+        if server_player_id == ServerPlayer.singleplayer_all:
+            player_id = self.state.current_turn
+
+        if player_id != self.state.current_turn:
+            print(
+                "Player {player_id} (client ID {client_id}) cannot move cursor, not their turn.",
+            )
+            await trio.lowlevel.checkpoint()
+            return
 
         print(f"handle_cursor_location {client_id = } {pos = }")
         await trio.lowlevel.checkpoint()

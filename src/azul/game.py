@@ -39,6 +39,7 @@ from typing import TYPE_CHECKING, Any, Final, TypeVar
 import pygame
 import trio
 from libcomponent.component import (
+    Component,
     ComponentManager,
     Event,
     ExternalRaiseManager,
@@ -462,6 +463,12 @@ class TileRenderer(sprite.Sprite):
                 return None
         # Otherwise, not in separation region, so we should be good
         return tile_position.floored()
+
+
+class EventClock(Component):
+    """Event Clock Component."""
+
+    __slots__ = ()
 
 
 class Cursor(TileRenderer):
