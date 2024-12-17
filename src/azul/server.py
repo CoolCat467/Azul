@@ -952,6 +952,11 @@ class GameServer(network.Server):
         place_count = 5 - column
 
         color = self.state.get_cursor_holding_color()
+
+        max_place = self.state.get_player_line_max_placable_count(line_id)
+        current_hold_count = self.state.cursor_contents[color]
+        place_count = min(place_count, current_hold_count, max_place)
+
         if not self.state.can_player_select_line(line_id, color, place_count):
             print(
                 f"Player {player_id} (client ID {client_id}) cannot select pattern line {line_id} placing {place_count} {Tile(color)} tiles.",
