@@ -55,6 +55,7 @@ from azul.network_shared import (
     ServerBoundEvents,
     encode_int8_array,
     encode_numeric_uint8_counter,
+    encode_tile_count,
 )
 from azul.state import Phase, State, Tile
 
@@ -96,10 +97,12 @@ class ServerClient(ServerClientNetworkEventComponent):
                 "server[write]->playing_as": cbe.playing_as,
                 "server[write]->game_over": cbe.game_over,
                 "server[write]->board_data": cbe.board_data,
+                "server[write]->pattern_data": cbe.pattern_data,
                 "server[write]->factory_data": cbe.factory_data,
                 "server[write]->cursor_data": cbe.cursor_data,
                 "server[write]->table_data": cbe.table_data,
                 "server[write]->cursor_movement_mode": cbe.cursor_movement_mode,
+                "server[write]->current_turn_change": cbe.current_turn_change,
             },
         )
         sbe = ServerBoundEvents
@@ -130,6 +133,8 @@ class ServerClient(ServerClientNetworkEventComponent):
                 "cursor_data->network": self.write_cursor_data,
                 "table_data->network": self.write_table_data,
                 f"cursor_movement_mode->network[{self.client_id}]": self.write_cursor_movement_mode,
+                "current_turn_change->network": self.write_current_turn_change,
+                "pattern_data->network": self.write_pattern_data,
             },
         )
 
@@ -293,7 +298,7 @@ class ServerClient(ServerClientNetworkEventComponent):
         self,
         event: Event[bool],
     ) -> None:
-        """Reraise as server[write]->table_data."""
+        """Reraise as server[write]->cursor_movement_mode."""
         client_mode = event.data
 
         buffer = Buffer()
@@ -301,6 +306,37 @@ class ServerClient(ServerClientNetworkEventComponent):
 
         await self.write_event(
             Event("server[write]->cursor_movement_mode", buffer),
+        )
+
+    async def write_current_turn_change(
+        self,
+        event: Event[int],
+    ) -> None:
+        """Reraise as server[write]->current_turn_change."""
+        pattern_id = event.data
+
+        buffer = Buffer()
+        buffer.write_value(StructFormat.UBYTE, pattern_id)
+
+        await self.write_event(
+            Event("server[write]->current_turn_change", buffer),
+        )
+
+    async def write_pattern_data(
+        self,
+        event: Event[tuple[int, int, tuple[int, int]]],
+    ) -> None:
+        """Reraise as server[write]->board_data."""
+        player_id, row_id, (tile_color, tile_count) = event.data
+
+        buffer = Buffer()
+        buffer.write_value(StructFormat.UBYTE, player_id)
+        buffer.write_value(StructFormat.UBYTE, row_id)
+        assert tile_color >= 0
+        buffer.extend(encode_tile_count(tile_color, tile_count))
+
+        await self.write_event(
+            Event("server[write]->pattern_data", buffer),
         )
 
 
@@ -750,6 +786,35 @@ class GameServer(network.Server):
                     self.client_count -= 1
         # ServerClient's `with` block handles closing stream.
 
+    def find_client_id_from_server_player_id(
+        self,
+        server_player_id: ServerPlayer,
+    ) -> int | None:
+        """Return client id from server player id or None if not found."""
+        for client_id, current_server_player_id in self.client_players.items():
+            if current_server_player_id == server_player_id:
+                return client_id
+            # Return singleplayer client id if exists
+            if current_server_player_id == ServerPlayer.singleplayer_all:
+                return client_id
+        return None
+
+    def find_server_player_id_from_state_turn(
+        self,
+        state_turn: int,
+    ) -> ServerPlayer:
+        """Return ServerPlayer id from game state turn."""
+        if self.internal_singleplayer_mode:
+            return ServerPlayer.singleplayer_all
+        return ServerPlayer(state_turn)
+
+    def find_client_id_from_state_turn(self, state_turn: int) -> int | None:
+        """Return client id from state turn or None if not found."""
+        server_player_id = self.find_server_player_id_from_state_turn(
+            state_turn,
+        )
+        return self.find_client_id_from_server_player_id(server_player_id)
+
     async def handle_client_factory_clicked(
         self,
         event: Event[tuple[int, int, Tile]],
@@ -886,10 +951,69 @@ class GameServer(network.Server):
         column, line_id = row_pos
         place_count = 5 - column
 
-        print(
-            f"handle_client_pattern_row_clicked {line_id = } {place_count = }",
+        color = self.state.get_cursor_holding_color()
+        if not self.state.can_player_select_line(line_id, color, place_count):
+            print(
+                f"Player {player_id} (client ID {client_id}) cannot select pattern line {line_id} placing {place_count} {Tile(color)} tiles.",
+            )
+            await trio.lowlevel.checkpoint()
+            return
+
+        prev_player_turn = self.state.current_turn
+
+        self.state = self.state.player_selects_pattern_line(
+            line_id,
+            place_count,
         )
-        await trio.lowlevel.checkpoint()
+
+        if self.state.current_turn != player_id:
+            if server_player_id != ServerPlayer.singleplayer_all:
+                new_client_id = self.find_client_id_from_state_turn(
+                    self.state.current_turn,
+                )
+                assert new_client_id is not None
+                await self.raise_event(
+                    Event(
+                        f"cursor_movement_mode->network[{client_id}]",
+                        False,
+                    ),
+                )
+                await self.raise_event(
+                    Event(
+                        f"cursor_movement_mode->network[{new_client_id}]",
+                        True,
+                    ),
+                )
+
+            await self.raise_event(
+                Event(
+                    "current_turn_change->network",
+                    self.state.current_turn,
+                ),
+            )
+
+        raw_tile_color, tile_count = self.state.player_data[
+            prev_player_turn
+        ].lines[line_id]
+        # Do not send blank colors, clamp to zero
+        tile_color = max(0, int(raw_tile_color))
+        await self.raise_event(
+            Event(
+                "pattern_data->network",
+                (
+                    prev_player_turn,
+                    line_id,
+                    (tile_color, tile_count),
+                ),
+            ),
+        )
+
+        await self.raise_event(
+            Event(
+                "cursor_data->network",
+                self.state.cursor_contents,
+            ),
+        )
 
     async def handle_cursor_location(
         self,

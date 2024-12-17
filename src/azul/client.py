@@ -42,6 +42,7 @@ from azul.network_shared import (
     ServerBoundEvents,
     decode_int8_array,
     decode_numeric_uint8_counter,
+    decode_tile_count,
 )
 
 if TYPE_CHECKING:
@@ -182,10 +183,12 @@ class GameClient(ClientNetworkEventComponent):
                 cbe.playing_as: "server->playing_as",
                 cbe.game_over: "server->game_over",
                 cbe.board_data: "server->board_data",
+                cbe.pattern_data: "server->pattern_data",
                 cbe.factory_data: "server->factory_data",
                 cbe.cursor_data: "server->cursor_data",
                 cbe.table_data: "server->table_data",
                 cbe.cursor_movement_mode: "server->cursor_movement_mode",
+                cbe.current_turn_change: "server->current_turn_change",
             },
         )
 
@@ -203,10 +206,12 @@ class GameClient(ClientNetworkEventComponent):
                 "server->playing_as": self.read_playing_as,
                 "server->game_over": self.read_game_over,
                 "server->board_data": self.read_board_data,
+                "server->pattern_data": self.read_pattern_data,
                 "server->factory_data": self.read_factory_data,
                 "server->cursor_data": self.read_cursor_data,
                 "server->table_data": self.read_table_data,
                 "server->cursor_movement_mode": self.read_cursor_movement_mode,
+                "server->current_turn_change": self.read_current_turn_change,
                 "client_connect": self.handle_client_connect,
                 "network_stop": self.handle_network_stop,
                 "game_factory_clicked": self.write_game_factory_clicked,
@@ -377,6 +382,18 @@ class GameClient(ClientNetworkEventComponent):
 
         await self.raise_event(Event("game_board_data", (player_id, array)))
 
+    async def read_pattern_data(self, event: Event[bytearray]) -> None:
+        """Read pattern_data event from server, reraise as `game_pattern_data`."""
+        buffer = Buffer(event.data)
+
+        player_id: u8 = buffer.read_value(StructFormat.UBYTE)
+        row_id: u8 = buffer.read_value(StructFormat.UBYTE)
+        tile_data = decode_tile_count(buffer)
+
+        await self.raise_event(
+            Event("game_pattern_data", (player_id, row_id, tile_data)),
+        )
+
     async def read_factory_data(self, event: Event[bytearray]) -> None:
         """Read factory_data event from server, reraise as `game_factory_data`."""
         buffer = Buffer(event.data)
@@ -410,6 +427,15 @@ class GameClient(ClientNetworkEventComponent):
 
         await self.raise_event(
             Event("game_cursor_set_movement_mode", client_mode),
+        )
+
+    async def read_current_turn_change(self, event: Event[bytearray]) -> None:
+        """Read current_turn_change event from server, reraise as `game_pattern_current_turn_change`."""
+        buffer = Buffer(event.data)
+
+        pattern_id: u8 = buffer.read_value(StructFormat.UBYTE)
+        await self.raise_event(
+            Event("game_pattern_current_turn_change", pattern_id),
         )
 
     async def write_game_factory_clicked(

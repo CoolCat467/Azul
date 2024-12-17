@@ -1165,8 +1165,8 @@ class State(NamedTuple):
         raise NotImplementedError()
 
     def _manual_wall_tiling_maybe_next_turn(self) -> Self:
+        # return self
         raise NotImplementedError()
-        return self
 
     def get_manual_wall_tiling_locations_for_player(
         self,

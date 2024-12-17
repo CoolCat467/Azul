@@ -117,10 +117,12 @@ class ClientBoundEvents(IntEnum):
     playing_as = auto()
     game_over = auto()
     board_data = auto()
+    pattern_data = auto()
     factory_data = auto()
     cursor_data = auto()
     table_data = auto()
     cursor_movement_mode = auto()
+    current_turn_change = auto()
 
 
 class ServerBoundEvents(IntEnum):

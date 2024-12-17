@@ -840,8 +840,14 @@ class PatternRows(TileRenderer):
         return f"{self.__class__.__name__}({self.rows_id})"
 
     def bind_handlers(self) -> None:
-        """Register click event handler."""
-        self.register_handler("click", self.handle_click)
+        """Register event handlers."""
+        self.register_handlers(
+            {
+                "click": self.handle_click,
+                "game_pattern_current_turn_change": self.handle_game_pattern_current_turn_change,
+                "game_pattern_data": self.handle_game_pattern_data,
+            },
+        )
 
     def update_image(self) -> None:
         """Update self.image."""
@@ -905,6 +911,32 @@ class PatternRows(TileRenderer):
                 2,
             ),
         )
+
+    async def handle_game_pattern_current_turn_change(
+        self,
+        event: Event[int],
+    ) -> None:
+        """Handle game_pattern_current_turn_change event."""
+        player_id = event.data
+
+        if player_id == self.rows_id:
+            self.set_background(DARKGREEN)
+        else:
+            self.set_background(None)
+
+    async def handle_game_pattern_data(
+        self,
+        event: Event[tuple[int, int, tuple[int, int]]],
+    ) -> None:
+        """Handle game_pattern_data event."""
+        player_id, row_id, (raw_tile_color, tile_count) = event.data
+
+        if player_id != self.rows_id:
+            await trio.lowlevel.checkpoint()
+            return
+        tile_color = Tile(raw_tile_color)
+        self.set_row_data(row_id, tile_color, tile_count)
+        await trio.lowlevel.checkpoint()
 
 
 class FloorLine(Row):
