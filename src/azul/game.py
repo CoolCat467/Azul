@@ -407,13 +407,12 @@ class TileRenderer(sprite.Sprite):
             self.background,
         )
 
-    def blit_tile(
+    def get_tile_topleft(
         self,
-        tile_color: int,
         tile_location: tuple[int, int],
         offset: tuple[int, int] | None = None,
-    ) -> None:
-        """Blit the surface of a given tile object onto self.image at given tile location. It is assumed that all tile locations are xy tuples."""
+    ) -> tuple[int, int]:
+        """Return top left corner location of tile given its location and optional offset."""
         tile_full = self.tile_size + self.tile_separation
 
         position = Vector2.from_iter(tile_location) * tile_full
@@ -421,12 +420,35 @@ class TileRenderer(sprite.Sprite):
             position += offset
         position += (self.tile_separation, self.tile_separation)
 
+        return vec2_to_location(position)
+
+    def get_tile_rect(
+        self,
+        tile_location: tuple[int, int],
+        offset: tuple[int, int] | None = None,
+    ) -> Rect:
+        """Return Rect of area given tile exists in."""
+        topleft = self.get_tile_topleft(tile_location, offset)
+        return Rect(
+            topleft,
+            (self.tile_size, self.tile_size),
+        )
+
+    def blit_tile(
+        self,
+        tile_color: int,
+        tile_location: tuple[int, int],
+        offset: tuple[int, int] | None = None,
+    ) -> None:
+        """Blit the surface of a given tile object onto self.image at given tile location. It is assumed that all tile locations are xy tuples."""
+        position = self.get_tile_topleft(tile_location, offset)
+
         surf = get_tile_image(tile_color, self.tile_size, self.greyshift)
         assert self.image is not None
 
         self.image.blit(
             surf,
-            vec2_to_location(position),
+            position,
         )
 
     def to_image_surface_location(
@@ -798,62 +820,6 @@ class Board(Grid):
         await trio.lowlevel.checkpoint()
 
 
-class Row(TileRenderer):
-    """Represents one of the five rows each player has."""
-
-    __slots__ = ("color", "count", "size")
-    greyshift = GREYSHIFT
-
-    def __init__(
-        self,
-        name: str,
-        size: int,
-        tile_separation: int | None = None,
-        background: tuple[int, int, int] | None = None,
-    ) -> None:
-        """Initialize row."""
-        super().__init__(
-            name,
-            tile_separation,
-            background,
-        )
-
-        self.color = Tile.blank
-        self.size = int(size)
-        self.count = 0
-
-    def __repr__(self) -> str:
-        """Return representation of self."""
-        return f"{self.__class__.__name__}({self.size})"
-
-    def update_image(self) -> None:
-        """Update self.image."""
-        self.clear_image((self.size, 1))
-
-        for x in range(self.count, self.size):
-            self.blit_tile(Tile.blank, (self.size - x, 0))
-        for x in range(self.count):
-            self.blit_tile(self.color, (self.size - x, 0))
-        self.dirty = 1
-
-    def get_placed(self) -> int:
-        """Return the number of tiles in self that are not fake tiles, like grey ones."""
-        return self.count
-
-    def get_placeable(self) -> int:
-        """Return the number of tiles permitted to be placed on self."""
-        return self.size - self.get_placed()
-
-    def is_full(self) -> bool:
-        """Return True if this row is full."""
-        return self.get_placeable() == 0
-
-    def set_background(self, color: tuple[int, int, int] | None) -> None:
-        """Set the background color for this row."""
-        self.background = color
-        self.update_image()
-
-
 class PatternRows(TileRenderer):
     """Represents one of the five rows each player has."""
 
@@ -984,42 +950,45 @@ class PatternRows(TileRenderer):
         await trio.lowlevel.checkpoint()
 
 
-class FloorLine(Row):
+class FloorLine(TileRenderer):
     """Represents a player's floor line."""
 
-    __slots__ = ("floor_line_id", "numbers", "text")
+    __slots__ = ("floor_line_id", "numbers", "size")
 
     def __init__(self, floor_line_id: int) -> None:
         """Initialize floor line."""
-        super().__init__(f"floor_line_{floor_line_id}", 7, background=ORANGE)
-
-        # self.font = Font(FONT, round(self.tile_size*1.2), color=BLACK, cx=False, cy=False)
-        self.text = objects.Text(
-            "text object",
-            pygame.font.Font(FONT, round(self.tile_size * 1.2)),
+        super().__init__(
+            f"floor_line_{floor_line_id}",
+            background=RED,
         )
-        self.text.color = BLACK
 
-        self.numbers = [-255 for _ in range(self.size)]
+        self.size = 7
+
+        self.numbers = tuple(-1 for _ in range(self.size))
+        self.tiles: list[Tile] = []
+
+        self.update_image()
+        self.visible = True
 
     def __repr__(self) -> str:
         """Return representation of self."""
-        return f"{self.__class__.__name__}(<>)"
+        return f"{self.__class__.__name__}({self.floor_line_id})"
 
-    def render(self, surface: pygame.surface.Surface) -> None:
+    def update_image(self) -> None:
         """Update self.image."""
-        sx, sy = self.location
-        w, h = self.rect.size
-        tile_full = self.tile_separation + self.tile_size
-        for x in range(self.size):
-            xy = round(
-                x * tile_full + self.tile_separation + sx - w / 2,
-            ), round(
-                self.tile_separation + sy - h / 2,
-            )
-            self.text.text = str(self.numbers[x])
-            self.text.location = Vector2(*xy)
-            # self.text.render(surface)
+        self.clear_image((self.size, 1))
+
+        font = pygame.font.Font(FONT, size=self.tile_size)
+
+        for x, tile in enumerate(self.tiles):
+            self.blit_tile(tile, (x, 0))
+        for x in range(len(self.tiles), self.size):
+            self.blit_tile(Tile.blank, (x, 0))
+            # Draw number on top
+            number_surf = font.render(str(self.numbers[x]), False, BLACK)
+            tile_topleft = self.get_tile_topleft((x, 0))
+            self.image.blit(number_surf, tile_topleft)
+        self.dirty = 1
 
 
 class Factory(TileRenderer):
@@ -1860,6 +1829,10 @@ class PlayState(GameState):
             if index == self.current_turn:
                 pattern_rows.set_background(DARKGREEN)
             self.group_add(pattern_rows)
+
+            floor_line = FloorLine(index)
+            floor_line.rect.topleft = pattern_rows.rect.bottomleft
+            self.group_add(floor_line)
 
             degrees += each
 
