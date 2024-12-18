@@ -953,7 +953,7 @@ class PatternRows(TileRenderer):
 class FloorLine(TileRenderer):
     """Represents a player's floor line."""
 
-    __slots__ = ("floor_line_id", "numbers", "size")
+    __slots__ = ("floor_line_id", "numbers")
 
     def __init__(self, floor_line_id: int) -> None:
         """Initialize floor line."""
@@ -962,9 +962,7 @@ class FloorLine(TileRenderer):
             background=RED,
         )
 
-        self.size = 7
-
-        self.numbers = tuple(-1 for _ in range(self.size))
+        self.numbers = tuple(-1 for _ in range(7))
         self.tiles: list[Tile] = []
 
         self.update_image()
@@ -976,13 +974,13 @@ class FloorLine(TileRenderer):
 
     def update_image(self) -> None:
         """Update self.image."""
-        self.clear_image((self.size, 1))
+        self.clear_image((len(self.numbers), 1))
 
         font = pygame.font.Font(FONT, size=self.tile_size)
 
         for x, tile in enumerate(self.tiles):
             self.blit_tile(tile, (x, 0))
-        for x in range(len(self.tiles), self.size):
+        for x in range(len(self.tiles), len(self.numbers)):
             self.blit_tile(Tile.blank, (x, 0))
             # Draw number on top
             number_surf = font.render(str(self.numbers[x]), False, BLACK)
