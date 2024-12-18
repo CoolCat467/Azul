@@ -6,7 +6,7 @@ attrs==24.3.0
     #   trio
 black==24.10.0 ; implementation_name == 'cpython'
     # via -r test-requirements.in
-cffi==1.17.1 ; (os_name != 'nt' and platform_python_implementation != 'PyPy') or (implementation_name != 'pypy' and os_name == 'nt') or (implementation_name == 'pypy' and platform_python_implementation != 'PyPy')
+cffi==1.17.1 ; (implementation_name != 'pypy' and os_name == 'nt') or platform_python_implementation != 'PyPy'
     # via
     #   cryptography
     #   trio
@@ -14,7 +14,7 @@ click==8.1.7 ; implementation_name == 'cpython'
     # via black
 codespell==2.3.0
     # via -r test-requirements.in
-colorama==0.4.6 ; (implementation_name != 'cpython' and sys_platform == 'win32') or (platform_system != 'Windows' and sys_platform == 'win32') or (implementation_name == 'cpython' and platform_system == 'Windows')
+colorama==0.4.6 ; (implementation_name == 'cpython' and platform_system == 'Windows') or sys_platform == 'win32'
     # via
     #   click
     #   pytest
@@ -33,7 +33,7 @@ idna==3.10
     # via trio
 iniconfig==2.0.0
     # via pytest
-libcomponent @ git+https://github.com/CoolCat467/LibComponent@b06eaca2f029a9fc019d68194ade260ccb00a841
+libcomponent @ git+https://github.com/CoolCat467/LibComponent@5c69fa04833560443dd3be414b5ce713793d5d42
     # via -r test-requirements.in
 mypy==1.13.0
     # via -r test-requirements.in
@@ -61,7 +61,7 @@ platformdirs==4.3.6 ; implementation_name == 'cpython'
     # via black
 pluggy==1.5.0
     # via pytest
-pycparser==2.22 ; (os_name != 'nt' and platform_python_implementation != 'PyPy') or (implementation_name != 'pypy' and os_name == 'nt') or (implementation_name == 'pypy' and platform_python_implementation != 'PyPy')
+pycparser==2.22 ; (implementation_name != 'pypy' and os_name == 'nt') or platform_python_implementation != 'PyPy'
     # via cffi
 pygame==2.6.1
     # via -r test-requirements.in
@@ -97,5 +97,5 @@ typing-extensions==4.12.2
     #   black
     #   libcomponent
     #   mypy
-uv==0.5.9
+uv==0.5.10
     # via -r test-requirements.in

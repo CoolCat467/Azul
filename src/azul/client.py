@@ -40,16 +40,18 @@ from azul.network_shared import (
     ADVERTISEMENT_PORT,
     ClientBoundEvents,
     ServerBoundEvents,
+    decode_cursor_location,
     decode_int8_array,
     decode_numeric_uint8_counter,
     decode_tile_count,
+    encode_cursor_location,
 )
+from azul.vector import Vector2
 
 if TYPE_CHECKING:
     from mypy_extensions import u8
 
     from azul.state import Tile
-    from azul.vector import Vector2
 
 
 async def read_advertisements(
@@ -189,6 +191,7 @@ class GameClient(ClientNetworkEventComponent):
                 cbe.table_data: "server->table_data",
                 cbe.cursor_movement_mode: "server->cursor_movement_mode",
                 cbe.current_turn_change: "server->current_turn_change",
+                cbe.cursor_position: "server->cursor_position",
             },
         )
 
@@ -212,6 +215,7 @@ class GameClient(ClientNetworkEventComponent):
                 "server->table_data": self.read_table_data,
                 "server->cursor_movement_mode": self.read_cursor_movement_mode,
                 "server->current_turn_change": self.read_current_turn_change,
+                "server->cursor_position": self.read_cursor_position,
                 "client_connect": self.handle_client_connect,
                 "network_stop": self.handle_network_stop,
                 "game_factory_clicked": self.write_game_factory_clicked,
@@ -438,6 +442,15 @@ class GameClient(ClientNetworkEventComponent):
             Event("game_pattern_current_turn_change", pattern_id),
         )
 
+    async def read_cursor_position(self, event: Event[bytearray]) -> None:
+        """Read current_turn_change event from server, reraise as `game_cursor_set_destination`."""
+        location = decode_cursor_location(event.data)
+        unit_location = Vector2.from_iter(x / 0xFFF for x in location)
+
+        await self.raise_event(
+            Event("game_cursor_set_destination", unit_location),
+        )
+
     async def write_game_factory_clicked(
         self,
         event: Event[tuple[int, Tile]],
@@ -459,8 +472,7 @@ class GameClient(ClientNetworkEventComponent):
         scaled_location = event.data
 
         x, y = map(int, (scaled_location * 0xFFF).floored())
-        position = ((x & 0xFFF) << 12) | (y & 0xFFF)
-        buffer = (position & 0xFFFFFF).to_bytes(3)
+        buffer = encode_cursor_location((x, y))
 
         await self.raise_event(Event("cursor_location->server[write]", buffer))
 

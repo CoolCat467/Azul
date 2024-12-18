@@ -36,6 +36,7 @@ from numpy import int8, zeros
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
+
 ADVERTISEMENT_IP: Final = "224.0.2.60"
 ADVERTISEMENT_PORT: Final = 4445
 
@@ -108,6 +109,21 @@ def decode_int8_array(buffer: Buffer, size: tuple[int, ...]) -> NDArray[int8]:
     return array
 
 
+def encode_cursor_location(scaled_location: tuple[int, int]) -> bytes:
+    """Return buffer from cursor location."""
+    x, y = scaled_location
+    position = ((x & 0xFFF) << 12) | (y & 0xFFF)
+    return (position & 0xFFFFFF).to_bytes(3)
+
+
+def decode_cursor_location(buffer: bytes | bytearray) -> tuple[int, int]:
+    """Return cursor location from buffer."""
+    value = int.from_bytes(buffer) & 0xFFFFFF
+    x = (value >> 12) & 0xFFF
+    y = value & 0xFFF
+    return (x, y)
+
+
 class ClientBoundEvents(IntEnum):
     """Client bound event IDs."""
 
@@ -123,6 +139,7 @@ class ClientBoundEvents(IntEnum):
     table_data = auto()
     cursor_movement_mode = auto()
     current_turn_change = auto()
+    cursor_position = auto()
 
 
 class ServerBoundEvents(IntEnum):

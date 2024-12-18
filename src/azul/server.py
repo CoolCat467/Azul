@@ -53,6 +53,8 @@ from azul.network_shared import (
     DEFAULT_PORT,
     ClientBoundEvents,
     ServerBoundEvents,
+    decode_cursor_location,
+    encode_cursor_location,
     encode_int8_array,
     encode_numeric_uint8_counter,
     encode_tile_count,
@@ -103,6 +105,7 @@ class ServerClient(ServerClientNetworkEventComponent):
                 "server[write]->table_data": cbe.table_data,
                 "server[write]->cursor_movement_mode": cbe.cursor_movement_mode,
                 "server[write]->current_turn_change": cbe.current_turn_change,
+                "server[write]->cursor_position": cbe.cursor_position,
             },
         )
         sbe = ServerBoundEvents
@@ -133,6 +136,7 @@ class ServerClient(ServerClientNetworkEventComponent):
                 "cursor_data->network": self.write_cursor_data,
                 "table_data->network": self.write_table_data,
                 f"cursor_movement_mode->network[{self.client_id}]": self.write_cursor_movement_mode,
+                f"cursor_position->network[{self.client_id}]": self.write_cursor_position,
                 "current_turn_change->network": self.write_current_turn_change,
                 "pattern_data->network": self.write_pattern_data,
             },
@@ -169,9 +173,7 @@ class ServerClient(ServerClientNetworkEventComponent):
 
     async def read_cursor_location(self, event: Event[bytearray]) -> None:
         """Read factory_clicked event from client. Raise as `factory_clicked->server`."""
-        buffer = int.from_bytes(event.data) & 0xFFFFFF
-        x = (buffer >> 12) & 0xFFF
-        y = buffer & 0xFFF
+        x, y = decode_cursor_location(event.data)
 
         await self.raise_event(
             Event(
@@ -306,6 +308,17 @@ class ServerClient(ServerClientNetworkEventComponent):
 
         await self.write_event(
             Event("server[write]->cursor_movement_mode", buffer),
+        )
+
+    async def write_cursor_position(
+        self,
+        event: Event[tuple[int, int]],
+    ) -> None:
+        """Reraise as server[write]->cursor_position."""
+        buffer = encode_cursor_location(event.data)
+
+        await self.write_event(
+            Event("server[write]->cursor_position", buffer),
         )
 
     async def write_current_turn_change(
@@ -625,11 +638,16 @@ class GameServer(network.Server):
             ),
         )
 
-        rev_map = {v: k for k, v in self.client_players.items()}
-        if self.internal_singleplayer_mode:
-            client_id = rev_map[ServerPlayer.singleplayer_all]
-        else:
-            client_id = rev_map[ServerPlayer(self.state.current_turn)]
+        await self.transmit_cursor_movement_mode()
+
+        await self.transmit_playing_as()
+
+    async def transmit_cursor_movement_mode(self) -> None:
+        """Update current cursor movement mode for all clients."""
+        client_id = self.find_client_id_from_state_turn(
+            self.state.current_turn,
+        )
+
         await self.raise_event(
             Event(
                 f"cursor_movement_mode->network[{client_id}]",
@@ -637,7 +655,16 @@ class GameServer(network.Server):
             ),
         )
 
-        await self.transmit_playing_as()
+        async with trio.open_nursery() as nursery:
+            for other_client_id in self.client_players:
+                if other_client_id != client_id:
+                    nursery.start_soon(
+                        self.raise_event,
+                        Event(
+                            f"cursor_movement_mode->network[{other_client_id}]",
+                            False,
+                        ),
+                    )
 
     async def client_network_loop(
         self,
@@ -748,7 +775,9 @@ class GameServer(network.Server):
         self.client_count += 1
 
         can_start = self.can_start()
+        print(f"[azul.server] {can_start = }")
         game_active = self.game_active()
+        print(f"[azul.server] {game_active = }")
         # if can_start:
         # self.stop_serving()
 
@@ -772,7 +801,8 @@ class GameServer(network.Server):
                 print("TODO: Joined as spectator")
                 # await self.send_spectator_join_packets(client)
             with self.temporary_component(client):
-                if can_start and not game_active and is_zee_capitan:
+                if can_start and not game_active:  # and is_zee_capitan:
+                    print("[azul.server] game start trigger.")
                     varient_play = False
                     await self.raise_event(
                         Event("server_send_game_start", varient_play),
@@ -840,14 +870,14 @@ class GameServer(network.Server):
 
         if player_id != self.state.current_turn:
             print(
-                "Player {player_id} (client ID {client_id}) cannot select factory tile, not their turn.",
+                f"Player {player_id} (client ID {client_id}) cannot select factory tile, not their turn.",
             )
             await trio.lowlevel.checkpoint()
             return
 
         if self.state.current_phase != Phase.factory_offer:
             print(
-                "Player {player_id} (client ID {client_id}) cannot select factory tile, not in factory offer phase.",
+                f"Player {player_id} (client ID {client_id}) cannot select factory tile, not in factory offer phase.",
             )
             await trio.lowlevel.checkpoint()
             return
@@ -855,14 +885,14 @@ class GameServer(network.Server):
         factory_display = self.state.factory_displays.get(factory_id)
         if factory_display is None:
             print(
-                "Player {player_id} (client ID {client_id}) cannot select invalid factory {factory_id!r}.",
+                f"Player {player_id} (client ID {client_id}) cannot select invalid factory {factory_id!r}.",
             )
             await trio.lowlevel.checkpoint()
             return
 
         if tile < 0 or tile not in factory_display:
             print(
-                "Player {player_id} (client ID {client_id}) cannot select nonexistent color {tile}.",
+                f"Player {player_id} (client ID {client_id}) cannot select nonexistent color {tile}.",
             )
             await trio.lowlevel.checkpoint()
             return
@@ -872,7 +902,7 @@ class GameServer(network.Server):
             int(tile),
         ):
             print(
-                "Player {player_id} (client ID {client_id}) cannot select factory tile, state says no.",
+                f"Player {player_id} (client ID {client_id}) cannot select factory tile, state says no.",
             )
             await trio.lowlevel.checkpoint()
             return
@@ -929,21 +959,21 @@ class GameServer(network.Server):
 
         if player_id != self.state.current_turn:
             print(
-                "Player {player_id} (client ID {client_id}) cannot select pattern row, not their turn.",
+                f"Player {player_id} (client ID {client_id}) cannot select pattern row, not their turn.",
             )
             await trio.lowlevel.checkpoint()
             return
 
         if self.state.current_phase != Phase.factory_offer:
             print(
-                "Player {player_id} (client ID {client_id}) cannot select pattern row, not in factory offer phase.",
+                f"Player {player_id} (client ID {client_id}) cannot select pattern row, not in factory offer phase.",
             )
             await trio.lowlevel.checkpoint()
             return
 
         if player_id != row_id:
             print(
-                "Player {player_id} (client ID {client_id}) cannot select pattern row {row_id} that does not belong to them.",
+                f"Player {player_id} (client ID {client_id}) cannot select pattern row {row_id} that does not belong to them.",
             )
             await trio.lowlevel.checkpoint()
             return
@@ -972,7 +1002,7 @@ class GameServer(network.Server):
         )
 
         if self.state.current_turn != player_id:
-            if server_player_id != ServerPlayer.singleplayer_all:
+            if not self.internal_singleplayer_mode:
                 new_client_id = self.find_client_id_from_state_turn(
                     self.state.current_turn,
                 )
@@ -1030,12 +1060,12 @@ class GameServer(network.Server):
             await trio.lowlevel.checkpoint()
             return
 
-        client_id, pos = event.data
+        client_id, location = event.data
 
         server_player_id = self.client_players[client_id]
 
         if server_player_id == ServerPlayer.spectator:
-            print(f"Spectator cannot select {pos = }")
+            print("Spectator cannot control cursor")
             await trio.lowlevel.checkpoint()
             return
 
@@ -1045,13 +1075,27 @@ class GameServer(network.Server):
 
         if player_id != self.state.current_turn:
             print(
-                "Player {player_id} (client ID {client_id}) cannot move cursor, not their turn.",
+                f"Player {player_id} (client ID {client_id}) cannot move cursor, not their turn.",
             )
             await trio.lowlevel.checkpoint()
             return
 
-        print(f"handle_cursor_location {client_id = } {pos = }")
-        await trio.lowlevel.checkpoint()
+        # print(f"handle_cursor_location {client_id = } {location = }")
+
+        if self.internal_singleplayer_mode:
+            await trio.lowlevel.checkpoint()
+            return
+
+        async with trio.open_nursery() as nursery:
+            for other_client_id in self.client_players:
+                if other_client_id != client_id:
+                    nursery.start_soon(
+                        self.raise_event,
+                        Event(
+                            f"cursor_position->network[{other_client_id}]",
+                            location,
+                        ),
+                    )
 
     def __del__(self) -> None:
         """Debug print."""

@@ -466,9 +466,47 @@ class TileRenderer(sprite.Sprite):
 
 
 class EventClock(Component):
-    """Event Clock Component."""
+    """Event Clock Component.
 
-    __slots__ = ()
+    Will raise `self.event_to_raise` every `self.duration` seconds.
+    If more than duration seconds pass before ticks, will only raise
+    one event.
+
+    Do not pass leveled events, event reference is maintained and
+    when first event is mutated with pop_level it will be same object
+    and only first run will be leveled event.
+    """
+
+    __slots__ = ("duration", "event_to_raise", "time_passed")
+
+    def __init__(
+        self,
+        name: str,
+        duration: float,
+        event_to_raise: Event[Any],
+    ) -> None:
+        """Initialize with name, duration, and event to raise."""
+        super().__init__(name)
+
+        self.time_passed: float = 0.0
+        self.duration = duration
+        self.event_to_raise = event_to_raise
+
+    def bind_handlers(self) -> None:
+        """Register tick event handler."""
+        self.register_handler("tick", self.handle_tick)
+
+    async def handle_tick(self, event: Event[sprite.TickEventData]) -> None:
+        """Handle tick event."""
+        self.time_passed += event.data.time_passed
+        truediv, self.time_passed = divmod(self.time_passed, self.duration)
+
+        # Could raise multiple times, but I am deciding that we will
+        # only raise at most once even if we miss the train
+        if truediv:
+            # Known issue: Event to raise cannot be a leveled event,
+            # because event.pop_level mutates the event object in place
+            await self.raise_event(self.event_to_raise)
 
 
 class Cursor(TileRenderer):
@@ -484,8 +522,14 @@ class Cursor(TileRenderer):
     - PygameMouseMotion
     """
 
-    __slots__ = ("tiles",)
+    __slots__ = (
+        "client_mode",
+        "last_transmit_pos",
+        "tiles",
+        "time_passed",
+    )
     greyshift = GREYSHIFT
+    duration = 0.25
 
     def __init__(self) -> None:
         """Initialize cursor with a game it belongs to."""
@@ -494,13 +538,16 @@ class Cursor(TileRenderer):
 
         self.add_components(
             (
-                sprite.MovementComponent(speed=800),
+                sprite.MovementComponent(speed=600),
                 sprite.TargetingComponent("cursor_reached_destination"),
             ),
         )
 
         # Stored in reverse render order
         self.tiles: list[int] = []
+        self.last_transmit_pos = self.location
+        self.time_passed = 0.0
+        self.client_mode = False
 
     def update_image(self) -> None:
         """Update self.image."""
@@ -555,13 +602,19 @@ class Cursor(TileRenderer):
         event: Event[tuple[int, int]],
     ) -> None:
         """Start moving towards new destination."""
+        destination = Vector2.from_iter(
+            x * y for x, y in zip(event.data, SCREEN_SIZE, strict=True)
+        ).floored()
+        # print(f"handle_cursor_set_destination {destination = }")
+
         targeting: sprite.TargetingComponent = self.get_component("targeting")
-        targeting.destination = event.data
+        targeting.destination = destination
         if not self.has_handler("tick"):
             self.register_handler(
                 "tick",
-                targeting.move_destination_time_ticks,
+                self.handle_tick,
             )
+
         self.move_to_front()
         await trio.lowlevel.checkpoint()
 
@@ -572,34 +625,57 @@ class Cursor(TileRenderer):
         """Set location to event data."""
         self.move_to_front()
         self.location = event.data["pos"]
+        await trio.lowlevel.checkpoint()
 
-        ##transmit_location = Vector2.from_iter(
-        ##    x / y for x, y in zip(self.location, SCREEN_SIZE, strict=True)
-        ##)
-        ##
-        ### Transmit to server
-        ### Event level to so reaches client
-        ##await self.raise_event(
-        ##    Event(
-        ##        "game_cursor_location_transmit",
-        ##        transmit_location,
-        ##        2,
-        ##    )
-        ##)
+    async def handle_tick(self, event: Event[sprite.TickEventData]) -> None:
+        """Handle tick event."""
+        if self.client_mode:
+            self.time_passed += event.data.time_passed
+            truediv, self.time_passed = divmod(self.time_passed, self.duration)
+
+            if self.last_transmit_pos != self.location and truediv:
+                self.last_transmit_pos = self.location
+            else:
+                await trio.lowlevel.checkpoint()
+                return
+
+            transmit_location = Vector2.from_iter(
+                x / y for x, y in zip(self.location, SCREEN_SIZE, strict=True)
+            )
+
+            # Transmit to server
+            # Event level to so reaches client
+            await self.raise_event(
+                Event(
+                    "game_cursor_location_transmit",
+                    transmit_location,
+                    2,
+                ),
+            )
+        else:
+            # Server mode
+            targeting: sprite.TargetingComponent = self.get_component(
+                "targeting",
+            )
+            await targeting.move_destination_time(event.data.time_passed)
 
     async def handle_cursor_set_movement_mode(
         self,
         event: Event[bool],
     ) -> None:
         """Change cursor movement mode. True if client mode, False if server mode."""
-        client_mode = event.data
-        if client_mode:
-            self.register_handler(
-                "PygameMouseMotion",
-                self.handle_pygame_mouse_motion,
+        self.client_mode = event.data
+        # print(f'handle_cursor_set_movement_mode {self.client_mode = }')
+        if self.client_mode:
+            self.register_handlers(
+                {
+                    "PygameMouseMotion": self.handle_pygame_mouse_motion,
+                    "tick": self.handle_tick,
+                },
             )
         else:
             self.unregister_handler_type("PygameMouseMotion")
+            self.unregister_handler_type("tick")
         await trio.lowlevel.checkpoint()
 
     def get_held_count(self) -> int:
