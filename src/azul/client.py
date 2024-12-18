@@ -174,6 +174,7 @@ class GameClient(ClientNetworkEventComponent):
                 "factory_clicked->server[write]": sbe.factory_clicked,
                 "cursor_location->server[write]": sbe.cursor_location,
                 "pattern_row_clicked->server[write]": sbe.pattern_row_clicked,
+                "table_clicked->server[write]": sbe.table_clicked,
             },
         )
         cbe = ClientBoundEvents
@@ -221,6 +222,7 @@ class GameClient(ClientNetworkEventComponent):
                 "game_factory_clicked": self.write_game_factory_clicked,
                 "game_cursor_location_transmit": self.write_game_cursor_location_transmit,
                 "game_pattern_row_clicked": self.write_game_pattern_row_clicked,
+                "game_table_clicked": self.write_game_table_clicked,
             },
         )
 
@@ -491,6 +493,18 @@ class GameClient(ClientNetworkEventComponent):
         await self.raise_event(
             Event("pattern_row_clicked->server[write]", buffer),
         )
+
+    async def write_game_table_clicked(
+        self,
+        event: Event[Tile],
+    ) -> None:
+        """Write table_clicked event to server."""
+        tile = event.data
+        buffer = Buffer()
+
+        buffer.write_value(StructFormat.UBYTE, tile)
+
+        await self.raise_event(Event("table_clicked->server[write]", buffer))
 
     async def handle_network_stop(self, event: Event[None]) -> None:
         """Send EOF if connected and close socket."""

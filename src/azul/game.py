@@ -678,37 +678,6 @@ class Cursor(TileRenderer):
             self.unregister_handler_type("tick")
         await trio.lowlevel.checkpoint()
 
-    def get_held_count(self) -> int:
-        """Return the number of held tiles."""
-        return len(self.tiles)
-
-    def is_holding(self) -> bool:
-        """Return True if the mouse is dragging something."""
-        return len(self.tiles) > 0
-
-    def get_held_info(self) -> tuple[int, ...]:
-        """Return tuple of currently held tiles."""
-        return tuple(reversed(self.tiles))
-
-    def drop(
-        self,
-        number: int | None = None,
-    ) -> tuple[int, ...]:
-        """Pop and return tiles the Cursor is carrying.
-
-        If number is None, pops all tiles, otherwise only pops given count.
-        """
-        if number is None:
-            tiles_copy = self.get_held_info()
-            self.tiles.clear()
-            self.update_image()
-            return tiles_copy
-        tiles: list[int] = []
-        for _ in range(number):
-            tiles.append(self.tiles.pop())
-        self.update_image()
-        return tuple(tiles)
-
 
 class Grid(TileRenderer):
     """Grid object, used for boards and parts of other objects."""
@@ -1149,7 +1118,11 @@ class Factory(TileRenderer):
             return
 
         index = int(point.y * 2 + point.x)
-        tile_color = tuple(self.tiles.elements())[index]
+        tiles = tuple(self.tiles.elements())
+        if not tiles:
+            await trio.lowlevel.checkpoint()
+            return
+        tile_color = tiles[index]
 
         if tile_color < 0:
             # Do not send non-real tiles
@@ -1184,13 +1157,20 @@ class TableCenter(TileRenderer):
         self.update_image()
         self.visible = True
 
+        self.add_component(sprite.DragClickEventComponent())
+
     def __repr__(self) -> str:
         """Return representation of self."""
         return f"{self.__class__.__name__}()"
 
     def bind_handlers(self) -> None:
         """Register event handlers."""
-        self.register_handler("game_table_data", self.update_board_data)
+        self.register_handlers(
+            {
+                "game_table_data": self.update_board_data,
+                "click": self.handle_click,
+            },
+        )
 
     def iter_tiles(self) -> Generator[int, None, None]:
         """Yield tile colors."""
@@ -1245,6 +1225,34 @@ class TableCenter(TileRenderer):
         self.tiles = event.data
         self.update_image()
         await trio.lowlevel.checkpoint()
+
+    async def handle_click(
+        self,
+        event: Event[sprite.PygameMouseButtonEventData],
+    ) -> None:
+        """Handle click event."""
+        point = self.get_tile_point(event.data["pos"])
+        if point is None:
+            await trio.lowlevel.checkpoint()
+            return
+
+        index = int(point.y * 6 + point.x)
+        tile_color = tuple(self.iter_tiles())[index]
+
+        if tile_color < 0:
+            # Do not send non-real tiles
+            await trio.lowlevel.checkpoint()
+            return
+
+        # Transmit to server
+        # Needs level 2 to reach server client
+        await self.raise_event(
+            Event(
+                "game_table_clicked",
+                Tile(tile_color),
+                2,
+            ),
+        )
 
 
 class HaltState(AsyncState["AzulClient"]):

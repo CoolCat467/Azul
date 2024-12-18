@@ -115,6 +115,7 @@ class ServerClient(ServerClientNetworkEventComponent):
                 sbe.factory_clicked: f"client[{self.client_id}]->factory_clicked",
                 sbe.cursor_location: f"client[{self.client_id}]->cursor_location",
                 sbe.pattern_row_clicked: f"client[{self.client_id}]->pattern_row_clicked",
+                sbe.table_clicked: f"client[{self.client_id}]->table_clicked",
             },
         )
 
@@ -127,6 +128,7 @@ class ServerClient(ServerClientNetworkEventComponent):
                 f"client[{self.client_id}]->factory_clicked": self.read_factory_clicked,
                 f"client[{self.client_id}]->cursor_location": self.read_cursor_location,
                 f"client[{self.client_id}]->pattern_row_clicked": self.read_pattern_row_clicked,
+                f"client[{self.client_id}]->table_clicked": self.read_table_clicked,
                 f"callback_ping->network[{self.client_id}]": self.handle_callback_ping,
                 "initial_config->network": self.write_factory_clicked,
                 f"playing_as->network[{self.client_id}]": self.write_playing_as,
@@ -200,6 +202,22 @@ class ServerClient(ServerClientNetworkEventComponent):
                     self.client_id,
                     row_id,
                     (row_pos_x, row_pos_y),
+                ),
+            ),
+        )
+
+    async def read_table_clicked(self, event: Event[bytearray]) -> None:
+        """Read table_clicked event from client. Raise as `table_clicked->server`."""
+        buffer = Buffer(event.data)
+
+        tile_color = Tile(buffer.read_value(StructFormat.UBYTE))
+
+        await self.raise_event(
+            Event(
+                "table_clicked->server",
+                (
+                    self.client_id,
+                    tile_color,
                 ),
             ),
         )
@@ -408,6 +426,7 @@ class GameServer(network.Server):
                 "factory_clicked->server": self.handle_client_factory_clicked,
                 "pattern_row_clicked->server": self.handle_client_pattern_row_clicked,
                 "cursor_location->server": self.handle_cursor_location,
+                "table_clicked->server": self.handle_client_table_clicked,
             },
         )
 
@@ -557,6 +576,89 @@ class GameServer(network.Server):
             # Serve runs forever until canceled
             nursery.start_soon(partial(self.serve, port, host, backlog=0))
 
+    async def transmit_new_round_data(self) -> None:
+        """Transmit all player board data, factory data, and table center data."""
+        async with trio.open_nursery() as nursery:
+            # Transmit board data
+            for player_id, player_data in self.state.player_data.items():
+                nursery.start_soon(
+                    self.raise_event,
+                    Event(
+                        "board_data->network",
+                        (
+                            player_id,
+                            player_data.wall,
+                        ),
+                    ),
+                )
+            # Transmit factory data
+            for (
+                factory_id,
+                factory_tiles,
+            ) in self.state.factory_displays.items():
+                nursery.start_soon(
+                    self.raise_event,
+                    Event(
+                        "factory_data->network",
+                        (
+                            factory_id,
+                            factory_tiles,
+                        ),
+                    ),
+                )
+        # Transmit table center data
+        await self.raise_event(
+            Event(
+                "table_data->network",
+                self.state.table_center,
+            ),
+        )
+
+    async def transmit_pattern_line_data(self) -> None:
+        """Transmit all pattern line data for all players."""
+        async with trio.open_nursery() as nursery:
+            # Transmit pattern line data
+            for player_id, player_data in self.state.player_data.items():
+                for line_id, line_data in enumerate(player_data.lines):
+                    nursery.start_soon(
+                        self.raise_event,
+                        Event(
+                            "pattern_data->network",
+                            (
+                                player_id,
+                                line_id,
+                                (
+                                    max(0, int(line_data.color)),
+                                    line_data.count_,
+                                ),
+                            ),
+                        ),
+                    )
+
+    async def transmit_cursor_movement_mode(self) -> None:
+        """Update current cursor movement mode for all clients."""
+        client_id = self.find_client_id_from_state_turn(
+            self.state.current_turn,
+        )
+
+        await self.raise_event(
+            Event(
+                f"cursor_movement_mode->network[{client_id}]",
+                True,
+            ),
+        )
+
+        async with trio.open_nursery() as nursery:
+            for other_client_id in self.client_players:
+                if other_client_id != client_id:
+                    nursery.start_soon(
+                        self.raise_event,
+                        Event(
+                            f"cursor_movement_mode->network[{other_client_id}]",
+                            False,
+                        ),
+                    )
+
     async def transmit_playing_as(self) -> None:
         """Transmit playing as."""
         async with trio.open_nursery() as nursery:
@@ -602,69 +704,11 @@ class GameServer(network.Server):
             ),
         )
 
-        async with trio.open_nursery() as nursery:
-            # Transmit board data
-            for player_id, player_data in self.state.player_data.items():
-                nursery.start_soon(
-                    self.raise_event,
-                    Event(
-                        "board_data->network",
-                        (
-                            player_id,
-                            player_data.wall,
-                        ),
-                    ),
-                )
-            # Transmit factory data
-            for (
-                factory_id,
-                factory_tiles,
-            ) in self.state.factory_displays.items():
-                nursery.start_soon(
-                    self.raise_event,
-                    Event(
-                        "factory_data->network",
-                        (
-                            factory_id,
-                            factory_tiles,
-                        ),
-                    ),
-                )
-        # Transmit table center data
-        await self.raise_event(
-            Event(
-                "table_data->network",
-                self.state.table_center,
-            ),
-        )
+        await self.transmit_new_round_data()
 
         await self.transmit_cursor_movement_mode()
 
         await self.transmit_playing_as()
-
-    async def transmit_cursor_movement_mode(self) -> None:
-        """Update current cursor movement mode for all clients."""
-        client_id = self.find_client_id_from_state_turn(
-            self.state.current_turn,
-        )
-
-        await self.raise_event(
-            Event(
-                f"cursor_movement_mode->network[{client_id}]",
-                True,
-            ),
-        )
-
-        async with trio.open_nursery() as nursery:
-            for other_client_id in self.client_players:
-                if other_client_id != client_id:
-                    nursery.start_soon(
-                        self.raise_event,
-                        Event(
-                            f"cursor_movement_mode->network[{other_client_id}]",
-                            False,
-                        ),
-                    )
 
     async def client_network_loop(
         self,
@@ -934,6 +978,69 @@ class GameServer(network.Server):
             ),
         )
 
+    async def handle_client_table_clicked(
+        self,
+        event: Event[tuple[int, Tile]],
+    ) -> None:
+        """Handle client clicked a table center tile."""
+        if not self.players_can_interact:
+            print("Players are not allowed to interact.")
+            await trio.lowlevel.checkpoint()
+            return
+
+        client_id, tile = event.data
+
+        server_player_id = self.client_players[client_id]
+
+        if server_player_id == ServerPlayer.spectator:
+            print(f"Spectator cannot select table center {tile}")
+            await trio.lowlevel.checkpoint()
+            return
+
+        player_id = int(server_player_id)
+        if server_player_id == ServerPlayer.singleplayer_all:
+            player_id = self.state.current_turn
+
+        if player_id != self.state.current_turn:
+            print(
+                f"Player {player_id} (client ID {client_id}) cannot select table center tile, not their turn.",
+            )
+            await trio.lowlevel.checkpoint()
+            return
+
+        if self.state.current_phase != Phase.factory_offer:
+            print(
+                f"Player {player_id} (client ID {client_id}) cannot select table center tile, not in factory offer phase.",
+            )
+            await trio.lowlevel.checkpoint()
+            return
+
+        if not self.state.can_cursor_select_center(
+            int(tile),
+        ):
+            print(
+                f"Player {player_id} (client ID {client_id}) cannot select table center tile, state says no.",
+            )
+            await trio.lowlevel.checkpoint()
+            return
+
+        # Perform move
+        self.state = self.state.cursor_selects_table_center(int(tile))
+
+        # Send updates to client
+        await self.raise_event(
+            Event(
+                "cursor_data->network",
+                self.state.cursor_contents,
+            ),
+        )
+        await self.raise_event(
+            Event(
+                "table_data->network",
+                self.state.table_center,
+            ),
+        )
+
     async def handle_client_pattern_row_clicked(
         self,
         event: Event[tuple[int, int, tuple[int, int]]],
@@ -979,13 +1086,36 @@ class GameServer(network.Server):
             return
 
         column, line_id = row_pos
-        place_count = 5 - column
 
+        if line_id >= 5:
+            print(
+                f"Player {player_id} (client ID {client_id}) cannot select pattern row {row_id} line {line_id} (invalid line id).",
+            )
+            await trio.lowlevel.checkpoint()
+            return
+        if column >= 5:
+            print(
+                f"Player {player_id} (client ID {client_id}) cannot select pattern row {row_id} column {column} (invalid column).",
+            )
+            await trio.lowlevel.checkpoint()
+            return
+
+        currently_placed = self.state.get_player_line_current_place_count(
+            line_id,
+        )
+
+        place_count = 5 - column - currently_placed
+
+        if self.state.is_cursor_empty():
+            print(
+                f"Player {player_id} (client ID {client_id}) cannot select pattern row {row_id} when not holding tiles.",
+            )
+            await trio.lowlevel.checkpoint()
+            return
         color = self.state.get_cursor_holding_color()
 
-        max_place = self.state.get_player_line_max_placable_count(line_id)
         current_hold_count = self.state.cursor_contents[color]
-        place_count = min(place_count, current_hold_count, max_place)
+        place_count = min(place_count, current_hold_count)
 
         if not self.state.can_player_select_line(line_id, color, place_count):
             print(
@@ -1001,47 +1131,43 @@ class GameServer(network.Server):
             place_count,
         )
 
-        if self.state.current_turn != player_id:
-            if not self.internal_singleplayer_mode:
-                new_client_id = self.find_client_id_from_state_turn(
-                    self.state.current_turn,
-                )
-                assert new_client_id is not None
-                await self.raise_event(
-                    Event(
-                        f"cursor_movement_mode->network[{client_id}]",
-                        False,
-                    ),
-                )
-                await self.raise_event(
-                    Event(
-                        f"cursor_movement_mode->network[{new_client_id}]",
-                        True,
-                    ),
-                )
-
+        if (
+            self.state.current_turn != player_id
+            and not self.internal_singleplayer_mode
+        ):
+            new_client_id = self.find_client_id_from_state_turn(
+                self.state.current_turn,
+            )
+            assert new_client_id is not None
             await self.raise_event(
                 Event(
-                    "current_turn_change->network",
-                    self.state.current_turn,
+                    f"cursor_movement_mode->network[{client_id}]",
+                    False,
+                ),
+            )
+            await self.raise_event(
+                Event(
+                    f"cursor_movement_mode->network[{new_client_id}]",
+                    True,
                 ),
             )
 
-        raw_tile_color, tile_count = self.state.player_data[
-            prev_player_turn
-        ].lines[line_id]
-        # Do not send blank colors, clamp to zero
-        tile_color = max(0, int(raw_tile_color))
-        await self.raise_event(
-            Event(
-                "pattern_data->network",
-                (
-                    prev_player_turn,
-                    line_id,
-                    (tile_color, tile_count),
+        if self.state.current_phase != Phase.wall_tiling:
+            raw_tile_color, tile_count = self.state.player_data[
+                prev_player_turn
+            ].lines[line_id]
+            # Do not send blank colors, clamp to zero
+            tile_color = max(0, int(raw_tile_color))
+            await self.raise_event(
+                Event(
+                    "pattern_data->network",
+                    (
+                        prev_player_turn,
+                        line_id,
+                        (tile_color, tile_count),
+                    ),
                 ),
-            ),
-        )
+            )
 
         await self.raise_event(
             Event(
@@ -1049,6 +1175,23 @@ class GameServer(network.Server):
                 self.state.cursor_contents,
             ),
         )
+
+        if self.state.current_phase == Phase.end:
+            print("TODO: Handle end of game.")
+
+        if self.state.current_phase == Phase.wall_tiling:
+            if not self.state.varient_play:
+                self.state = self.state.apply_auto_wall_tiling()
+            await self.transmit_new_round_data()
+            await self.transmit_pattern_line_data()
+
+        if self.state.current_turn != player_id:
+            await self.raise_event(
+                Event(
+                    "current_turn_change->network",
+                    self.state.current_turn,
+                ),
+            )
 
     async def handle_cursor_location(
         self,

@@ -235,6 +235,11 @@ class PlayerData(NamedTuple):
         # Line id is keeping track of max count
         return line_id + 1
 
+    def get_line_current_place_count(self, line_id: int) -> int:
+        """Return count of currently placed tiles for given line."""
+        assert self.line_id_valid(line_id)
+        return self.lines[line_id].count_
+
     def get_line_max_placable_count(self, line_id: int) -> int:
         """Return max placable count for given line."""
         assert self.line_id_valid(line_id)
@@ -833,6 +838,12 @@ class State(NamedTuple):
 
         return player_data.get_line_max_placable_count(line_id)
 
+    def get_player_line_current_place_count(self, line_id: int) -> int:
+        """Return current place count for given line."""
+        player_data = self.player_data[self.current_turn]
+
+        return player_data.get_line_current_place_count(line_id)
+
     def all_pullable_empty(self) -> bool:
         """Return if all pullable tile locations are empty, not counting cursor."""
         if self.table_center.total():
@@ -857,13 +868,13 @@ class State(NamedTuple):
             # Go to wall tiling phase
             current_phase = Phase.wall_tiling
 
-        new_state = self._replace(
+        ##if current_phase == Phase.wall_tiling and not self.varient_play:
+        ##    return new_state.apply_auto_wall_tiling()
+        ##return new_state
+        return self._replace(
             current_phase=current_phase,
             current_turn=current_turn,
         )
-        if current_phase == Phase.wall_tiling and not self.varient_play:
-            return new_state.apply_auto_wall_tiling()
-        return new_state
 
     def player_select_floor_line(self, color: int, place_count: int) -> Self:
         """Return new state after player adds tiles to floor line."""
