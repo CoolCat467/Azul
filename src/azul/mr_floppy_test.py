@@ -47,7 +47,7 @@ FONT_FOLDER: Final = ROOT_FOLDER / "fonts"
 FONT = FONT_FOLDER / "RuneScape-UF-Regular.ttf"
 
 
-class AzulClient(sprite.GroupProcessor, AsyncStateMachine):
+class GameClient(sprite.GroupProcessor, AsyncStateMachine):
     """Gear Runner and Layered Dirty Sprite group handler."""
 
     def __init__(self) -> None:
@@ -78,7 +78,7 @@ class AzulClient(sprite.GroupProcessor, AsyncStateMachine):
         await manager.raise_event(event)
 
 
-class AzulState(AsyncState[AzulClient]):
+class AzulState(AsyncState[GameClient]):
     """Azul Client Asynchronous base class."""
 
     __slots__ = ("id", "manager")
@@ -120,7 +120,7 @@ class ClickDestinationComponent(Component):
         self.register_handlers(
             {
                 "click": self.click,
-                "drag": self.drag,
+                # "drag": self.drag,
                 "PygameMouseButtonDown": self.mouse_down,
                 "tick": self.move_towards_dest,
                 "init": self.cache_outline,
@@ -132,11 +132,15 @@ class ClickDestinationComponent(Component):
         """Print out event data."""
         print(f"{event = }")
 
+        await trio.lowlevel.checkpoint()
+
     async def cache_outline(self, _: Event[None]) -> None:
         """Precalculate outlined images."""
         image: sprite.ImageComponent = self.get_component("image")
         outline: sprite.OutlineComponent = image.get_component("outline")
         outline.precalculate_all_outlined(self.outline)
+
+        await trio.lowlevel.checkpoint()
 
     async def update_selected(self) -> None:
         """Update selected."""
@@ -150,15 +154,19 @@ class ClickDestinationComponent(Component):
             movement: sprite.MovementComponent = self.get_component("movement")
             movement.speed = 0
 
+        await trio.lowlevel.checkpoint()
+
     async def click(
         self,
         event: Event[sprite.PygameMouseButtonEventData],
     ) -> None:
         """Toggle selected."""
-        if event.data["button"] == 1:
-            self.selected = not self.selected
+        if event.data["button"] != 1:
+            await trio.lowlevel.checkpoint()
+            return
+        self.selected = not self.selected
 
-            await self.update_selected()
+        await self.update_selected()
 
     async def drag(self, event: Event[None]) -> None:
         """Drag sprite."""
@@ -168,18 +176,23 @@ class ClickDestinationComponent(Component):
         movement: sprite.MovementComponent = self.get_component("movement")
         movement.speed = 0
 
+        await trio.lowlevel.checkpoint()
+
     async def mouse_down(
         self,
         event: Event[sprite.PygameMouseButtonEventData],
     ) -> None:
         """Target click pos if selected."""
         if not self.selected:
+            await trio.lowlevel.checkpoint()
             return
         if event.data["button"] == 1:
             movement: sprite.MovementComponent = self.get_component("movement")
             movement.speed = 200
             target: sprite.TargetingComponent = self.get_component("targeting")
             target.destination = Vector2.from_iter(event.data["pos"])
+
+        await trio.lowlevel.checkpoint()
 
     async def move_towards_dest(
         self,
@@ -199,12 +212,14 @@ class MrFloppy(sprite.Sprite):
         """Initialize mr floppy sprite."""
         super().__init__("MrFloppy")
 
+        image_component = sprite.ImageComponent()
+        image_component.add_component(sprite.AnimationComponent())
         self.add_components(
             (
                 sprite.MovementComponent(),
                 sprite.TargetingComponent(),
                 ClickDestinationComponent(),
-                sprite.ImageComponent(),
+                image_component,
                 sprite.DragClickEventComponent(),
             ),
         )
@@ -257,10 +272,13 @@ class MrFloppy(sprite.Sprite):
 
     async def drag(self, event: Event[sprite.DragEvent]) -> None:
         """Move by relative from drag."""
-        if not event.data.buttons[1]:
+        if not event.data.buttons.get(1):
+            await trio.lowlevel.checkpoint()
             return
         self.location += event.data.rel
         self.dirty = 1
+
+        await trio.lowlevel.checkpoint()
 
 
 class FPSCounter(objects.Text):
@@ -273,10 +291,15 @@ class FPSCounter(objects.Text):
         font = pygame.font.Font(FONT, 28)
         super().__init__("fps", font)
 
+        self.text = "FPS: ???"
+        self.visible = True
+
     async def on_tick(self, event: Event[sprite.TickEventData]) -> None:
         """Update text."""
         # self.text = f'FPS: {event.data["fps"]:.2f}'
         self.text = f"FPS: {event.data.fps:.0f}"
+
+        await trio.lowlevel.checkpoint()
 
     async def update_loc(
         self,
@@ -316,7 +339,7 @@ class AzulInitialize(AzulState):
         """Create group and add mr floppy."""
         self.id = self.machine.new_group("test")
         floppy = MrFloppy()
-        print(floppy)
+        print(f"{floppy = }")
         self.group_add(floppy)
         self.group_add(FPSCounter())
 
@@ -326,6 +349,8 @@ class AzulInitialize(AzulState):
         """Remove group and unbind components."""
         self.machine.remove_group(self.id)
         self.manager.unbind_components()
+
+        await trio.lowlevel.checkpoint()
 
 
 def save_crash_img() -> None:
@@ -355,7 +380,7 @@ async def async_run() -> None:
     pygame.key.set_repeat(1000, 30)
     screen.fill((0xFF, 0xFF, 0xFF))
 
-    client = AzulClient()
+    client = GameClient()
 
     background = pygame.image.load(
         path.join("data", "background.png"),

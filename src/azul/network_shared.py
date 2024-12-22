@@ -150,3 +150,4 @@ class ServerBoundEvents(IntEnum):
     cursor_location = auto()
     pattern_row_clicked = auto()
     table_clicked = auto()
+    floor_clicked = auto()

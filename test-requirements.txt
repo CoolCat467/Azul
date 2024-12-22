@@ -10,7 +10,7 @@ cffi==1.17.1 ; (implementation_name != 'pypy' and os_name == 'nt') or platform_p
     # via
     #   cryptography
     #   trio
-click==8.1.7 ; implementation_name == 'cpython'
+click==8.1.8 ; implementation_name == 'cpython'
     # via black
 codespell==2.3.0
     # via -r test-requirements.in
@@ -33,9 +33,9 @@ idna==3.10
     # via trio
 iniconfig==2.0.0
     # via pytest
-libcomponent @ git+https://github.com/CoolCat467/LibComponent@5c69fa04833560443dd3be414b5ce713793d5d42
+libcomponent @ git+https://github.com/CoolCat467/LibComponent@91362869af19943520430fbed9edc38fc473ac9e
     # via -r test-requirements.in
-mypy==1.13.0
+mypy==1.14.0
     # via -r test-requirements.in
 mypy-extensions==1.0.0
     # via
@@ -74,7 +74,7 @@ pytest-cov==6.0.0
     # via -r test-requirements.in
 pytest-trio==0.8.0
     # via -r test-requirements.in
-ruff==0.8.3
+ruff==0.8.4
     # via -r test-requirements.in
 sniffio==1.3.1
     # via trio
@@ -97,5 +97,5 @@ typing-extensions==4.12.2
     #   black
     #   libcomponent
     #   mypy
-uv==0.5.10
+uv==0.5.11
     # via -r test-requirements.in

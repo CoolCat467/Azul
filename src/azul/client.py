@@ -175,6 +175,7 @@ class GameClient(ClientNetworkEventComponent):
                 "cursor_location->server[write]": sbe.cursor_location,
                 "pattern_row_clicked->server[write]": sbe.pattern_row_clicked,
                 "table_clicked->server[write]": sbe.table_clicked,
+                "floor_clicked->server[write]": sbe.floor_clicked,
             },
         )
         cbe = ClientBoundEvents
@@ -223,6 +224,7 @@ class GameClient(ClientNetworkEventComponent):
                 "game_cursor_location_transmit": self.write_game_cursor_location_transmit,
                 "game_pattern_row_clicked": self.write_game_pattern_row_clicked,
                 "game_table_clicked": self.write_game_table_clicked,
+                "game_floor_clicked": self.write_game_floor_clicked,
             },
         )
 
@@ -464,7 +466,7 @@ class GameClient(ClientNetworkEventComponent):
         buffer.write_value(StructFormat.UBYTE, factory_id)
         buffer.write_value(StructFormat.UBYTE, tile)
 
-        await self.raise_event(Event("factory_clicked->server[write]", buffer))
+        await self.write_event(Event("factory_clicked->server[write]", buffer))
 
     async def write_game_cursor_location_transmit(
         self,
@@ -476,7 +478,7 @@ class GameClient(ClientNetworkEventComponent):
         x, y = map(int, (scaled_location * 0xFFF).floored())
         buffer = encode_cursor_location((x, y))
 
-        await self.raise_event(Event("cursor_location->server[write]", buffer))
+        await self.write_event(Event("cursor_location->server[write]", buffer))
 
     async def write_game_pattern_row_clicked(
         self,
@@ -490,7 +492,7 @@ class GameClient(ClientNetworkEventComponent):
         buffer.write_value(StructFormat.UBYTE, int(location.x))
         buffer.write_value(StructFormat.UBYTE, int(location.y))
 
-        await self.raise_event(
+        await self.write_event(
             Event("pattern_row_clicked->server[write]", buffer),
         )
 
@@ -504,7 +506,20 @@ class GameClient(ClientNetworkEventComponent):
 
         buffer.write_value(StructFormat.UBYTE, tile)
 
-        await self.raise_event(Event("table_clicked->server[write]", buffer))
+        await self.write_event(Event("table_clicked->server[write]", buffer))
+
+    async def write_game_floor_clicked(
+        self,
+        event: Event[tuple[int, int]],
+    ) -> None:
+        """Write floor_clicked event to server."""
+        floor_line_id, location_x = event.data
+        buffer = Buffer()
+
+        buffer.write_value(StructFormat.UBYTE, floor_line_id)
+        buffer.write_value(StructFormat.UBYTE, location_x)
+
+        await self.write_event(Event("floor_clicked->server[write]", buffer))
 
     async def handle_network_stop(self, event: Event[None]) -> None:
         """Send EOF if connected and close socket."""

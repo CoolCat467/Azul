@@ -748,14 +748,20 @@ class GameServer(network.Server):
             except network.NetworkEOFError:
                 print(f"{client.name} EOF")
                 break
+            except RuntimeError as exc:
+                traceback.print_exception(exc)
+                print(f"{client.name} Bad packet")
+                break
             except (
                 trio.BrokenResourceError,
                 trio.ClosedResourceError,
-                RuntimeError,
-            ):
+            ) as exc:
+                traceback.print_exception(exc)
+                print(f"{client.name} Socket connection issue")
                 break
             except Exception as exc:
                 traceback.print_exception(exc)
+                print(f"{client.name} Unhandled exception")
                 break
             if event is not None:
                 # if controls_lobby:

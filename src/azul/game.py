@@ -591,6 +591,7 @@ class Cursor(TileRenderer):
                 "cursor_reached_destination": self.handle_cursor_reached_destination,
                 "game_cursor_set_destination": self.handle_cursor_set_destination,
                 "game_cursor_set_movement_mode": self.handle_cursor_set_movement_mode,
+                "client_disconnected": self.handle_network_stop,
             },
         )
 
@@ -698,6 +699,15 @@ class Cursor(TileRenderer):
         else:
             self.unregister_handler_type("PygameMouseMotion")
             self.unregister_handler_type("tick")
+        await trio.lowlevel.checkpoint()
+
+    async def handle_network_stop(
+        self,
+        event: Event[None],
+    ) -> None:
+        """Unregister tick event handler."""
+        print(f"[azul.game.Cursor] Got {event = }")
+        self.unregister_handler_type("tick")
         await trio.lowlevel.checkpoint()
 
 
@@ -962,6 +972,10 @@ class FloorLine(TileRenderer):
             background=RED,
         )
 
+        self.add_component(sprite.DragClickEventComponent())
+
+        self.floor_line_id = floor_line_id
+
         self.numbers = tuple(-1 for _ in range(7))
         self.tiles: list[Tile] = []
 
@@ -987,6 +1001,36 @@ class FloorLine(TileRenderer):
             tile_topleft = self.get_tile_topleft((x, 0))
             self.image.blit(number_surf, tile_topleft)
         self.dirty = 1
+
+    def bind_handlers(self) -> None:
+        """Register event handlers."""
+        self.register_handlers(
+            {
+                "click": self.handle_click,
+            },
+        )
+
+    async def handle_click(
+        self,
+        event: Event[sprite.PygameMouseButtonEventData],
+    ) -> None:
+        """Handle click event."""
+        point = self.get_tile_point(event.data["pos"])
+        if point is None:
+            await trio.lowlevel.checkpoint()
+            return
+
+        # Transmit to server
+        await self.raise_event(
+            Event(
+                "game_floor_clicked",
+                (
+                    self.floor_line_id,
+                    int(point.floored().x),
+                ),
+                2,
+            ),
+        )
 
 
 class Factory(TileRenderer):
@@ -1868,7 +1912,7 @@ class PlayState(GameState):
     async def handle_client_disconnected(self, event: Event[str]) -> None:
         """Handle client disconnected error."""
         error = event.data
-        print(f"handle_client_disconnected  {error = }")
+        print(f"[azul.game.PlayState] handle_client_disconnected {error = }")
 
         self.exit_data = (1, f"Client Disconnected$${error}", False)
 
@@ -1878,11 +1922,11 @@ class PlayState(GameState):
         if self.exit_data is None:
             return
 
-        exit_status, message, handled = self.exit_data
+        exit_status, raw_message, handled = self.exit_data
 
         if handled:
             return
-        self.exit_data = (exit_status, message, True)
+        self.exit_data = (exit_status, raw_message, True)
 
         font = pygame.font.Font(
             FONT,
@@ -1891,7 +1935,9 @@ class PlayState(GameState):
 
         error_message = ""
         if exit_status == 1:
-            message, error_message = message.split("$$")
+            message, error_message = raw_message.split("$$", 1)
+        else:
+            message = raw_message
 
         if not self.manager.component_exists("continue_button"):
             continue_button = KwargButton(
@@ -1913,6 +1959,7 @@ class PlayState(GameState):
         if exit_status == 1:
             if not self.manager.component_exists("error_text"):
                 error_text = objects.OutlinedText("error_text", font)
+                error_text.text = ""
             else:
                 error_text = self.manager.get_component("error_text")
             error_text.visible = True
