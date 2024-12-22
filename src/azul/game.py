@@ -539,6 +539,7 @@ class Cursor(TileRenderer):
     - cursor_reached_destination
     - cursor_set_destination
     - cursor_set_movement_mode
+    - client_disconnected
 
     Sometimes registered:
     - PygameMouseMotion
@@ -591,7 +592,7 @@ class Cursor(TileRenderer):
                 "cursor_reached_destination": self.handle_cursor_reached_destination,
                 "game_cursor_set_destination": self.handle_cursor_set_destination,
                 "game_cursor_set_movement_mode": self.handle_cursor_set_movement_mode,
-                "client_disconnected": self.handle_network_stop,
+                "client_disconnected": self.handle_client_disconnected,
             },
         )
 
@@ -701,12 +702,12 @@ class Cursor(TileRenderer):
             self.unregister_handler_type("tick")
         await trio.lowlevel.checkpoint()
 
-    async def handle_network_stop(
+    async def handle_client_disconnected(
         self,
         event: Event[None],
     ) -> None:
         """Unregister tick event handler."""
-        print(f"[azul.game.Cursor] Got {event = }")
+        print("[azul.game.Cursor] Got client disconnect, unregistering tick")
         self.unregister_handler_type("tick")
         await trio.lowlevel.checkpoint()
 

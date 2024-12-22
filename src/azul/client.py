@@ -244,9 +244,36 @@ class GameClient(ClientNetworkEventComponent):
                 f"{self.__class__.__name__}: Manager does not exist, not raising disconnect event.",
             )
             return
+        # self.unregister_all_network_write_events()
         await self.raise_event(Event("client_disconnected", message))
         await self.close()
         assert self.not_connected
+
+    async def write_event(
+        self,
+        event: Event[bytes | bytearray | memoryview],
+    ) -> None:
+        """Send event to network if running, otherwise does nothing.
+
+        Raises:
+          RuntimeError: if unregistered packet id received from network
+          trio.BusyResourceError: if another task is already executing a
+              :meth:`send_all`, :meth:`wait_send_all_might_not_block`, or
+              :meth:`HalfCloseableStream.send_eof` on this stream.
+          trio.BrokenResourceError: if something has gone wrong, and the stream
+              is broken.
+          trio.ClosedResourceError: if you previously closed this stream
+              object, or if another task closes this stream object while
+              :meth:`send_all` is running.
+
+        """
+        if not self.running:
+            await trio.lowlevel.checkpoint()
+            print(
+                f"[azul.client.write_event] Skipping writing {event.name!r}, not running.",
+            )
+            return
+        await super().write_event(event)
 
     async def handle_read_event(self) -> None:
         """Raise events from server.
