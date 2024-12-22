@@ -85,6 +85,7 @@ if TYPE_CHECKING:
         Sequence,
     )
 
+    from mypy_extensions import u8
     from numpy.typing import NDArray
     from typing_extensions import TypeVarTuple
 
@@ -966,7 +967,7 @@ class FloorLine(TileRenderer):
 
     __slots__ = ("floor_line_id", "numbers")
 
-    def __init__(self, floor_line_id: int) -> None:
+    def __init__(self, floor_line_id: int, numbers: NDArray[int8]) -> None:
         """Initialize floor line."""
         super().__init__(
             f"floor_line_{floor_line_id}",
@@ -977,8 +978,8 @@ class FloorLine(TileRenderer):
 
         self.floor_line_id = floor_line_id
 
-        self.numbers = tuple(-1 for _ in range(7))
-        self.tiles: list[Tile] = []
+        self.numbers = tuple(numbers.flat)
+        self.tiles: Counter[Tile] = Counter()
 
         self.update_image()
         self.visible = True
@@ -993,9 +994,9 @@ class FloorLine(TileRenderer):
 
         font = pygame.font.Font(FONT, size=self.tile_size)
 
-        for x, tile in enumerate(self.tiles):
+        for x, tile in enumerate(sorted(self.tiles.elements(), reverse=True)):
             self.blit_tile(tile, (x, 0))
-        for x in range(len(self.tiles), len(self.numbers)):
+        for x in range(self.tiles.total(), len(self.numbers)):
             self.blit_tile(Tile.blank, (x, 0))
             # Draw number on top
             number_surf = font.render(str(self.numbers[x]), False, BLACK)
@@ -1007,9 +1008,27 @@ class FloorLine(TileRenderer):
         """Register event handlers."""
         self.register_handlers(
             {
+                "game_floor_data": self.handle_game_floor_data,
                 "click": self.handle_click,
             },
         )
+
+    async def handle_game_floor_data(
+        self,
+        event: Event[tuple[int, Counter[u8]]],
+    ) -> None:
+        """Handle game_floor_data event."""
+        line_id, floor_data = event.data
+
+        if line_id != self.floor_line_id:
+            await trio.lowlevel.checkpoint()
+            return
+
+        self.tiles.clear()
+        self.tiles.update({Tile(k): v for k, v in floor_data.items()})
+        self.update_image()
+
+        await trio.lowlevel.checkpoint()
 
     async def handle_click(
         self,
@@ -1828,12 +1847,16 @@ class PlayState(GameState):
 
     async def handle_game_initial_config(
         self,
-        event: Event[tuple[bool, int, int, int]],
+        event: Event[tuple[bool, int, int, int, NDArray[int8]]],
     ) -> None:
         """Handle `game_initial_config` event."""
-        variant_play, player_count, factory_count, self.current_turn = (
-            event.data
-        )
+        (
+            variant_play,
+            player_count,
+            factory_count,
+            self.current_turn,
+            floor_line_data,
+        ) = event.data
 
         center = Vector2.from_iter(SCREEN_SIZE) // 2
 
@@ -1873,7 +1896,7 @@ class PlayState(GameState):
                 pattern_rows.set_background(DARKGREEN)
             self.group_add(pattern_rows)
 
-            floor_line = FloorLine(index)
+            floor_line = FloorLine(index, floor_line_data)
             floor_line.rect.topleft = pattern_rows.rect.bottomleft
             self.group_add(floor_line)
 

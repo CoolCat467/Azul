@@ -45,7 +45,7 @@ DEFAULT_PORT: Final = 31613
 Pos: TypeAlias = tuple[u8, u8]
 
 
-def encode_tile_count(tile_color: int, tile_count: int) -> Buffer:
+def encode_tile_count(tile_color: u8, tile_count: u8) -> Buffer:
     """Return buffer from tile color and count."""
     buffer = Buffer()
 
@@ -55,7 +55,7 @@ def encode_tile_count(tile_color: int, tile_count: int) -> Buffer:
     return buffer
 
 
-def decode_tile_count(buffer: Buffer) -> tuple[int, int]:
+def decode_tile_count(buffer: Buffer) -> tuple[u8, u8]:
     """Read and return tile color and count from buffer."""
     tile_color = buffer.read_value(StructFormat.UBYTE)
     tile_count = buffer.read_value(StructFormat.UBYTE)
@@ -76,9 +76,9 @@ def encode_numeric_uint8_counter(counter: Counter[int]) -> Buffer:
     return buffer
 
 
-def decode_numeric_uint8_counter(buffer: Buffer) -> Counter[int]:
+def decode_numeric_uint8_counter(buffer: Buffer) -> Counter[u8]:
     """Read and return uint8 counter from buffer."""
-    data: dict[int, int] = {}
+    data: dict[u8, u8] = {}
 
     pair_count = buffer.read_value(StructFormat.UBYTE)
     for _ in range(pair_count):
@@ -140,6 +140,7 @@ class ClientBoundEvents(IntEnum):
     cursor_movement_mode = auto()
     current_turn_change = auto()
     cursor_position = auto()
+    floor_data = auto()
 
 
 class ServerBoundEvents(IntEnum):

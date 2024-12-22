@@ -569,7 +569,7 @@ class PlayerData(NamedTuple):
         )
 
     def finish_manual_wall_tiling(self) -> tuple[Self, Counter[int], bool]:
-        """Return new player data and tiles for box lid after performing automatic wall tiling."""
+        """Return new player data and tiles for box lid after performing manual wall tiling."""
         for_box_lid: Counter[int] = Counter()
 
         score = self.score

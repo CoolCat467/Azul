@@ -194,6 +194,7 @@ class GameClient(ClientNetworkEventComponent):
                 cbe.cursor_movement_mode: "server->cursor_movement_mode",
                 cbe.current_turn_change: "server->current_turn_change",
                 cbe.cursor_position: "server->cursor_position",
+                cbe.floor_data: "server->floor_data",
             },
         )
 
@@ -218,6 +219,7 @@ class GameClient(ClientNetworkEventComponent):
                 "server->cursor_movement_mode": self.read_cursor_movement_mode,
                 "server->current_turn_change": self.read_current_turn_change,
                 "server->cursor_position": self.read_cursor_position,
+                "server->floor_data": self.read_floor_data,
                 "client_connect": self.handle_client_connect,
                 "network_stop": self.handle_network_stop,
                 "game_factory_clicked": self.write_game_factory_clicked,
@@ -225,16 +227,19 @@ class GameClient(ClientNetworkEventComponent):
                 "game_pattern_row_clicked": self.write_game_pattern_row_clicked,
                 "game_table_clicked": self.write_game_table_clicked,
                 "game_floor_clicked": self.write_game_floor_clicked,
+                # "callback_ping": self.print_callback_ping,
             },
         )
 
-    async def print_callback_ping(self, event: Event[bytearray]) -> None:
+    async def print_callback_ping(self, event: Event[int]) -> None:
         """Print received `callback_ping` event from server.
 
         This event is used as a sort of keepalive heartbeat, because
         it stops the connection from timing out.
         """
-        print(f"print_callback_ping {event = }")
+        difference = event.data
+        print(f"[azul.client] print_callback_ping {difference * 1e-06:.03f}ms")
+        await trio.lowlevel.checkpoint()
 
     async def raise_disconnect(self, message: str) -> None:
         """Raise client_disconnected event with given message."""
@@ -298,6 +303,7 @@ class GameClient(ClientNetworkEventComponent):
         if self.not_connected:
             await self.raise_disconnect("Not connected to server.")
             return
+        # event: Event[bytearray] | None = None
         try:
             # print("handle_read_event start")
             event = await self.read_event()
@@ -307,6 +313,7 @@ class GameClient(ClientNetworkEventComponent):
             print(f"[{self.name}] Socket closed from another task.")
             return
         except network.NetworkTimeoutError as exc:
+            # print("[azul.client] Network timeout")
             if self.running:
                 self.running = False
                 print(f"[{self.name}] NetworkTimeoutError")
@@ -331,6 +338,8 @@ class GameClient(ClientNetworkEventComponent):
                 "Server closed connection.",
             )
             return
+
+        ##        print(f'[azul.client] handle_read_event {event}')
 
         await self.raise_event(event)
 
@@ -376,6 +385,9 @@ class GameClient(ClientNetworkEventComponent):
         player_count: u8 = buffer.read_value(StructFormat.UBYTE)
         factory_count: u8 = buffer.read_value(StructFormat.UBYTE)
         current_turn: u8 = buffer.read_value(StructFormat.UBYTE)
+        floor_line_size: u8 = buffer.read_value(StructFormat.UBYTE)
+
+        floor_line_data = decode_int8_array(buffer, (floor_line_size, 1))
 
         await self.raise_event(
             Event(
@@ -385,6 +397,7 @@ class GameClient(ClientNetworkEventComponent):
                     player_count,
                     factory_count,
                     current_turn,
+                    floor_line_data,
                 ),
             ),
         )
@@ -480,6 +493,17 @@ class GameClient(ClientNetworkEventComponent):
 
         await self.raise_event(
             Event("game_cursor_set_destination", unit_location),
+        )
+
+    async def read_floor_data(self, event: Event[bytearray]) -> None:
+        """Read floor_data event from server, reraise as `game_floor_data`."""
+        buffer = Buffer(event.data)
+
+        floor_id: u8 = buffer.read_value(StructFormat.UBYTE)
+        floor_line = decode_numeric_uint8_counter(buffer)
+
+        await self.raise_event(
+            Event("game_floor_data", (floor_id, floor_line)),
         )
 
     async def write_game_factory_clicked(
