@@ -345,7 +345,7 @@ class GameClient(ClientNetworkEventComponent):
         """Read initial_config event from server."""
         buffer = Buffer(event.data)
 
-        varient_play: u8 = buffer.read_value(StructFormat.BOOL)
+        variant_play: u8 = buffer.read_value(StructFormat.BOOL)
         player_count: u8 = buffer.read_value(StructFormat.UBYTE)
         factory_count: u8 = buffer.read_value(StructFormat.UBYTE)
         current_turn: u8 = buffer.read_value(StructFormat.UBYTE)
@@ -354,7 +354,7 @@ class GameClient(ClientNetworkEventComponent):
             Event(
                 "game_initial_config",
                 (
-                    varient_play,
+                    variant_play,
                     player_count,
                     factory_count,
                     current_turn,

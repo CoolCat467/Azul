@@ -234,11 +234,11 @@ class ServerClient(ServerClientNetworkEventComponent):
         event: Event[tuple[bool, int, int, int]],
     ) -> None:
         """Read initial config event and reraise as server[write]->initial_config."""
-        varient_play, player_count, factory_count, current_turn = event.data
+        variant_play, player_count, factory_count, current_turn = event.data
 
         buffer = Buffer()
 
-        buffer.write_value(StructFormat.BOOL, varient_play)
+        buffer.write_value(StructFormat.BOOL, variant_play)
         buffer.write_value(StructFormat.UBYTE, player_count)
         buffer.write_value(StructFormat.UBYTE, factory_count)
         buffer.write_value(StructFormat.UBYTE, current_turn)
@@ -531,14 +531,14 @@ class GameServer(network.Server):
                 players[client_id] = ServerPlayer.spectator
         return players
 
-    def new_game_init(self, varient_play: bool = False) -> None:
+    def new_game_init(self, variant_play: bool = False) -> None:
         """Start new game."""
         print("server new_game_init")
         self.client_players.clear()
 
         self.state = State.new_game(
             max(2, min(4, self.client_count)),
-            varient_play,
+            variant_play,
         )
 
         # Why keep track of another object just to know client ID numbers
@@ -670,7 +670,7 @@ class GameServer(network.Server):
 
     async def handle_server_start_new_game(self, event: Event[bool]) -> None:
         """Handle game start."""
-        varient_play = event.data
+        variant_play = event.data
         ##        # Delete all pieces from last state (shouldn't be needed but still.)
         ##        async with trio.open_nursery() as nursery:
         ##            for piece_pos, _piece_type in self.state.get_pieces():
@@ -681,7 +681,7 @@ class GameServer(network.Server):
 
         # Choose which team plays first
         # Using non-cryptographically secure random because it doesn't matter
-        self.new_game_init(varient_play)
+        self.new_game_init(variant_play)
 
         ##        # Send create_piece events for all pieces
         ##        async with trio.open_nursery() as nursery:
@@ -696,7 +696,7 @@ class GameServer(network.Server):
             Event(
                 "initial_config->network",
                 (
-                    self.state.varient_play,
+                    self.state.variant_play,
                     len(self.state.player_data),
                     len(self.state.factory_displays),
                     self.state.current_turn,
@@ -796,7 +796,7 @@ class GameServer(network.Server):
                     Event(
                         "initial_config->network",
                         (
-                            self.state.varient_play,
+                            self.state.variant_play,
                             len(self.state.player_data),
                             len(self.state.factory_displays),
                             self.state.current_turn,
@@ -853,9 +853,9 @@ class GameServer(network.Server):
             with self.temporary_component(client):
                 if can_start and not game_active:  # and is_zee_capitan:
                     print("[azul.server] game start trigger.")
-                    varient_play = False
+                    variant_play = False
                     await self.raise_event(
-                        Event("server_send_game_start", varient_play),
+                        Event("server_send_game_start", variant_play),
                     )
                 try:
                     await self.client_network_loop(client, is_zee_capitan)
@@ -1186,7 +1186,7 @@ class GameServer(network.Server):
             print("TODO: Handle end of game.")
 
         if self.state.current_phase == Phase.wall_tiling:
-            if not self.state.varient_play:
+            if not self.state.variant_play:
                 self.state = self.state.apply_auto_wall_tiling()
             await self.transmit_new_round_data()
             await self.transmit_pattern_line_data()

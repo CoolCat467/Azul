@@ -183,8 +183,8 @@ def floor_fill_tile_excess(
     return excess
 
 
-class UnplacableTileError(Exception):
-    """Unplacable Tile Exception."""
+class UnplayableTileError(Exception):
+    """Unplayable Tile Exception."""
 
     __slots__ = ("y",)
 
@@ -202,11 +202,11 @@ class PlayerData(NamedTuple):
     floor: Counter[int]
 
     @classmethod
-    def new(cls, varient_play: bool = False) -> Self:
+    def new(cls, variant_play: bool = False) -> Self:
         """Return new player data instance."""
         wall = full((5, 5), Tile.blank, int8)
 
-        if not varient_play:
+        if not variant_play:
             for y in range(5):
                 for x in range(5):
                     color = -((5 - y + x) % len(REAL_TILES) + 1)
@@ -483,7 +483,7 @@ class PlayerData(NamedTuple):
     def get_manual_wall_tile_location(self) -> tuple[int, list[int]] | None:
         """Return tuple of row and placable columns for wall tiling, or None if done.
 
-        Raises UnplacableTileError if no valid placement locations.
+        Raises UnplayableTileError if no valid placement locations.
         """
         for y, line in enumerate(self.lines):
             if line.color == Tile.blank:
@@ -499,11 +499,11 @@ class PlayerData(NamedTuple):
                     continue
                 valid_x.append(x)
             if not valid_x:
-                raise UnplacableTileError(y)
+                raise UnplayableTileError(y)
             return (y, valid_x)
         return None
 
-    def handle_unplacable_wall_tiling(
+    def handle_unplayable_wall_tiling(
         self,
         y: int,
     ) -> tuple[Self, Counter[int]]:
@@ -646,7 +646,7 @@ class SelectableDestinationTiles(NamedTuple):
 class State(NamedTuple):
     """Represents state of an azul game."""
 
-    varient_play: bool
+    variant_play: bool
     current_phase: Phase
     bag: Counter[int]
     box_lid: Counter[int]
@@ -660,7 +660,7 @@ class State(NamedTuple):
     def blank(cls) -> Self:
         """Return new blank state."""
         return cls(
-            varient_play=False,
+            variant_play=False,
             current_phase=Phase.end,
             bag=Counter(),
             box_lid=Counter(),
@@ -672,7 +672,7 @@ class State(NamedTuple):
         )
 
     @classmethod
-    def new_game(cls, player_count: int, varient_play: bool = False) -> Self:
+    def new_game(cls, player_count: int, variant_play: bool = False) -> Self:
         """Return state of a new game."""
         factory_count = player_count * 2 + 1
         bag = generate_bag_contents()
@@ -685,7 +685,7 @@ class State(NamedTuple):
             factory_displays[x] = tiles
 
         return cls(
-            varient_play=varient_play,
+            variant_play=variant_play,
             current_phase=Phase.factory_offer,
             bag=bag,
             box_lid=Counter(),
@@ -694,7 +694,7 @@ class State(NamedTuple):
             cursor_contents=Counter(),
             current_turn=0,
             player_data={
-                x: PlayerData.new(varient_play) for x in range(player_count)
+                x: PlayerData.new(variant_play) for x in range(player_count)
             },
         )
 
@@ -868,7 +868,7 @@ class State(NamedTuple):
             # Go to wall tiling phase
             current_phase = Phase.wall_tiling
 
-        ##if current_phase == Phase.wall_tiling and not self.varient_play:
+        ##if current_phase == Phase.wall_tiling and not self.variant_play:
         ##    return new_state.apply_auto_wall_tiling()
         ##return new_state
         return self._replace(
@@ -1030,7 +1030,7 @@ class State(NamedTuple):
     def apply_auto_wall_tiling(self) -> Self:
         """Return new state after performing automatic wall tiling."""
         assert self.current_phase == Phase.wall_tiling
-        assert not self.varient_play
+        assert not self.variant_play
         box_lid = self.box_lid.copy()
         new_players = player_data_deepcopy(self.player_data)
 
@@ -1191,12 +1191,12 @@ class State(NamedTuple):
 
         try:
             return current_player_data.get_manual_wall_tile_location()
-        except UnplacableTileError as unplacable_exc:
+        except UnplayableTileError as unplayable_exc:
             # kind of hacky, but it works
-            y_position = unplacable_exc.y
+            y_position = unplayable_exc.y
 
             new_player_data, for_box_lid = (
-                current_player_data.handle_unplacable_wall_tiling(y_position)
+                current_player_data.handle_unplayable_wall_tiling(y_position)
             )
 
             box_lid = self.box_lid.copy()

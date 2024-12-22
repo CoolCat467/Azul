@@ -1830,7 +1830,7 @@ class PlayState(GameState):
         event: Event[tuple[bool, int, int, int]],
     ) -> None:
         """Handle `game_initial_config` event."""
-        varient_play, player_count, factory_count, self.current_turn = (
+        variant_play, player_count, factory_count, self.current_turn = (
             event.data
         )
 
