@@ -14,11 +14,11 @@ click==8.1.8 ; implementation_name == 'cpython'
     # via black
 codespell==2.3.0
     # via -r test-requirements.in
-colorama==0.4.6 ; (implementation_name == 'cpython' and platform_system == 'Windows') or sys_platform == 'win32'
+colorama==0.4.6 ; sys_platform == 'win32'
     # via
     #   click
     #   pytest
-coverage==7.6.9
+coverage==7.6.10
     # via
     #   -r test-requirements.in
     #   pytest-cov
@@ -33,9 +33,9 @@ idna==3.10
     # via trio
 iniconfig==2.0.0
     # via pytest
-libcomponent @ git+https://github.com/CoolCat467/LibComponent@91362869af19943520430fbed9edc38fc473ac9e
+libcomponent==0.0.1
     # via -r test-requirements.in
-mypy==1.14.0
+mypy==1.14.1
     # via -r test-requirements.in
 mypy-extensions==1.0.0
     # via
@@ -45,7 +45,7 @@ mypy-extensions==1.0.0
     #   mypy
 numpy==2.1.3
     # via -r test-requirements.in
-orjson==3.10.12 ; implementation_name == 'cpython'
+orjson==3.10.13 ; implementation_name == 'cpython'
     # via -r test-requirements.in
 outcome==1.3.0.post0
     # via
@@ -86,7 +86,7 @@ tomli==2.2.1 ; python_full_version <= '3.11'
     #   coverage
     #   mypy
     #   pytest
-trio==0.27.0
+trio==0.28.0
     # via
     #   -r test-requirements.in
     #   libcomponent
@@ -97,5 +97,5 @@ typing-extensions==4.12.2
     #   black
     #   libcomponent
     #   mypy
-uv==0.5.11
+uv==0.5.13
     # via -r test-requirements.in
