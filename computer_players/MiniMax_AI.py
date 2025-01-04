@@ -13,7 +13,7 @@ __version__ = "0.0.0"
 
 from typing import TYPE_CHECKING, TypeAlias, TypeVar
 
-##from machine_client import RemoteState, run_clients_in_local_servers_sync
+from machine_client import RemoteState, run_clients_in_local_servers_sync
 from minimax import Minimax, MinimaxResult, Player
 
 from azul.state import (
@@ -37,13 +37,13 @@ Action: TypeAlias = (
 # 1 = True  = AI (Us) = MAX = 1, 3
 
 
-class AzulMinimax(Minimax[State, Action]):
+class AzulMinimax(Minimax[tuple[State, int], Action]):
     """Minimax Algorithm for Checkers."""
 
     __slots__ = ()
 
     @staticmethod
-    def value(state: State) -> int | float:
+    def value(state: tuple[State, int]) -> int | float:
         """Return value of given game state."""
         # Real
         real_state, max_player = state
@@ -68,13 +68,13 @@ class AzulMinimax(Minimax[State, Action]):
         return (max_ - min_) / (abs(max_) + abs(min_) + 1)
 
     @staticmethod
-    def terminal(state: State) -> bool:
+    def terminal(state: tuple[State, int]) -> bool:
         """Return if game state is terminal."""
         real_state, _max_player = state
         return real_state.current_phase == Phase.end
 
     @staticmethod
-    def player(state: State) -> Player:
+    def player(state: tuple[State, int]) -> Player:
         """Return Player enum from current state's turn."""
         real_state, max_player = state
         return (
@@ -82,62 +82,65 @@ class AzulMinimax(Minimax[State, Action]):
         )
 
     @staticmethod
-    def actions(state: State) -> Iterable[Action]:
+    def actions(state: tuple[State, int]) -> Iterable[Action]:
         """Return all actions that are able to be performed for the current player in the given state."""
         real_state, _max_player = state
         return tuple(real_state.yield_actions())
         ##        print(f'{len(actions) = }')
 
     @staticmethod
-    def result(state: State, action: Action) -> State:
+    def result(state: tuple[State, int], action: Action) -> tuple[State, int]:
         """Return new state after performing given action on given current state."""
         real_state, max_player = state
         return (real_state.preform_action(action), max_player)
 
     @classmethod
-    def adaptive_depth_minimax(cls, state: State) -> MinimaxResult[Action]:
+    def adaptive_depth_minimax(
+        cls,
+        state: tuple[State, int],
+    ) -> MinimaxResult[Action]:
         """Adaptive depth minimax."""
         # TODO
         depth = 1
         return cls.alphabeta(state, depth)
 
 
-##class MinimaxPlayer(RemoteState):
-##    """Minimax Player."""
-##
-##    __slots__ = ()
-##
-##    async def preform_turn(self) -> Action:
-##        """Perform turn."""
-##        print("preform_turn")
-##        ##value, action = CheckersMinimax.adaptive_depth_minimax(
-##        ##    self.state, 4, 5
-##        ##)
-##        ##value, action = CheckersMinimax.minimax(self.state, 4)
-##        value, action = CheckersMinimax.alphabeta(self.state, 4)
-##        if action is None:
-##            raise ValueError("action is None")
-##        print(f"{value = }")
-##        return action
+class MinimaxPlayer(RemoteState):
+    """Minimax Player."""
+
+    __slots__ = ()
+
+    async def preform_turn(self) -> Action:
+        """Perform turn."""
+        print("preform_turn")
+        ##value, action = CheckersMinimax.adaptive_depth_minimax(
+        ##    self.state, 4, 5
+        ##)
+        ##value, action = CheckersMinimax.minimax(self.state, 4)
+        value, action = AzulMinimax.alphabeta((self.state, self.playing_as), 1)
+        ##        value, action = AzulMinimax.alphabeta((self.state, self.playing_as), 4)
+        if action is None:
+            raise ValueError("action is None")
+        print(f"{value = }")
+        return action
 
 
 def run() -> None:
     """Run MinimaxPlayer clients in local server."""
-    import random
+    ##    import random
+    ##
+    ##    random.seed(0)
+    ##
+    ##    state = (State.new_game(2), 0)
+    ##
+    ##    while not AzulMinimax.terminal(state):
+    ##        action = AzulMinimax.adaptive_depth_minimax(state)
+    ##        print(f"{action = }")
+    ##        state = AzulMinimax.result(state, action.action)
+    ##        print(f"{state = }")
+    ##    print(state)
 
-    random.seed(0)
-
-    state = (State.new_game(2), 0)
-
-    while not AzulMinimax.terminal(state):
-        action = AzulMinimax.adaptive_depth_minimax(state)
-        print(f"{action = }")
-        state = AzulMinimax.result(state, action.action)
-        print(f"{state = }")
-    print(state)
-
-
-##    run_clients_in_local_servers_sync(MinimaxPlayer)
+    run_clients_in_local_servers_sync(MinimaxPlayer)
 
 
 if __name__ == "__main__":

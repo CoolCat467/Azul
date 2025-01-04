@@ -9,20 +9,38 @@ __version__ = "0.0.0"
 import sys
 from abc import ABCMeta, abstractmethod
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias
 
 import trio
-from checkers.client import GameClient, read_advertisements
-from checkers.component import (
+from libcomponent.component import (
     Component,
     ComponentManager,
     Event,
     ExternalRaiseManager,
 )
-from checkers.state import Action, Pos, State
+
+from azul.client import GameClient, read_advertisements
+from azul.state import (
+    PatternLine,
+    Phase,
+    SelectableDestination,
+    SelectableDestinationTiles,
+    SelectableSource,
+    SelectableSourceTiles,
+    State,
+    Tile,
+    factory_displays_deepcopy,
+    player_data_deepcopy,
+)
 
 if TYPE_CHECKING:
+    from collections import Counter
     from collections.abc import AsyncGenerator
+
+    from mypy_extensions import u8
+    from numpy import int8
+    from numpy.typing import NDArray
+
 
 if sys.version_info < (3, 11):
     from exceptiongroup import BaseExceptionGroup
@@ -30,6 +48,12 @@ if sys.version_info < (3, 11):
 # Player:
 # 0 = False = Person  = MIN = 0, 2
 # 1 = True  = AI (Us) = MAX = 1, 3
+
+##Action: TypeAlias = tuple[SelectableSourceTiles, SelectableDestinationTiles]
+Action: TypeAlias = (
+    tuple[SelectableDestinationTiles, ...]
+    | tuple[SelectableSourceTiles, tuple[SelectableDestinationTiles, ...]]
+)
 
 
 class RemoteState(Component, metaclass=ABCMeta):
@@ -39,43 +63,84 @@ class RemoteState(Component, metaclass=ABCMeta):
     turn.
     """
 
-    __slots__ = ("has_initial", "moves", "pieces", "playing_as", "state")
+    __slots__ = ("has_initial", "moves", "playing_as", "state")
 
     def __init__(self) -> None:
         """Initialize remote state."""
         super().__init__("remote_state")
 
-        self.state = State((8, 8), {})
+        self.state = State.blank()
         self.has_initial = False
-        self.pieces: dict[Pos, int] = {}
 
-        self.playing_as = 1
+        self.playing_as: u8 = 1
         self.moves = 0
 
     def bind_handlers(self) -> None:
         """Register game event handlers."""
         self.register_handlers(
             {
-                "game_action_complete": self.handle_action_complete,
                 "game_winner": self.handle_game_over,
                 "game_initial_config": self.handle_initial_config,
                 "game_playing_as": self.handle_playing_as,
-                "gameboard_create_piece": self.handle_create_piece,
+                "game_board_data": self.handle_board_data,
+                "game_pattern_data": self.handle_pattern_data,
+                "game_factory_data": self.handle_factory_data,
+                # "game_cursor_data":
+                "game_table_data": self.handle_table_data,
+                # "game_cursor_set_movement_mode":
+                "game_pattern_current_turn_change": self.handle_pattern_current_turn_change,
+                # "game_cursor_set_destination":
+                "game_floor_data": self.handle_floor_data,
             },
         )
 
+    async def apply_select_source(
+        self,
+        selection: SelectableSourceTiles,
+    ) -> None:
+        """Select source."""
+        color = selection.tiles
+        raise NotImplementedError(selection.source)
+        if selection.source == SelectableSource.table_center:  # type: ignore[unreachable]
+            return self.cursor_selects_table_center(color)
+        if selection.source == SelectableSource.factory:
+            assert selection.source_id is not None
+            return self.cursor_selects_factory(selection.source_id, color)
+        raise NotImplementedError(selection.source)
+
+    async def apply_select_destination(
+        self,
+        selection: SelectableDestinationTiles,
+    ) -> None:
+        """Select destination."""
+        assert self.state.current_phase == Phase.factory_offer
+        assert not self.state.is_cursor_empty()
+
+        raise NotImplementedError(selection.destination)
+        if selection.destination == SelectableDestination.floor_line:  # type: ignore[unreachable]
+            color = self.state.get_cursor_holding_color()
+            return self.player_select_floor_line(
+                color,
+                selection.place_count,
+            )
+        if selection.destination == SelectableDestination.pattern_line:
+            assert selection.destination_id is not None
+            return self.state.player_selects_pattern_line(
+                selection.destination_id,
+                selection.place_count,
+            )
+        raise NotImplementedError(selection.destination)
+
     async def preform_action(self, action: Action) -> None:
         """Raise events to perform game action."""
-        await self.raise_event(
-            Event(
-                "gameboard_piece_clicked",
-                (
-                    action.from_pos,
-                    self.state.pieces[action.from_pos],
-                ),
-            ),
-        )
-        await self.raise_event(Event("gameboard_tile_clicked", action.to_pos))
+        source, dest = action
+        assert isinstance(source, SelectableSourceTiles)
+
+        await self.apply_select_source(source)
+        destination = dest[0]
+        assert isinstance(destination, SelectableDestinationTiles)
+        await self.apply_select_destination(destination)
+        raise NotImplementedError(f"{source = } {dest = }")
 
     @abstractmethod
     async def preform_turn(self) -> Action:
@@ -84,53 +149,164 @@ class RemoteState(Component, metaclass=ABCMeta):
     async def base_preform_turn(self) -> None:
         """Perform turn."""
         self.moves += 1
-        winner = self.state.check_for_win()
-        if winner is not None:
+        ##        winner = self.state.check_for_win()
+        ##        if winner is not None:
+        if self.state.current_phase == Phase.end:
             print("Terminal state, not performing turn")
-            value = ("Lost", "Won")[winner == self.playing_as]
+            ##value = ("Lost", "Won")[winner == self.playing_as]
+            value = "<unknown>"
             print(f"{value} after {self.moves}")
+            await trio.lowlevel.checkpoint()
             return
+        print(f"Move {self.moves}...")
         action = await self.preform_turn()
         await self.preform_action(action)
 
-    async def handle_action_complete(
-        self,
-        event: Event[tuple[Pos, Pos, int]],
-    ) -> None:
-        """Perform action on internal state and perform our turn if possible."""
-        from_pos, to_pos, turn = event.data
-        action = self.state.action_from_points(from_pos, to_pos)
-        self.state = self.state.preform_action(action)
-        ##        print(f'{turn = }')
-        if turn == self.playing_as:
-            await self.base_preform_turn()
-
-    async def handle_create_piece(self, event: Event[tuple[Pos, int]]) -> None:
-        """Update internal pieces if we haven't had the initial setup event."""
-        if self.has_initial:
-            return
-        pos, type_ = event.data
-        self.pieces[pos] = type_
-
-    async def handle_playing_as(self, event: Event[int]) -> None:
-        """Handle playing as event."""
+    async def handle_playing_as(self, event: Event[u8]) -> None:
+        """Handle client playing as specified player event."""
+        ##        print("handle_playing_as")
         self.playing_as = event.data
+
+        if self.state.current_turn == self.playing_as:
+            await self.base_preform_turn()
+            return
+        await trio.lowlevel.checkpoint()
 
     async def handle_initial_config(
         self,
-        event: Event[tuple[Pos, int]],
+        event: Event[tuple[u8, u8, u8, u8, NDArray[int8]]],
     ) -> None:
-        """Set up initial state and perform our turn if possible."""
-        board_size, turn = event.data
-        self.state = State(board_size, self.pieces, bool(turn))
+        """Set up initial game state."""
+        ##        print("handle_initial_config")
+        (
+            variant_play,
+            player_count,
+            factory_count,
+            current_turn,
+            floor_line_data,
+        ) = event.data
+        self.state = State.new_game(player_count, bool(variant_play))
+        self.state = self.state._replace(current_turn=current_turn)
         self.has_initial = True
-        if turn == self.playing_as:
-            await self.base_preform_turn()
+        ##if current_turn == self.playing_as:
+        ##    await self.base_preform_turn()
 
-    async def handle_game_over(self, event: Event[int]) -> None:
+    async def handle_game_over(self, event: Event[u8]) -> None:
         """Raise network_stop event so we disconnect from server."""
+        ##        print("handle_game_over")
         self.has_initial = False
         await self.raise_event(Event("network_stop", None))
+
+    async def handle_board_data(
+        self,
+        event: Event[tuple[u8, NDArray[int8]]],
+    ) -> None:
+        """Handle player board data update."""
+        ##        print("handle_board_data")
+        player_id, board_data = event.data
+
+        current_player_data = self.state.player_data[player_id]
+
+        new_player_data = current_player_data._replace(wall=board_data)
+
+        player_data = player_data_deepcopy(self.state.player_data)
+        player_data[player_id] = new_player_data
+
+        self.state = self.state._replace(
+            player_data=player_data,
+        )
+        await trio.lowlevel.checkpoint()
+
+    async def handle_pattern_data(
+        self,
+        event: Event[tuple[u8, u8, tuple[u8, u8]]],
+    ) -> None:
+        """Handle player pattern line data update."""
+        ##        print("handle_pattern_data")
+        player_id, row_id, (tile_color, tile_count) = event.data
+
+        current_player_data = self.state.player_data[player_id]
+
+        new_player_data = current_player_data._replace(
+            lines=current_player_data.replace_pattern_line(
+                current_player_data.lines,
+                row_id,
+                PatternLine(Tile(tile_color), int(tile_count)),
+            ),
+        )
+
+        player_data = player_data_deepcopy(self.state.player_data)
+        player_data[player_id] = new_player_data
+
+        self.state = self.state._replace(
+            player_data=player_data,
+        )
+        await trio.lowlevel.checkpoint()
+
+    async def handle_factory_data(
+        self,
+        event: Event[tuple[u8, Counter[u8]]],
+    ) -> None:
+        """Handle factory data update."""
+        ##        print("handle_factory_data")
+        factory_id, tiles = event.data
+
+        factory_displays = factory_displays_deepcopy(
+            self.state.factory_displays,
+        )
+        factory_displays[factory_id] = tiles
+
+        self.state = self.state._replace(
+            factory_displays=factory_displays,
+        )
+        await trio.lowlevel.checkpoint()
+
+    async def handle_table_data(self, event: Event[Counter[u8]]) -> None:
+        """Handle table center tile data update."""
+        ##        print("handle_table_data")
+        table_center = event.data
+
+        self.state = self.state._replace(
+            table_center=table_center,
+        )
+        await trio.lowlevel.checkpoint()
+
+    async def handle_pattern_current_turn_change(
+        self,
+        event: Event[u8],
+    ) -> None:
+        """Handle change of current turn."""
+        ##        print("handle_pattern_current_turn_change")
+        pattern_id = event.data
+
+        self.state = self.state._replace(
+            current_turn=pattern_id,
+        )
+
+        if self.state.current_turn == self.playing_as:
+            await self.base_preform_turn()
+            return
+        await trio.lowlevel.checkpoint()
+
+    async def handle_floor_data(
+        self,
+        event: Event[tuple[u8, Counter[u8]]],
+    ) -> None:
+        """Handle floor data event."""
+        ##        print("handle_floor_data")
+        floor_id, floor_line = event.data
+
+        current_player_data = self.state.player_data[floor_id]
+
+        new_player_data = current_player_data._replace(floor=floor_line)
+
+        player_data = player_data_deepcopy(self.state.player_data)
+        player_data[floor_id] = new_player_data
+
+        self.state = self.state._replace(
+            player_data=player_data,
+        )
+        await trio.lowlevel.checkpoint()
 
 
 class MachineClient(ComponentManager):

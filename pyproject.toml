@@ -60,7 +60,7 @@ azul = ["py.typed", "data/*"]
 
 [tool.mypy]
 plugins = ["numpy.typing.mypy_plugin"]
-files = ["src/azul/",]
+files = ["src/azul/", "computer_players"]
 check_untyped_defs = true
 disallow_any_decorated = true
 disallow_any_generics = true
