@@ -1250,8 +1250,10 @@ class GameServer(network.Server):
             ),
         )
 
+        did_auto_wall_tile = False
         if self.state.current_phase == Phase.wall_tiling:
             if not self.state.variant_play:
+                did_auto_wall_tile = True
                 self.state = self.state.apply_auto_wall_tiling()
             await self.transmit_new_round_data()
             await self.transmit_pattern_line_data()
@@ -1259,7 +1261,7 @@ class GameServer(network.Server):
         if self.state.current_phase == Phase.end:
             print("TODO: Handle end of game.")
 
-        if self.state.current_turn != player_id:
+        if self.state.current_turn != player_id or did_auto_wall_tile:
             await self.raise_event(
                 Event(
                     "current_turn_change->network",
@@ -1388,8 +1390,10 @@ class GameServer(network.Server):
             ),
         )
 
+        did_auto_wall_tile = False
         if self.state.current_phase == Phase.wall_tiling:
             if not self.state.variant_play:
+                did_auto_wall_tile = True
                 self.state = self.state.apply_auto_wall_tiling()
             await self.transmit_new_round_data()
             await self.transmit_pattern_line_data()
@@ -1397,7 +1401,7 @@ class GameServer(network.Server):
         if self.state.current_phase == Phase.end:
             print("TODO: Handle end of game.")
 
-        if self.state.current_turn != player_id:
+        if self.state.current_turn != player_id or did_auto_wall_tile:
             await self.raise_event(
                 Event(
                     "current_turn_change->network",

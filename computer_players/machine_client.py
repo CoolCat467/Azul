@@ -9,7 +9,7 @@ __version__ = "0.0.0"
 import sys
 from abc import ABCMeta, abstractmethod
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, TypeAlias, cast
 
 import trio
 from libcomponent.component import (
@@ -32,6 +32,7 @@ from azul.state import (
     factory_displays_deepcopy,
     player_data_deepcopy,
 )
+from azul.vector import Vector2
 
 if TYPE_CHECKING:
     from collections import Counter
@@ -63,17 +64,28 @@ class RemoteState(Component, metaclass=ABCMeta):
     turn.
     """
 
-    __slots__ = ("has_initial", "moves", "playing_as", "state")
+    __slots__ = (
+        "can_made_play",
+        "has_initial",
+        "moves",
+        "playing_as",
+        "playing_lock",
+        "state",
+    )
 
-    def __init__(self) -> None:
+    def __init__(self, state_class: type[State] = State) -> None:
         """Initialize remote state."""
         super().__init__("remote_state")
 
-        self.state = State.blank()
+        ##        print(f'[RemoteState] {state_class = }')
+        self.state = state_class.blank()
         self.has_initial = False
 
         self.playing_as: u8 = 1
         self.moves = 0
+
+        self.playing_lock = trio.Lock()
+        self.can_made_play = True
 
     def bind_handlers(self) -> None:
         """Register game event handlers."""
@@ -85,7 +97,7 @@ class RemoteState(Component, metaclass=ABCMeta):
                 "game_board_data": self.handle_board_data,
                 "game_pattern_data": self.handle_pattern_data,
                 "game_factory_data": self.handle_factory_data,
-                # "game_cursor_data":
+                "game_cursor_data": self.handle_cursor_data,
                 "game_table_data": self.handle_table_data,
                 # "game_cursor_set_movement_mode":
                 "game_pattern_current_turn_change": self.handle_pattern_current_turn_change,
@@ -99,14 +111,17 @@ class RemoteState(Component, metaclass=ABCMeta):
         selection: SelectableSourceTiles,
     ) -> None:
         """Select source."""
+        ##        print(f"select {selection = }")
         color = selection.tiles
-        raise NotImplementedError(selection.source)
-        if selection.source == SelectableSource.table_center:  # type: ignore[unreachable]
-            return self.cursor_selects_table_center(color)
-        if selection.source == SelectableSource.factory:
+        if selection.source == SelectableSource.table_center:
+            await self.raise_event(Event("game_table_clicked", color))
+        elif selection.source == SelectableSource.factory:
             assert selection.source_id is not None
-            return self.cursor_selects_factory(selection.source_id, color)
-        raise NotImplementedError(selection.source)
+            await self.raise_event(
+                Event("game_factory_clicked", (selection.source_id, color)),
+            )
+        else:
+            raise NotImplementedError(selection.source)
 
     async def apply_select_destination(
         self,
@@ -114,33 +129,68 @@ class RemoteState(Component, metaclass=ABCMeta):
     ) -> None:
         """Select destination."""
         assert self.state.current_phase == Phase.factory_offer
-        assert not self.state.is_cursor_empty()
+        ##assert not self.state.is_cursor_empty()
+        ##        print(f'dest {selection = }')
 
-        raise NotImplementedError(selection.destination)
-        if selection.destination == SelectableDestination.floor_line:  # type: ignore[unreachable]
-            color = self.state.get_cursor_holding_color()
-            return self.player_select_floor_line(
-                color,
-                selection.place_count,
+        if selection.destination == SelectableDestination.floor_line:
+            await self.raise_event(
+                Event(
+                    "game_floor_clicked",
+                    (self.playing_as, selection.place_count),
+                ),
             )
-        if selection.destination == SelectableDestination.pattern_line:
+        elif selection.destination == SelectableDestination.pattern_line:
             assert selection.destination_id is not None
-            return self.state.player_selects_pattern_line(
-                selection.destination_id,
-                selection.place_count,
+            line_id = selection.destination_id
+            currently_placed = self.state.get_player_line_current_place_count(
+                line_id,
             )
-        raise NotImplementedError(selection.destination)
+            await self.raise_event(
+                Event(
+                    "game_pattern_row_clicked",
+                    (
+                        self.playing_as,
+                        Vector2(
+                            5 - selection.place_count - currently_placed,
+                            line_id,
+                        ),
+                    ),
+                ),
+            )
+        else:
+            raise NotImplementedError(selection.destination)
 
     async def preform_action(self, action: Action) -> None:
         """Raise events to perform game action."""
-        source, dest = action
-        assert isinstance(source, SelectableSourceTiles)
+        await self.raise_event(
+            Event(
+                "game_cursor_location_transmit",
+                Vector2(0.5, 0.5),
+            ),
+        )
+        source: SelectableSourceTiles | None = None
+        dest: tuple[SelectableDestinationTiles, ...]
+        if len(action) == 2:
+            raw_source, raw_dest = action
+            if isinstance(raw_source, SelectableSourceTiles):
+                source = raw_source
+                dest = cast(tuple[SelectableDestinationTiles, ...], raw_dest)
+            else:
+                dest = cast(tuple[SelectableDestinationTiles, ...], action)
+        else:
+            dest = action
 
-        await self.apply_select_source(source)
-        destination = dest[0]
-        assert isinstance(destination, SelectableDestinationTiles)
-        await self.apply_select_destination(destination)
-        raise NotImplementedError(f"{source = } {dest = }")
+        async with self.playing_lock:
+            self.can_made_play = False
+            if source is not None:
+                await self.apply_select_source(source)
+            for destination in dest:
+                ##                print(f'{destination = }')
+                assert isinstance(destination, SelectableDestinationTiles)
+                await self.apply_select_destination(destination)
+            self.can_made_play = True
+
+    ##        raise NotImplementedError(f"{source = } {dest = }")
 
     @abstractmethod
     async def preform_turn(self) -> Action:
@@ -148,6 +198,12 @@ class RemoteState(Component, metaclass=ABCMeta):
 
     async def base_preform_turn(self) -> None:
         """Perform turn."""
+        ##        async with self.playing_lock:
+        if not self.can_made_play:
+            print("Skipping making move because of flag.")
+            await trio.lowlevel.checkpoint()
+            return
+        self.can_made_play = False
         self.moves += 1
         ##        winner = self.state.check_for_win()
         ##        if winner is not None:
@@ -158,13 +214,14 @@ class RemoteState(Component, metaclass=ABCMeta):
             print(f"{value} after {self.moves}")
             await trio.lowlevel.checkpoint()
             return
-        print(f"Move {self.moves}...")
+        print(f"\nMove {self.moves}...")
         action = await self.preform_turn()
         await self.preform_action(action)
+        print("Action complete.")
 
     async def handle_playing_as(self, event: Event[u8]) -> None:
         """Handle client playing as specified player event."""
-        ##        print("handle_playing_as")
+        print("handle_playing_as")
         self.playing_as = event.data
 
         if self.state.current_turn == self.playing_as:
@@ -185,6 +242,7 @@ class RemoteState(Component, metaclass=ABCMeta):
             current_turn,
             floor_line_data,
         ) = event.data
+        ##        print(f'[RemoteState] {variant_play = }')
         self.state = State.new_game(player_count, bool(variant_play))
         self.state = self.state._replace(current_turn=current_turn)
         self.has_initial = True
@@ -259,6 +317,27 @@ class RemoteState(Component, metaclass=ABCMeta):
         self.state = self.state._replace(
             factory_displays=factory_displays,
         )
+
+        ##if self.state.current_turn == self.playing_as:
+        ##    await self.base_preform_turn()
+        ##    return
+        await trio.lowlevel.checkpoint()
+
+    async def handle_cursor_data(
+        self,
+        event: Event[Counter[u8]],
+    ) -> None:
+        """Handle cursor data update."""
+        ##        print("handle_cursor_data")
+        cursor_contents = event.data
+
+        self.state = self.state._replace(
+            cursor_contents=cursor_contents,
+        )
+
+        ##        if self.state.current_turn == self.playing_as and not self.state.is_cursor_empty():
+        ##            await self.base_preform_turn()
+        ##            return
         await trio.lowlevel.checkpoint()
 
     async def handle_table_data(self, event: Event[Counter[u8]]) -> None:
@@ -276,7 +355,7 @@ class RemoteState(Component, metaclass=ABCMeta):
         event: Event[u8],
     ) -> None:
         """Handle change of current turn."""
-        ##        print("handle_pattern_current_turn_change")
+        print("handle_pattern_current_turn_change")
         pattern_id = event.data
 
         self.state = self.state._replace(

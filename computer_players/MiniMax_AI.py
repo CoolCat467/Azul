@@ -11,10 +11,12 @@ __title__ = "Minimax AI"
 __author__ = "CoolCat467"
 __version__ = "0.0.0"
 
+from math import inf as infinity
 from typing import TYPE_CHECKING, TypeAlias, TypeVar
 
 from machine_client import RemoteState, run_clients_in_local_servers_sync
 from minimax import Minimax, MinimaxResult, Player
+from mypy_extensions import u8
 
 from azul.state import (
     Phase,
@@ -25,6 +27,8 @@ from azul.state import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+    from typing_extensions import Self
 
 T = TypeVar("T")
 Action: TypeAlias = (
@@ -37,13 +41,30 @@ Action: TypeAlias = (
 # 1 = True  = AI (Us) = MAX = 1, 3
 
 
-class AzulMinimax(Minimax[tuple[State, int], Action]):
+class AutoWallState(State):
+    """Azul State with automatic wall tiling in regular play mode."""
+
+    __slots__ = ()
+
+    def _factory_offer_maybe_next_turn(self) -> Self:
+        """Return either current state or new state if player's turn is over."""
+        new_state = super()._factory_offer_maybe_next_turn()
+
+        if (
+            new_state.current_phase == Phase.wall_tiling
+            and not new_state.variant_play
+        ):
+            return new_state.apply_auto_wall_tiling()
+        return new_state
+
+
+class AzulMinimax(Minimax[tuple[AutoWallState, u8], Action]):
     """Minimax Algorithm for Checkers."""
 
     __slots__ = ()
 
     @staticmethod
-    def value(state: tuple[State, int]) -> int | float:
+    def value(state: tuple[AutoWallState, u8]) -> int | float:
         """Return value of given game state."""
         # Real
         real_state, max_player = state
@@ -68,13 +89,13 @@ class AzulMinimax(Minimax[tuple[State, int], Action]):
         return (max_ - min_) / (abs(max_) + abs(min_) + 1)
 
     @staticmethod
-    def terminal(state: tuple[State, int]) -> bool:
+    def terminal(state: tuple[AutoWallState, u8]) -> bool:
         """Return if game state is terminal."""
         real_state, _max_player = state
         return real_state.current_phase == Phase.end
 
     @staticmethod
-    def player(state: tuple[State, int]) -> Player:
+    def player(state: tuple[AutoWallState, u8]) -> Player:
         """Return Player enum from current state's turn."""
         real_state, max_player = state
         return (
@@ -82,14 +103,17 @@ class AzulMinimax(Minimax[tuple[State, int], Action]):
         )
 
     @staticmethod
-    def actions(state: tuple[State, int]) -> Iterable[Action]:
+    def actions(state: tuple[AutoWallState, u8]) -> Iterable[Action]:
         """Return all actions that are able to be performed for the current player in the given state."""
         real_state, _max_player = state
         return tuple(real_state.yield_actions())
         ##        print(f'{len(actions) = }')
 
     @staticmethod
-    def result(state: tuple[State, int], action: Action) -> tuple[State, int]:
+    def result(
+        state: tuple[AutoWallState, u8],
+        action: Action,
+    ) -> tuple[AutoWallState, u8]:
         """Return new state after performing given action on given current state."""
         real_state, max_player = state
         return (real_state.preform_action(action), max_player)
@@ -97,18 +121,42 @@ class AzulMinimax(Minimax[tuple[State, int], Action]):
     @classmethod
     def adaptive_depth_minimax(
         cls,
-        state: tuple[State, int],
+        state: tuple[AutoWallState, u8],
     ) -> MinimaxResult[Action]:
         """Adaptive depth minimax."""
         # TODO
         depth = 1
         return cls.alphabeta(state, depth)
 
+    @classmethod
+    def alphabeta(
+        cls,
+        state: tuple[AutoWallState, u8],
+        depth: int | None = 5,
+        a: int | float = -infinity,
+        b: int | float = infinity,
+    ) -> MinimaxResult[
+        tuple[SelectableDestinationTiles, ...]
+        | tuple[SelectableSourceTiles, tuple[SelectableDestinationTiles, ...]]
+    ]:
+        """Return minimax alphabeta pruning result best action for given current state."""
+        new_state, player = state
+        if (
+            new_state.current_phase == Phase.wall_tiling
+            and not new_state.variant_play
+        ):
+            new_state = new_state.apply_auto_wall_tiling()
+        return super().alphabeta((new_state, player), depth, a, b)
+
 
 class MinimaxPlayer(RemoteState):
     """Minimax Player."""
 
     __slots__ = ()
+
+    def __init__(self) -> None:
+        """Initialize remote minmax player state."""
+        super().__init__(state_class=AutoWallState)
 
     async def preform_turn(self) -> Action:
         """Perform turn."""
@@ -117,7 +165,8 @@ class MinimaxPlayer(RemoteState):
         ##    self.state, 4, 5
         ##)
         ##value, action = CheckersMinimax.minimax(self.state, 4)
-        value, action = AzulMinimax.alphabeta((self.state, self.playing_as), 1)
+        assert isinstance(self.state, AutoWallState)
+        value, action = AzulMinimax.alphabeta((self.state, self.playing_as), 2)
         ##        value, action = AzulMinimax.alphabeta((self.state, self.playing_as), 4)
         if action is None:
             raise ValueError("action is None")
@@ -131,7 +180,7 @@ def run() -> None:
     ##
     ##    random.seed(0)
     ##
-    ##    state = (State.new_game(2), 0)
+    ##    state = (AutoWallState.new_game(2), 0)
     ##
     ##    while not AzulMinimax.terminal(state):
     ##        action = AzulMinimax.adaptive_depth_minimax(state)

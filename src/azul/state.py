@@ -985,25 +985,26 @@ class State(NamedTuple):
         current_player_data = self.player_data[self.current_turn]
 
         color = self.get_cursor_holding_color()
-        count = self.cursor_contents[color] + 1
+        count = self.cursor_contents[color]
 
         for (
             line_id,
             placable,
         ) in current_player_data.yield_possible_placement_rows(color):
-            for place_count in range(1, min(count, placable + 1)):
-                yield SelectableDestinationTiles(
-                    destination=SelectableDestination.pattern_line,
-                    place_count=place_count,
-                    destination_id=line_id,
-                )
+            ##            for place_count in range(1, min(count, placable + 1)):
+            place_count = min(count, placable)
+            yield SelectableDestinationTiles(
+                destination=SelectableDestination.pattern_line,
+                place_count=place_count,
+                destination_id=line_id,
+            )
         # Can always place in floor line, even if full,
         # because of box lid overflow
-        for place_count in range(1, count):
-            yield SelectableDestinationTiles(
-                destination=SelectableDestination.floor_line,
-                place_count=place_count,
-            )
+        ##        for place_count in range(1, count):
+        yield SelectableDestinationTiles(
+            destination=SelectableDestination.floor_line,
+            place_count=count,
+        )
 
     def apply_destination_select_action_factory_offer(
         self,
@@ -1139,8 +1140,10 @@ class State(NamedTuple):
                         action_chain
                     ) in new.yield_all_factory_offer_destinations():
                         yield (selection, action_chain)
+        elif self.current_phase == Phase.end:
+            pass
         else:
-            raise NotImplementedError()
+            raise NotImplementedError(f"{self.current_phase = }")
 
     def preform_action(
         self,

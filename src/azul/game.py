@@ -2167,8 +2167,10 @@ def cli_run() -> None:
             )
         run()
     except ExceptionGroup as exc:
-        print(exc)
-        exception = "".join(traceback.format_exception(exc))
+        ##        print(exc)
+        ##        exception = "".join(traceback.format_exception(exc))
+        ##        print(exception)
+        traceback.print_exception(exc)
     ##        raise
     ##    except BaseException as ex:
     ##        screenshot_last_frame()
