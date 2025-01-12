@@ -33,8 +33,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          persist-credentials: true  # Set to `false` once git issue fixed
-          submodules: false  # Disable submodule fetching
+          persist-credentials: false
       - name: Setup python
         uses: actions/setup-python@v5
         with:

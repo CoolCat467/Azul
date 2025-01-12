@@ -2177,7 +2177,7 @@ def run() -> None:
 def screenshot_last_frame() -> None:
     """Save the last frame before the game crashed."""
     surface = pygame.display.get_surface().copy()
-    str_time = "_".join(time.asctime().split(" "))
+    str_time = "_".join(time.asctime().split(" ")).replace(":", "_")
     filename = f"Crash_at_{str_time}.png"
 
     path = Path("screenshots").absolute()
