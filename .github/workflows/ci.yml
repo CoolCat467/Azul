@@ -30,11 +30,13 @@ jobs:
         || false
       }}
     steps:
+      - name: Print Git config
+        run: git config --list
       - name: Checkout
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-          set-safe-directory: false
+          submodules: false  # Disable submodule fetching
       - name: Setup python
         uses: actions/setup-python@v5
         with:
