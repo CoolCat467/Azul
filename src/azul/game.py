@@ -59,7 +59,7 @@ from pygame.locals import (
 from pygame.rect import Rect
 from pygame.sprite import LayeredDirty
 
-from azul import element_list, objects, sprite
+from azul import database, element_list, objects, sprite
 from azul.async_clock import Clock
 from azul.client import GameClient, read_advertisements
 from azul.crop import auto_crop_clear
@@ -125,6 +125,9 @@ if globals().get("__file__") is None:
 ROOT_FOLDER: Final = Path(__file__).absolute().parent
 DATA_FOLDER: Final = ROOT_FOLDER / "data"
 FONT_FOLDER: Final = ROOT_FOLDER / "fonts"
+LANG_FOLDER: Final = ROOT_FOLDER / "lang"
+# TODO: Way to change language
+LANGUAGE: Final = "en_us"
 
 # Game stuff
 # Tiles
@@ -154,7 +157,7 @@ BUTTONBACKCOLOR = WHITE
 GREYSHIFT = 0.75  # 0.65
 
 # Font
-FONT: Final = FONT_FOLDER / "VeraSerif.ttf"  # "RuneScape-UF-Regular.ttf"
+FONT: Final = FONT_FOLDER / "VeraSerif.ttf"
 SCOREFONTSIZE = 30
 BUTTONFONTSIZE = 60
 
@@ -171,6 +174,45 @@ SOUND_DATA: Final = {
         volume=50,
     ),
 }
+
+
+def decode_localization_entry(localization_string: str) -> list[str]:
+    """Return localization entry path."""
+    return localization_string.split(".")
+
+
+def s_(localization_string: str, **kwargs: object) -> str:
+    """Return localization string entry, or path to it if it doesn't exist."""
+    language_filename = f"{LANGUAGE}.json"
+    language_file = LANG_FOLDER / language_filename
+    # Load keeps copy in-memory, so only performance hit first time.
+    language_data = database.load(language_file)
+
+    localization_entry = decode_localization_entry(localization_string)
+
+    current: dict[str, Any] = language_data
+    new: dict[str, Any] | str | None
+    final: str | None = None
+    for entry in localization_entry:
+        new = current.get(entry)
+        if new is None:
+            break
+        if isinstance(new, str):
+            final = new
+            break
+        assert isinstance(
+            new,
+            dict,
+        ), f"Unexpected value in {language_file!r} for {localization_string!r}"
+        current = new
+    if final is None:
+        # Key does not exist
+        localization_key = f"[{LANGUAGE}] {localization_string}"
+        if kwargs:
+            args = ",".join(f"{k}={v!r}" for k, v in kwargs.items())
+            return f"{localization_key}<{args}>"
+        return localization_key
+    return final.format(**kwargs)
 
 
 def vec2_to_location(vec: Vector2) -> tuple[int, int]:
@@ -708,7 +750,7 @@ class Cursor(TileRenderer):
         event: Event[None],
     ) -> None:
         """Unregister tick event handler."""
-        print("[azul.game.Cursor] Got client disconnect, unregistering tick")
+        # print("[azul.game.Cursor] Got client disconnect, unregistering tick")
         self.unregister_handler_type("tick")
         await trio.lowlevel.checkpoint()
 
@@ -825,7 +867,11 @@ class Board(Grid):
             await trio.lowlevel.checkpoint()
             return
 
-        self.data = array
+        assert array.ndim == 2
+        assert len(array.shape) == 2
+        w, h = array.shape
+        # Prove to typechecker that array is 2D
+        self.data = array.reshape((w, h))
         self.update_image()
         self.visible = True
 
@@ -1508,7 +1554,7 @@ class TitleState(MenuState):
             color=Color(0, 0, 0),
             outline=(255, 0, 0),
             border_width=4,
-            text=__title__.upper(),
+            text=s_("title.game_title"),
         )
         title_text.location = (SCREEN_SIZE[0] // 2, title_text.rect.h)
         self.group_add(title_text)
@@ -1518,7 +1564,7 @@ class TitleState(MenuState):
             button_font,
             visible=True,
             color=Color(0, 0, 0),
-            text="Host Networked Game",
+            text=s_("title.host_game"),
             location=[x // 2 for x in SCREEN_SIZE],
             handle_click=self.change_state("play_hosting"),
         )
@@ -1529,7 +1575,7 @@ class TitleState(MenuState):
             button_font,
             visible=True,
             color=Color(0, 0, 0),
-            text="Join Networked Game",
+            text=s_("title.join_game"),
             location=hosting_button.location
             + Vector2(
                 0,
@@ -1544,7 +1590,7 @@ class TitleState(MenuState):
             button_font,
             visible=True,
             color=Color(0, 0, 0),
-            text="Singleplayer Game",
+            text=s_("title.singleplayer"),
             location=hosting_button.location
             - Vector2(
                 0,
@@ -1559,7 +1605,7 @@ class TitleState(MenuState):
             button_font,
             visible=True,
             color=Color(0, 0, 0),
-            text="Quit",
+            text=s_("title.quit"),
             location=join_button.location
             + Vector2(
                 0,
@@ -1656,7 +1702,7 @@ class ReturnElement(element_list.Element, objects.Button):
         self.update_location_on_resize = False
         self.border_width = 4
         self.outline = RED
-        self.text = "Return to Title"
+        self.text = s_("connect.return_title")
         self.visible = True
         self.location = (SCREEN_SIZE[0] // 2, self.location.y + 10)
 
@@ -1929,7 +1975,7 @@ class PlayState(GameState):
     async def handle_game_over(self, event: Event[int]) -> None:
         """Handle game over event."""
         winner = event.data
-        self.exit_data = (0, f"{winner} Won", False)
+        self.exit_data = (0, s_("play.win", winner=winner), False)
 
         await self.machine.raise_event_internal(Event("network_stop", None))
 
@@ -1938,7 +1984,9 @@ class PlayState(GameState):
         error = event.data
         print(f"[azul.game.PlayState] handle_client_disconnected {error = }")
 
-        self.exit_data = (1, f"Client Disconnected$${error}", False)
+        client_disconnected = s_("error.client_disconnected")
+        error_text = s_(error)
+        self.exit_data = (1, f"{client_disconnected}$${error_text}", False)
 
     async def do_actions(self) -> None:
         """Perform actions for this State."""
@@ -1969,7 +2017,7 @@ class PlayState(GameState):
                 font,
                 visible=True,
                 color=Color(0, 0, 0),
-                text=f"{message} - Return to Title",
+                text=s_("play.return_title_msg", message=message),
                 location=[x // 2 for x in SCREEN_SIZE],
                 handle_click=self.change_state("title"),
             )
@@ -2141,7 +2189,7 @@ def screenshot_last_frame() -> None:
     pygame.image.save(surface, fullpath, filename)
     del surface
 
-    print(f'Saved screenshot to "{fullpath}".')
+    print(s_("screenshot_save", fullpath=fullpath))
 
 
 def cli_run() -> None:
@@ -2161,16 +2209,12 @@ def cli_run() -> None:
         # Initialize Pygame
         _success, fail = pygame.init()
         if fail > 0:
-            print(
-                "Warning! Some modules of Pygame have not initialized properly!\n",
-                "This can occur when not all required modules of SDL are installed.",
-            )
+            print(s_("error.pygame_uninitialized"))
         run()
     except ExceptionGroup as exc:
         ##        print(exc)
-        ##        exception = "".join(traceback.format_exception(exc))
+        exception = "".join(traceback.format_exception(exc))
         ##        print(exception)
-        traceback.print_exception(exc)
     ##        raise
     ##    except BaseException as ex:
     ##        screenshot_last_frame()

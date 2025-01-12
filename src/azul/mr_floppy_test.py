@@ -17,7 +17,7 @@ from libcomponent.component import Component, ComponentManager, Event
 from pygame.locals import K_ESCAPE, KEYUP, QUIT, RESIZABLE, WINDOWRESIZED
 from pygame.rect import Rect
 
-from azul import conf, lang, objects, sprite
+from azul import objects, sprite
 from azul.statemachine import AsyncState, AsyncStateMachine
 from azul.vector import Vector2
 
@@ -368,8 +368,6 @@ async def async_run() -> None:
     """Run client."""
     global SCREEN_SIZE
     # global client
-    config = conf.load_config(path.join("conf", "main.conf"))
-    lang.load_lang(config["Language"]["lang_name"])
 
     screen = pygame.display.set_mode(
         tuple(SCREEN_SIZE),

@@ -57,7 +57,7 @@ version = {attr = "azul.game.__version__"}
 azul_game = "azul.game:cli_run"
 
 [tool.setuptools.package-data]
-azul = ["py.typed", "data/*"]
+azul = ["py.typed", "data/*", "lang/*", "fonts/*"]
 
 [tool.mypy]
 plugins = ["numpy.typing.mypy_plugin"]

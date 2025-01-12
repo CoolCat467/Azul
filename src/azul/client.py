@@ -241,16 +241,16 @@ class GameClient(ClientNetworkEventComponent):
         print(f"[azul.client] print_callback_ping {difference * 1e-06:.03f}ms")
         await trio.lowlevel.checkpoint()
 
-    async def raise_disconnect(self, message: str) -> None:
+    async def raise_disconnect(self, message_key: str) -> None:
         """Raise client_disconnected event with given message."""
-        print(f"{self.__class__.__name__}: {message}")
+        print(f"{self.__class__.__name__}: {message_key}")
         if not self.manager_exists:
             print(
                 f"{self.__class__.__name__}: Manager does not exist, not raising disconnect event.",
             )
             return
         # self.unregister_all_network_write_events()
-        await self.raise_event(Event("client_disconnected", message))
+        await self.raise_event(Event("client_disconnected", message_key))
         await self.close()
         assert self.not_connected
 
@@ -301,7 +301,7 @@ class GameClient(ClientNetworkEventComponent):
         if not self.manager_exists:
             return
         if self.not_connected:
-            await self.raise_disconnect("Not connected to server.")
+            await self.raise_disconnect("error.not_connected")
             return
         # event: Event[bytearray] | None = None
         try:
@@ -319,9 +319,7 @@ class GameClient(ClientNetworkEventComponent):
                 print(f"[{self.name}] NetworkTimeoutError")
                 await self.close()
                 traceback.print_exception(exc)
-                await self.raise_disconnect(
-                    "Failed to read event from server.",
-                )
+                await self.raise_disconnect("error.read_event_fail")
             return
         except network.NetworkStreamNotConnectedError as exc:
             self.running = False
@@ -334,9 +332,7 @@ class GameClient(ClientNetworkEventComponent):
             self.running = False
             print(f"[{self.name}] NetworkEOFError")
             await self.close()
-            await self.raise_disconnect(
-                "Server closed connection.",
-            )
+            await self.raise_disconnect("error.socket_eof")
             return
 
         ##        print(f'[azul.client] handle_read_event {event}')
@@ -375,7 +371,7 @@ class GameClient(ClientNetworkEventComponent):
                         "manager does not exist, cannot send client connection closed event.",
                     )
                 return
-            await self.raise_disconnect("Error connecting to server.")
+            await self.raise_disconnect("error.socket_connect_fail")
 
     async def read_initial_config(self, event: Event[bytearray]) -> None:
         """Read initial_config event from server."""
