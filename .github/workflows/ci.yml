@@ -30,12 +30,10 @@ jobs:
         || false
       }}
     steps:
-      - name: Print Git config
-        run: git config --list
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          persist-credentials: false
+          persist-credentials: true  # Set to `false` once git issue fixed
           submodules: false  # Disable submodule fetching
       - name: Setup python
         uses: actions/setup-python@v5
