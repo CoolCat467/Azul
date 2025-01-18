@@ -19,18 +19,36 @@ python -c "import sys, struct; print('python:', sys.version); print('version_inf
 echo "::endgroup::"
 
 echo "::group::Install dependencies"
-python -m pip install -U pip uv -c test-requirements.txt
+python -m pip install -U pip tomli
 python -m pip --version
+UV_VERSION=$(python -c 'import tomli; from pathlib import Path; print({p["name"]:p for p in tomli.loads(Path("uv.lock").read_text())["package"]}["uv"]["version"])')
+python -m pip install uv==$UV_VERSION
 python -m uv --version
 
-python -m uv pip install build
+UV_VENV_SEED="pip"
+UV_VENV_OUTPUT="$(uv venv --seed --allow-existing 2>&1)"
+echo "$UV_VENV_OUTPUT"
 
-python -m build
-wheel_package=$(ls dist/*.whl)
-python -m uv pip install "$PROJECT @ $wheel_package" -c test-requirements.txt
+# Extract the activation command from the output
+activation_command=$(echo "$UV_VENV_OUTPUT" | grep -oP '(?<=Activate with: ).*')
+
+# Check if the activation command was found
+if [ -n "$activation_command" ]; then
+    # Execute the activation command
+    echo "Activating virtual environment..."
+    eval "$activation_command"
+else
+    echo "::error:: Activation command not found in uv venv output."
+    exit 1
+fi
+python -m pip install uv==$UV_VERSION
+
+# python -m uv build
+# wheel_package=$(ls dist/*.whl)
+# python -m uv pip install "$PROJECT @ $wheel_package" -c test-requirements.txt
 
 if [ "$CHECK_FORMATTING" = "1" ]; then
-    python -m uv pip install -r test-requirements.txt exceptiongroup
+    python -m uv sync --extra tests --extra tools
     echo "::endgroup::"
     source check.sh
 else
@@ -38,10 +56,12 @@ else
     # expands to 0 != 1 if NO_TEST_REQUIREMENTS is not set, if set the `-0` has no effect
     # https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_06_02
     if [ "${NO_TEST_REQUIREMENTS-0}" == 1 ]; then
-        python -m uv pip install pytest coverage -c test-requirements.txt
-        flags="--skip-optional-imports"
+        # python -m uv pip install pytest coverage -c test-requirements.txt
+        python -m uv sync --extra tests
+        flags=""
+        #"--skip-optional-imports"
     else
-        python -m uv pip install -r test-requirements.txt
+        python -m uv sync --extra tests --extra tools
         flags=""
     fi
 
@@ -71,10 +91,14 @@ else
     else
         PASSED=false
     fi
+    PREV_DIR="$PWD"
+    cd "$INSTALLDIR"
+    rm pyproject.toml
+    cd "$PREV_DIR"
     echo "::endgroup::"
     echo "::group::Coverage"
 
-    #coverage combine --rcfile ../pyproject.toml
+    coverage combine --rcfile ../pyproject.toml
     coverage report -m --rcfile ../pyproject.toml
     coverage xml --rcfile ../pyproject.toml
 
