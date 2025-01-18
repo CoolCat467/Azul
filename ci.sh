@@ -30,7 +30,7 @@ UV_VENV_OUTPUT="$(uv venv --seed --allow-existing 2>&1)"
 echo "$UV_VENV_OUTPUT"
 
 # Extract the activation command from the output
-activation_command=$(echo "$UV_VENV_OUTPUT" | grep -oP '(?<=Activate with: ).*')
+activation_command=$(echo "$UV_VENV_OUTPUT" | grep 'Activate with:' | sed 's/.*Activate with: //')
 
 # Check if the activation command was found
 if [ -n "$activation_command" ]; then
