@@ -56,7 +56,7 @@ async def test_tick(clock: Clock) -> None:
 @pytest.mark.trio
 async def test_tick_fps(clock: Clock) -> None:
     for _ in range(20):
-        await clock.tick(60)
+        await clock.tick(1024)
     fps = clock.get_fps()
     assert isinstance(fps, float)
     assert fps >= 0

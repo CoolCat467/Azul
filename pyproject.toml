@@ -43,7 +43,6 @@ dependencies = [
     "orjson>=3.10,<4",
     "pygame~=2.6.0",
     "trio~=0.28.0",
-    "typing_extensions>=4.12.2",
 ]
 
 [tool.setuptools.dynamic]
@@ -53,11 +52,29 @@ version = {attr = "azul.game.__version__"}
 "Source" = "https://github.com/CoolCat467/Azul"
 "Bug Tracker" = "https://github.com/CoolCat467/Azul/issues"
 
-[project.scripts]
+[project.gui-scripts]
 azul_game = "azul.game:cli_run"
+
+[project.optional-dependencies]
+tests = [
+    "pytest>=5.0",
+    "pytest-cov",
+    "pytest-trio",
+    "coverage>=7.2.5",
+    "uv>=0.5.21",
+    "mypy>=1.14.1",
+]
+tools = [
+    'black>=24.10.0; implementation_name == "cpython"',
+    "ruff>=0.9.2",
+    "codespell>=2.3.0",
+]
 
 [tool.setuptools.package-data]
 azul = ["py.typed", "data/*", "lang/*", "fonts/*"]
+
+[tool.uv]
+package = true
 
 [tool.mypy]
 plugins = ["numpy.typing.mypy_plugin"]
@@ -152,6 +169,9 @@ source_pkgs = ["azul"]
 omit = [
     "__init__.py",
 ]
+parallel = true
+relative_files = true
+source = ["."]
 
 [tool.coverage.report]
 precision = 1
