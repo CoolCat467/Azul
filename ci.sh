@@ -30,31 +30,20 @@ python -m uv venv --seed --allow-existing
 
 # Determine the platform and activate the virtual environment accordingly
 case "$OSTYPE" in
-  linux-gnu*|linux-musl*)
-    # Linux
-    echo "Activating virtual environment on Linux..."
-    source .venv/bin/activate
-    ;;
-  darwin*)
-    # macOS
-    echo "Activating virtual environment on macOS..."
+  linux-gnu*|linux-musl*|darwin*)
     source .venv/bin/activate
     ;;
   cygwin*|msys*)
-    # Windows
-    echo "Activating virtual environment on Windows..."
     source .venv/Scripts/activate
     ;;
   *)
-    echo "::error:: Unknown OS. Please activate the virtual environment manually."
+    echo "::error:: Unknown OS. Please add an activation method for '$OSTYPE'."
     exit 1
     ;;
 esac
-python -m pip install uv==$UV_VERSION
 
-# python -m uv build
-# wheel_package=$(ls dist/*.whl)
-# python -m uv pip install "$PROJECT @ $wheel_package" -c test-requirements.txt
+# Install uv in virtual environment
+python -m pip install uv==$UV_VERSION
 
 if [ "$CHECK_FORMATTING" = "1" ]; then
     python -m uv sync --extra tests --extra tools
@@ -65,7 +54,6 @@ else
     # expands to 0 != 1 if NO_TEST_REQUIREMENTS is not set, if set the `-0` has no effect
     # https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_06_02
     if [ "${NO_TEST_REQUIREMENTS-0}" == 1 ]; then
-        # python -m uv pip install pytest coverage -c test-requirements.txt
         python -m uv sync --extra tests
         flags=""
         #"--skip-optional-imports"
@@ -89,9 +77,6 @@ else
 
     # get mypy tests a nice cache
     MYPYPATH=".." mypy --config-file= --cache-dir=./.mypy_cache -c "import $PROJECT" >/dev/null 2>/dev/null || true
-
-    # support subprocess spawning with coverage.py
-    # echo "import coverage; coverage.process_startup()" | tee -a "$INSTALLDIR/../sitecustomize.py"
 
     echo "::endgroup::"
     echo "::group:: Run Tests"
