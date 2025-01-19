@@ -40,10 +40,10 @@ case "$OSTYPE" in
     echo "Activating virtual environment on macOS..."
     source .venv/bin/activate
     ;;
-  cygwin*|msys*)
+  cygwin*|msys*|win32)
     # Windows
     echo "Activating virtual environment on Windows..."
-    .venv\Scripts\activate
+    source .venv/Scripts/activate
     ;;
   *)
     echo "::error:: Unknown OS. Please activate the virtual environment manually."
