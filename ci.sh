@@ -40,7 +40,7 @@ case "$OSTYPE" in
     echo "Activating virtual environment on macOS..."
     source .venv/bin/activate
     ;;
-  cygwin*|msys*|win32)
+  cygwin*|msys*)
     # Windows
     echo "Activating virtual environment on Windows..."
     source .venv/Scripts/activate
