@@ -26,21 +26,30 @@ python -m pip install uv==$UV_VERSION
 python -m uv --version
 
 UV_VENV_SEED="pip"
-UV_VENV_OUTPUT="$(uv venv --seed --allow-existing 2>&1)"
-echo "$UV_VENV_OUTPUT"
+python -m uv venv --seed --allow-existing
 
-# Extract the activation command from the output
-activation_command=$(echo "$UV_VENV_OUTPUT" | grep 'Activate with:' | sed 's/.*Activate with: //; s/^/"/; s/$/"/')
-
-# Check if the activation command was found
-if [ -n "$activation_command" ]; then
-    # Execute the activation command
-    echo "Activating virtual environment..."
-    eval "$activation_command"
-else
-    echo "::error:: Activation command not found in uv venv output."
+# Determine the platform and activate the virtual environment accordingly
+case "$OSTYPE" in
+  linux-gnu*|linux-musl*)
+    # Linux
+    echo "Activating virtual environment on Linux..."
+    source .venv/bin/activate
+    ;;
+  darwin*)
+    # macOS
+    echo "Activating virtual environment on macOS..."
+    source .venv/bin/activate
+    ;;
+  cygwin*|msys*)
+    # Windows
+    echo "Activating virtual environment on Windows..."
+    .venv\Scripts\activate
+    ;;
+  *)
+    echo "::error:: Unknown OS. Please activate the virtual environment manually."
     exit 1
-fi
+    ;;
+esac
 python -m pip install uv==$UV_VERSION
 
 # python -m uv build
