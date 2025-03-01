@@ -491,7 +491,7 @@ class GameServer(network.Server):
     async def post_advertisement(
         self,
         udp_socket: trio.socket.SocketType,
-        send_to_ip: str,
+        send_to_ip: str | int,
         hosting_port: int,
     ) -> None:
         """Post server advertisement packet."""

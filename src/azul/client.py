@@ -96,7 +96,9 @@ async def read_advertisements(
         # trio.socket.inet_aton(network_adapter),
         # ),
         # )
-        group_bin = trio.socket.inet_pton(addrinfo[0], addrinfo[4][0])
+        addr_port = addrinfo[4][0]
+        assert isinstance(addr_port, str)
+        group_bin = trio.socket.inet_pton(addrinfo[0], addr_port)
         # Join group
         if addrinfo[0] == trio.socket.AF_INET:  # IPv4
             mreq = group_bin + struct.pack("=I", trio.socket.INADDR_ANY)
