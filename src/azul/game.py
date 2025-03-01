@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING, Any, Final, TypeVar
 
 import pygame
 import trio
+from libcomponent.async_clock import Clock
 from libcomponent.component import (
     Component,
     ComponentManager,
@@ -60,7 +61,6 @@ from pygame.rect import Rect
 from pygame.sprite import LayeredDirty
 
 from azul import database, element_list, objects, sprite
-from azul.async_clock import Clock
 from azul.client import GameClient, read_advertisements
 from azul.crop import auto_crop_clear
 from azul.network_shared import DEFAULT_PORT
