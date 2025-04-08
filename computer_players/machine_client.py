@@ -174,9 +174,9 @@ class RemoteState(Component, metaclass=ABCMeta):
             raw_source, raw_dest = action
             if isinstance(raw_source, SelectableSourceTiles):
                 source = raw_source
-                dest = cast(tuple[SelectableDestinationTiles, ...], raw_dest)
+                dest = cast("tuple[SelectableDestinationTiles, ...]", raw_dest)
             else:
-                dest = cast(tuple[SelectableDestinationTiles, ...], action)
+                dest = cast("tuple[SelectableDestinationTiles, ...]", action)
         else:
             dest = action
 

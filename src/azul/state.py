@@ -99,7 +99,7 @@ def generate_bag_contents() -> Counter[int]:
     tile_types = 5
     tile_count = 100
     count_each = tile_count // tile_types
-    return Counter({type_: count_each for type_ in range(tile_types)})
+    return Counter(dict.fromkeys(range(tile_types), count_each))
 
 
 def bag_draw_tile(bag: Counter[int]) -> int:

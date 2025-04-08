@@ -897,9 +897,10 @@ class PatternRows(TileRenderer):
         self.add_component(sprite.DragClickEventComponent())
 
         self.rows_id = rows_id
-        self.rows: dict[int, tuple[int, int]] = {
-            i: (Tile.blank, 0) for i in range(5)
-        }
+        self.rows: dict[int, tuple[int, int]] = dict.fromkeys(
+            range(5),
+            (Tile.blank, 0),
+        )
 
         self.update_image()
         self.visible = True

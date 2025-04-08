@@ -11,13 +11,12 @@ __version__ = "0.0.0"
 import operator
 import random
 from abc import ABC, abstractmethod
-from collections.abc import Callable
 from enum import IntEnum, auto
 from math import inf as infinity
 from typing import TYPE_CHECKING, Generic, NamedTuple, TypeVar, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
 
 
 class Player(IntEnum):
@@ -117,7 +116,7 @@ class Minimax(ABC, Generic[State, Action]):
             best = min
         elif current_player == Player.CHANCE:
             value = 0
-            best = cast(Callable[[float, float], float], sum)
+            best = cast("Callable[[float, float], float]", sum)
         else:
             raise ValueError(f"Unexpected player type {current_player!r}")
 
@@ -173,7 +172,7 @@ class Minimax(ABC, Generic[State, Action]):
             set_idx = 1
         elif current_player == Player.CHANCE:
             value = 0
-            best = cast(Callable[[float, float], float], sum)
+            best = cast("Callable[[float, float], float]", sum)
         else:
             raise ValueError(f"Unexpected player type {current_player!r}")
 
