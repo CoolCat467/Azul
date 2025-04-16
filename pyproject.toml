@@ -79,6 +79,7 @@ package = true
 [tool.mypy]
 plugins = ["numpy.typing.mypy_plugin"]
 files = ["src/azul/", "computer_players"]
+enable_error_code = ["truthy-bool", "mutable-override"]
 show_column_numbers = true
 show_error_codes = true
 show_traceback = true
