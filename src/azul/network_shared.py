@@ -24,11 +24,18 @@ __author__ = "CoolCat467"
 __license__ = "GNU General Public License Version 3"
 
 
+from collections import Counter
 from enum import IntEnum, auto
-from typing import Final, NamedTuple, TypeAlias
+from typing import TYPE_CHECKING, Final, TypeAlias
 
-import trio
+from libcomponent.base_io import StructFormat
+from libcomponent.buffer import Buffer
 from mypy_extensions import u8
+from numpy import int8, zeros
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
 
 ADVERTISEMENT_IP: Final = "224.0.2.60"
 ADVERTISEMENT_PORT: Final = 4445
@@ -38,41 +45,83 @@ DEFAULT_PORT: Final = 31613
 Pos: TypeAlias = tuple[u8, u8]
 
 
-class TickEventData(NamedTuple):
-    """Tick Event Data."""
+def encode_tile_count(tile_color: u8, tile_count: u8) -> Buffer:
+    """Return buffer from tile color and count."""
+    buffer = Buffer()
 
-    time_passed: float
-    fps: float
+    buffer.write_value(StructFormat.UBYTE, tile_color)
+    buffer.write_value(StructFormat.UBYTE, tile_count)
 
-
-# Stolen from WOOF (Web Offer One File), Copyright (C) 2004-2009 Simon Budig,
-# available at http://www.home.unix-ag.org/simon/woof
-# with modifications
-
-# Utility function to guess the IP (as a string) where the server can be
-# reached from the outside. Quite nasty problem actually.
+    return buffer
 
 
-async def find_ip() -> str:  # pragma: nocover
-    """Guess the IP where the server can be found from the network."""
-    # we get a UDP-socket for the TEST-networks reserved by IANA.
-    # It is highly unlikely, that there is special routing used
-    # for these networks, hence the socket later should give us
-    # the IP address of the default route.
-    # We're doing multiple tests, to guard against the computer being
-    # part of a test installation.
+def decode_tile_count(buffer: Buffer) -> tuple[u8, u8]:
+    """Read and return tile color and count from buffer."""
+    tile_color = buffer.read_value(StructFormat.UBYTE)
+    tile_count = buffer.read_value(StructFormat.UBYTE)
 
-    candidates: list[str] = []
-    for test_ip in ("192.0.2.0", "198.51.100.0", "203.0.113.0"):
-        sock = trio.socket.socket(trio.socket.AF_INET, trio.socket.SOCK_DGRAM)
-        await sock.connect((test_ip, 80))
-        ip_addr: str = sock.getsockname()[0]
-        sock.close()
-        if ip_addr in candidates:
-            return ip_addr
-        candidates.append(ip_addr)
+    return (tile_color, tile_count)
 
-    return candidates[0]
+
+def encode_numeric_uint8_counter(counter: Counter[int]) -> Buffer:
+    """Return buffer from uint8 counter."""
+    buffer = Buffer()
+
+    buffer.write_value(StructFormat.UBYTE, len(counter))
+    for key, value in counter.items():
+        assert isinstance(key, int)
+        assert value >= 0
+        buffer.extend(encode_tile_count(key, value))
+
+    return buffer
+
+
+def decode_numeric_uint8_counter(buffer: Buffer) -> Counter[u8]:
+    """Read and return uint8 counter from buffer."""
+    data: dict[u8, u8] = {}
+
+    pair_count = buffer.read_value(StructFormat.UBYTE)
+    for _ in range(pair_count):
+        key, value = decode_tile_count(buffer)
+        assert key not in data
+        data[key] = value
+
+    return Counter(data)
+
+
+def encode_int8_array(array: NDArray[int8]) -> Buffer:
+    """Return buffer from int8 array flat values."""
+    buffer = Buffer()
+
+    for value in array.flat:
+        buffer.write_value(StructFormat.BYTE, int(value))
+
+    return buffer
+
+
+def decode_int8_array(buffer: Buffer, size: tuple[int, ...]) -> NDArray[int8]:
+    """Return flattened int8 array from buffer."""
+    array = zeros(size, dtype=int8)
+
+    for index in range(array.size):
+        array.flat[index] = buffer.read_value(StructFormat.BYTE)
+
+    return array
+
+
+def encode_cursor_location(scaled_location: tuple[int, int]) -> bytes:
+    """Return buffer from cursor location."""
+    x, y = scaled_location
+    position = ((x & 0xFFF) << 12) | (y & 0xFFF)
+    return (position & 0xFFFFFF).to_bytes(3)
+
+
+def decode_cursor_location(buffer: bytes | bytearray) -> tuple[int, int]:
+    """Return cursor location from buffer."""
+    value = int.from_bytes(buffer) & 0xFFFFFF
+    x = (value >> 12) & 0xFFF
+    y = value & 0xFFF
+    return (x, y)
 
 
 class ClientBoundEvents(IntEnum):
@@ -82,21 +131,24 @@ class ClientBoundEvents(IntEnum):
     callback_ping = auto()
     initial_config = auto()
     playing_as = auto()
-    create_piece = auto()
-    select_piece = auto()
-    create_tile = auto()
-    delete_tile = auto()
-    animation_state = auto()
-    delete_piece_animation = auto()
-    update_piece_animation = auto()
-    move_piece_animation = auto()
-    action_complete = auto()
     game_over = auto()
+    board_data = auto()
+    pattern_data = auto()
+    factory_data = auto()
+    cursor_data = auto()
+    table_data = auto()
+    cursor_movement_mode = auto()
+    current_turn_change = auto()
+    cursor_position = auto()
+    floor_data = auto()
 
 
 class ServerBoundEvents(IntEnum):
     """Server bound event IDs."""
 
     encryption_response = 0
-    select_piece = auto()
-    select_tile = auto()
+    factory_clicked = auto()
+    cursor_location = auto()
+    pattern_row_clicked = auto()
+    table_clicked = auto()
+    floor_clicked = auto()

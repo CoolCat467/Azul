@@ -52,7 +52,7 @@ def __wxpython(title: str, message: str) -> None:
     """Error with wxPython."""
     from wxPython.wx import wxApp, wxICON_EXCLAMATION, wxMessageDialog, wxOK
 
-    class LameApp(wxApp):  # type: ignore[misc]
+    class LameApp(wxApp):  # type: ignore[misc,no-any-unimported]
         __slots__ = ()
 
         def OnInit(self) -> int:  # noqa: N802
