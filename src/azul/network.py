@@ -370,7 +370,7 @@ class NetworkEventComponent(NetworkComponent):
         for event_name, packet_id in event_map.items():
             self.register_network_write_event(event_name, packet_id)
 
-    async def write_event(self, event: Event[bytearray]) -> None:
+    async def write_event(self, event: Event[bytearray | bytes]) -> None:
         """Send event to network.
 
         Raises:

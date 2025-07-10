@@ -59,7 +59,6 @@ azul_game = "azul.game:cli_run"
 azul = ["py.typed", "data/*"]
 
 [tool.mypy]
-plugins = ["numpy.typing.mypy_plugin"]
 files = ["src/azul/",]
 check_untyped_defs = true
 disallow_any_generics = true
