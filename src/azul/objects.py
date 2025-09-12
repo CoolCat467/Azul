@@ -35,9 +35,8 @@ from pygame.surface import Surface
 from azul import sprite
 
 if TYPE_CHECKING:
+    from libcomponent.component import Event
     from pygame.font import Font
-
-    from azul.component import Event
 
 
 class Text(sprite.Sprite):

@@ -9,7 +9,7 @@ __author__ = "CoolCat467"
 __version__ = "0.0.0"
 
 
-from azul.component import ComponentManager
+from libcomponent.component import ComponentManager
 
 
 class Keyboard(ComponentManager):
