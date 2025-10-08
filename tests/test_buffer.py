@@ -39,7 +39,7 @@ def test_no_data_read() -> None:
     buf = Buffer(b"Blip")
     with pytest.raises(
         IOError,
-        match="^Requested to read more data than available.",
+        match=r"^Requested to read more data than available\.",
     ):
         buf.read(len(buf) + 1)
 
@@ -87,7 +87,7 @@ def test_flush() -> None:
     assert buf == bytearray()
 
 
-def test_remainig() -> None:
+def test_remaining() -> None:
     """Buffer should report correct amount of remaining bytes to be read."""
     buf = Buffer(b"012345")  # 6 bytes to be read
     assert buf.remaining == 6

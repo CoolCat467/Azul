@@ -292,7 +292,7 @@ class WriterTests(ABC):
         """Test writing out of range varuints raises :exc:`ValueError`."""
         with pytest.raises(
             ValueError,
-            match="^Tried to write varint outside of the range of",
+            match=r"^Tried to write varint outside of the range of",
         ):
             self.writer._write_varuint(write_value, max_bits=max_bits)
 
@@ -401,7 +401,7 @@ class WriterTests(ABC):
         """Test writing a UTF string too big raises a :exc:`ValueError`."""
         with pytest.raises(
             ValueError,
-            match="Maximum character limit for writing strings is 32767 characters.",
+            match=r"Maximum character limit for writing strings is 32767 characters\.",
         ):
             self.writer.write_utf("a" * (32768))
 
@@ -548,7 +548,7 @@ class ReaderTests(ABC):
         read_mock.combined_data = bytearray(read_bytes)
         with pytest.raises(
             IOError,
-            match="^Received varint was outside the range of",
+            match=r"^Received varint was outside the range of",
         ):
             self.reader._read_varuint(max_bits=max_bits)
 
@@ -672,7 +672,7 @@ class ReaderTests(ABC):
         read_mock.combined_data = bytearray(read_bytes)
         with pytest.raises(
             IOError,
-            match="^Maximum read limit for utf strings is ",
+            match=r"^Maximum read limit for utf strings is ",
         ):
             self.reader.read_utf()
 

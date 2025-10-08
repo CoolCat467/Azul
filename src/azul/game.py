@@ -819,7 +819,7 @@ class Tile(NamedTuple):
 class TileRenderer(Object):
     """Base class for all objects that need to render tiles."""
 
-    __slots__ = ("back", "image_update", "tile_full", "tile_seperation")
+    __slots__ = ("back", "image_update", "tile_full", "tile_separation")
     greyshift = GREYSHIFT
     tile_size = TILESIZE
 
@@ -827,7 +827,7 @@ class TileRenderer(Object):
         self,
         name: str,
         game: Game,
-        tile_seperation: int | None = None,
+        tile_separation: int | None = None,
         background: tuple[int, int, int] | None = TILEDEFAULT,
     ) -> None:
         """Initialize renderer. Needs a game object for its cache and optional tile separation value and background RGB color.
@@ -835,7 +835,7 @@ class TileRenderer(Object):
         Defines the following attributes during initialization and uses throughout:
          self.game
          self.wh
-         self.tile_seperation
+         self.tile_separation
          self.tile_full
          self.back
          and finally, self.image_update
@@ -849,12 +849,12 @@ class TileRenderer(Object):
         super().__init__(name)
         self.game = game
 
-        if tile_seperation is None:
-            self.tile_seperation = self.tile_size / 3.75
+        if tile_separation is None:
+            self.tile_separation = self.tile_size / 3.75
         else:
-            self.tile_seperation = tile_seperation
+            self.tile_separation = tile_separation
 
-        self.tile_full = self.tile_size + self.tile_seperation
+        self.tile_full = self.tile_size + self.tile_separation
         self.back = background
 
         self.image_update = True
@@ -862,8 +862,8 @@ class TileRenderer(Object):
     def get_rect(self) -> Rect:
         """Return a Rect object representing this row's area."""
         wh = (
-            self.wh[0] - self.tile_seperation * 2,
-            self.wh[1] - self.tile_seperation * 2,
+            self.wh[0] - self.tile_separation * 2,
+            self.wh[1] - self.tile_separation * 2,
         )
         location = self.location[0] - wh[0] / 2, self.location[1] - wh[1] / 2
         return Rect(location, wh)
@@ -872,8 +872,8 @@ class TileRenderer(Object):
         """Reset self.image using tile_dimensions tuple and fills with self.back. Also updates self.wh."""
         tw, th = tile_dimensions
         self.wh = (
-            round(tw * self.tile_full + self.tile_seperation),
-            round(th * self.tile_full + self.tile_seperation),
+            round(tw * self.tile_full + self.tile_separation),
+            round(th * self.tile_full + self.tile_separation),
         )
         self.image = get_tile_container_image(self.wh, self.back)
 
@@ -889,8 +889,8 @@ class TileRenderer(Object):
         self.image.blit(
             surf,
             (
-                round(x * self.tile_full + self.tile_seperation),
-                round(y * self.tile_full + self.tile_seperation),
+                round(x * self.tile_full + self.tile_separation),
+                round(y * self.tile_full + self.tile_separation),
             ),
         )
 
@@ -1068,11 +1068,11 @@ class Grid(TileRenderer):
         self,
         size: tuple[int, int],
         game: Game,
-        tile_seperation: int | None = None,
+        tile_separation: int | None = None,
         background: tuple[int, int, int] | None = TILEDEFAULT,
     ) -> None:
         """Grid Objects require a size and game at least."""
-        super().__init__("Grid", game, tile_seperation, background)
+        super().__init__("Grid", game, tile_separation, background)
 
         self.size = size
 
@@ -1481,14 +1481,14 @@ class Row(TileRenderer):
         self,
         player: Player,
         size: int,
-        tile_seperation: int | None = None,
+        tile_separation: int | None = None,
         background: tuple[int, int, int] | None = None,
     ) -> None:
         """Initialize row."""
         super().__init__(
             "Row",
             player.game,
-            tile_seperation,
+            tile_separation,
             background,
         )
         self.player = player
@@ -1632,14 +1632,14 @@ class Row(TileRenderer):
 class PatternLine(MultipartObject):
     """Represents multiple rows to make the pattern line."""
 
-    __slots__ = ("player", "row_seperation")
+    __slots__ = ("player", "row_separation")
     size = (5, 5)
 
-    def __init__(self, player: Player, row_seperation: int = 0) -> None:
+    def __init__(self, player: Player, row_separation: int = 0) -> None:
         """Initialize pattern line."""
         super().__init__("PatternLine")
         self.player = player
-        self.row_seperation = row_seperation
+        self.row_separation = row_separation
 
         for x, _y in zip(
             range(self.size[0]),
@@ -1822,10 +1822,13 @@ class FloorLine(Row):
         assert self.wh is not None, "Should be impossible."
         w, h = self.wh
         for x in range(self.size):
-            xy = round(
-                x * self.tile_full + self.tile_seperation + sx - w / 2,
-            ), round(
-                self.tile_seperation + sy - h / 2,
+            xy = (
+                round(
+                    x * self.tile_full + self.tile_separation + sx - w / 2,
+                ),
+                round(
+                    self.tile_separation + sy - h / 2,
+                ),
             )
             self.text.update_value(str(self.numbers[x]))
             self.text.location = Vector2(*xy)
@@ -1943,11 +1946,11 @@ class Factory(Grid):
         super().render(surface)
 
     def fill(self, tiles: list[Tile]) -> None:
-        """Fill self with tiles. Will raise exception if insufficiant tiles."""
+        """Fill self with tiles. Will raise exception if insufficient tiles."""
         if len(tiles) < self.size[0] * self.size[1]:
             size = self.size[0] * self.size[1]
             raise RuntimeError(
-                f"Insufficiant quantity of tiles! Needs {size}!",
+                f"Insufficient quantity of tiles! Needs {size}!",
             )
         for y in range(self.size[1]):
             for tile, x in zip(
@@ -2070,7 +2073,7 @@ class Factories(MultipartObject):
         cursor.drag(select)
 
     def play_tiles_from_bag(self, empty_color: int = -6) -> None:
-        """Divy up tiles to each factory from the bag."""
+        """Divvy up tiles to each factory from the bag."""
         # For every factory we have,
         for fid in range(self.count):
             # Draw tiles for the factory
@@ -2362,7 +2365,7 @@ class Player(MultipartObject):
         game: Game,
         player_id: int,
         networked: bool = False,
-        varient_play: bool = False,
+        variant_play: bool = False,
     ) -> None:
         """Initialize player."""
         super().__init__(f"Player{player_id}")
@@ -2370,9 +2373,9 @@ class Player(MultipartObject):
         self.game = game
         self.player_id = player_id
         self.networked = networked
-        self.varient_play = varient_play
+        self.variant_play = variant_play
 
-        self.add_object(Board(self, self.varient_play))
+        self.add_object(Board(self, self.variant_play))
         self.add_object(PatternLine(self))
         self.add_object(FloorLine(self))
         self.add_object(Text(SCOREFONTSIZE, SCORECOLOR))
@@ -2393,7 +2396,7 @@ class Player(MultipartObject):
             self.game,
             self.player_id,
             self.networked,
-            self.varient_play,
+            self.variant_play,
         )
 
     def update_score(self) -> None:
@@ -2534,7 +2537,7 @@ class Player(MultipartObject):
 
         self.update_score()
 
-    def has_horzontal_line(self) -> bool:
+    def has_horizontal_line(self) -> bool:
         """Return True if this player has a horizontal line on their game board filled."""
         board = self.get_object_by_name("Board")
         assert isinstance(board, Board)
@@ -2554,7 +2557,7 @@ class Player(MultipartObject):
             self.set_attr_all("hidden", self.hidden)
             super().process(time_passed)
             return
-        if self.hidden and self.is_wall_tiling and self.varient_play:
+        if self.hidden and self.is_wall_tiling and self.variant_play:
             # If hidden, not anymore. Our turn.
             self.hidden = False
         if self.networked:  # We are networked.
@@ -3128,18 +3131,18 @@ class SettingsScreen(MenuState):
         assert self.game is not None
         self.game.set_attr_all("hidden", True)
 
-        def varient_text(x: object) -> str:
+        def variant_text(x: object) -> str:
             return f"Variant Play: {x}"
 
         self.add_text(
             "Variant",
-            varient_text(self.variant_play),
+            variant_text(self.variant_play),
             (cx, cy - self.bh),
         )
         self.add_button(
-            "ToggleVarient",
+            "ToggleVariant",
             "Toggle",
-            self.toggle_button_state("Variant", "variant_play", varient_text),
+            self.toggle_button_state("Variant", "variant_play", variant_text),
             (cx, cy),
             size=int(self.fontsize / 1.5),
         )
@@ -3323,7 +3326,7 @@ class PhasePrepareNext(GameState):
             self.game.get_player(player_id)
             for player_id in range(self.game.players)
         )
-        complete = (player.has_horzontal_line() for player in players)
+        complete = (player.has_horizontal_line() for player in players)
         self.new_round = not any(complete)
 
     def do_actions(self) -> None:
@@ -3654,7 +3657,7 @@ class Game(ObjectHandler):
     def start_game(
         self,
         players: int,
-        varient_play: bool = False,
+        variant_play: bool = False,
         host_mode: bool = True,
         address: str = "",
     ) -> None:
@@ -3688,7 +3691,7 @@ class Game(ObjectHandler):
 
         for player_id in range(self.players):
             networked = False
-            newp = Player(self, player_id, networked, varient_play)
+            newp = Player(self, player_id, networked, variant_play)
 
             truedeg = (self.players + 1 - player_id) * (360 / self.players)
             closedeg = truedeg // mdeg * mdeg + 45
@@ -3890,18 +3893,18 @@ def run() -> None:
 
         # Get the time passed from the FPS clock
         time_passed = clock.tick(FPS)
-        time_passed_secconds = time_passed / 1000
+        time_passed_seconds = time_passed / 1000
 
         # Process the game
-        game.process(time_passed_secconds)
-        keyboard.process(time_passed_secconds)
+        game.process(time_passed_seconds)
+        keyboard.process(time_passed_seconds)
 
         # Render the grid to the screen.
         game.render(screen)
 
         # Update the display
         pygame.display.update()
-    # Once the game has ended, stop the music and de-initalize pygame.
+    # Once the game has ended, stop the music and de-initialize pygame.
     pygame.mixer.music.stop()
 
 
