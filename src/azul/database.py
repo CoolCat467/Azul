@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 # Database - Read and write json files
-# Copyright (C) 2024  CoolCat467
+# Copyright (C) 2024-2026  CoolCat467
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -33,8 +33,7 @@ import trio
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable, Iterator
     from types import TracebackType
-
-    from typing_extensions import Self
+    from typing import Self
 
 
 _LOADED: dict[str, Records] = {}
@@ -283,7 +282,7 @@ def load(file_path: str | Path | trio.Path) -> Records:
 async def load_async(file_path: str | Path | trio.Path) -> Records:
     """Load database from file path or return already loaded instance."""
     await trio.lowlevel.checkpoint()
-    file = path.abspath(file_path)
+    file = await trio.Path.abspath(file_path)
     if file not in _LOADED:
         _LOADED[file] = Records(file, auto_load=False)
         if await trio.Path(file).exists():
@@ -308,7 +307,7 @@ def unload(file_path: str | Path | trio.Path) -> None:
 
 async def async_unload(file_path: str | Path | trio.Path) -> None:
     """If database loaded, write file and unload."""
-    file = path.abspath(file_path)
+    file = await trio.Path.abspath(file_path)
     if file not in get_loaded():
         return
     database = load(file)

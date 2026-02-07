@@ -40,9 +40,9 @@ from numpy import full, int8
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+    from typing import Self
 
     from numpy.typing import NDArray
-    from typing_extensions import Self
 
 T = TypeVar("T")
 

@@ -17,7 +17,7 @@ def test_state() -> None:
 
     with pytest.raises(
         RuntimeError,
-        match="^State has no statemachine bound$",
+        match=r"^State has no statemachine bound$",
     ):
         print(state.machine)
 
@@ -34,7 +34,7 @@ def test_async_state() -> None:
 
     with pytest.raises(
         RuntimeError,
-        match="^State has no statemachine bound$",
+        match=r"^State has no statemachine bound$",
     ):
         print(state.machine)
 
@@ -50,11 +50,14 @@ def test_state_machine_add() -> None:
 
     machine.add_state(TestState("test"))
     bob = State("bob")
-    with pytest.raises(RuntimeError, match="State has no statemachine bound"):
+    with pytest.raises(
+        RuntimeError,
+        match=r"^State has no statemachine bound$",
+    ):
         assert bob.machine
-    with pytest.raises(TypeError, match="is not an instance of State!"):
+    with pytest.raises(TypeError, match=r"is not an instance of State!$"):
         machine.add_state(AsyncState("test"))
-    with pytest.raises(ValueError, match="is not a registered State."):
+    with pytest.raises(ValueError, match=r"is not a registered State\.$"):
         machine.remove_state("waffle")
     machine.add_state(bob)
     assert add_actions_run
@@ -66,7 +69,10 @@ def test_state_machine_add() -> None:
     for _ in range(3):
         gc.collect()
 
-    with pytest.raises(RuntimeError, match="State has no statemachine bound"):
+    with pytest.raises(
+        RuntimeError,
+        match=r"^State has no statemachine bound$",
+    ):
         assert bob.machine
 
 
@@ -85,7 +91,7 @@ def test_state_machine_think() -> None:
     machine.remove_state("jerald")
     machine.remove_state("bob")
     machine.set_state(None)
-    with pytest.raises(KeyError, match="not found in internal states"):
+    with pytest.raises(KeyError, match=r"not found in internal states$"):
         machine.set_state("bob")
     machine.add_state(State("bob"))
 
@@ -106,11 +112,14 @@ async def test_async_state_machine_add() -> None:
 
     machine.add_state(AsyncState("test"))
     bob = AsyncState("bob")
-    with pytest.raises(RuntimeError, match="State has no statemachine bound"):
+    with pytest.raises(
+        RuntimeError,
+        match=r"^State has no statemachine bound$",
+    ):
         assert bob.machine
-    with pytest.raises(TypeError, match="is not an instance of AsyncState!"):
+    with pytest.raises(TypeError, match=r"is not an instance of AsyncState!$"):
         machine.add_state(State("test"))
-    with pytest.raises(ValueError, match="is not a registered AsyncState."):
+    with pytest.raises(ValueError, match=r"is not a registered AsyncState\.$"):
         machine.remove_state("waffle")
     machine.add_state(bob)
 
@@ -121,7 +130,10 @@ async def test_async_state_machine_add() -> None:
     for _ in range(3):
         gc.collect()
 
-    with pytest.raises(RuntimeError, match="State has no statemachine bound"):
+    with pytest.raises(
+        RuntimeError,
+        match=r"^State has no statemachine bound$",
+    ):
         assert bob.machine
 
 
@@ -141,7 +153,7 @@ async def test_async_state_machine_think() -> None:
     await jerald.exit_actions()
     machine.remove_state("bob")
     await machine.set_state(None)
-    with pytest.raises(KeyError, match="not found in internal states"):
+    with pytest.raises(KeyError, match=r"not found in internal states$"):
         await machine.set_state("bob")
     machine.add_state(AsyncState("bob"))
 

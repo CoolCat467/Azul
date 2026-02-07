@@ -36,8 +36,7 @@ from azul.namedtuple_mod import NamedTupleMeta
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable, Iterator
-
-    from typing_extensions import Self
+    from typing import Self
 
 # As a forward to the madness below, we are doing something incredibly sneeky.
 # We have BaseVector, which we want to have all of the shared functionality

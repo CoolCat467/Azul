@@ -73,9 +73,6 @@ from azul.tools import (
 )
 from azul.vector import Vector2
 
-if sys.version_info < (3, 11):
-    from exceptiongroup import ExceptionGroup
-
 if TYPE_CHECKING:
     from collections.abc import (
         Awaitable,
@@ -1898,7 +1895,7 @@ class PlayState(GameState):
     ) -> None:
         """Handle `game_initial_config` event."""
         (
-            variant_play,
+            _variant_play,
             player_count,
             factory_count,
             self.current_turn,

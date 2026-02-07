@@ -6,7 +6,6 @@ __title__ = "Machine Client"
 __author__ = "CoolCat467"
 __version__ = "0.0.0"
 
-import sys
 from abc import ABCMeta, abstractmethod
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, TypeAlias, cast
@@ -42,9 +41,6 @@ if TYPE_CHECKING:
     from numpy import int8
     from numpy.typing import NDArray
 
-
-if sys.version_info < (3, 11):
-    from exceptiongroup import BaseExceptionGroup
 
 # Player:
 # 0 = False = Person  = MIN = 0, 2
@@ -238,9 +234,9 @@ class RemoteState(Component, metaclass=ABCMeta):
         (
             variant_play,
             player_count,
-            factory_count,
+            _factory_count,
             current_turn,
-            floor_line_data,
+            _floor_line_data,
         ) = event.data
         ##        print(f'[RemoteState] {variant_play = }')
         self.state = State.new_game(player_count, bool(variant_play))
