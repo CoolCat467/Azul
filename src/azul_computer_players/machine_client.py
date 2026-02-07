@@ -433,7 +433,7 @@ async def run_client(
     """Run machine client and raise tick events."""
     async with trio.open_nursery() as main_nursery:
         event_manager = ExternalRaiseManager(
-            "checkers",
+            "azul",
             main_nursery,
             "client",
         )

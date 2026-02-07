@@ -2092,7 +2092,7 @@ async def async_run() -> None:
     ##    try:
     async with trio.open_nursery() as main_nursery:
         event_manager = ExternalRaiseManager(
-            "checkers",
+            "azul",
             main_nursery,  # "client"
         )
         client = AzulClient(event_manager)

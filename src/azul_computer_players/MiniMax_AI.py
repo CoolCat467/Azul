@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# AI that plays checkers.
+# AI that plays azul.
 
-"""Minimax Checkers AI."""
+"""Minimax Azul AI."""
 
 from __future__ import annotations
 

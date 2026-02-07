@@ -70,7 +70,6 @@ def __tkinter(title: str, message: str) -> None:
     from tkinter import messagebox
 
     tk.Tk().wm_withdraw()
-    # types: attr-defined error: Module has no attribute "messagebox"
     messagebox.showerror(title, message)
 
 
