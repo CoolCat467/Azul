@@ -12,9 +12,10 @@ __author__ = "CoolCat467"
 __version__ = "0.0.0"
 
 import time
+from collections.abc import Iterable
 from enum import IntEnum, auto
 from math import inf as infinity
-from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, TypeVar
+from typing import Any, ClassVar, Self, TypeAlias, TypeVar
 
 from azul.state import (
     Phase,
@@ -27,12 +28,6 @@ from azul_computer_players.machine_client import (
     run_clients_in_local_servers_sync,
 )
 from azul_computer_players.minimax import Minimax, MinimaxResult, Player
-
-if TYPE_CHECKING:
-    from collections.abc import Iterable
-    from typing import Self
-
-    from mypy_extensions import u8
 
 T = TypeVar("T")
 Action: TypeAlias = (
@@ -66,7 +61,7 @@ class AutoWallState(State):
         return new_state
 
 
-class MinimaxWithID(Minimax[AutoWallState, Action]):
+class MinimaxWithID(Minimax[State, Action]):
     """Minimax with ID."""
 
     __slots__ = ()
@@ -211,8 +206,14 @@ class MinimaxWithID(Minimax[AutoWallState, Action]):
 
         # 2) Store in transposition_table
         result = MinimaxResult(value, best_action)
-        cls._transposition_table_store(state_h, depth, result, a, b)
-        return result
+        cls._transposition_table_store(
+            state_h,
+            depth,
+            result,  # type: ignore[arg-type]
+            a,
+            b,
+        )
+        return result  # type: ignore[return-value]
 
     @classmethod
     def iterative_deepening(
@@ -259,36 +260,41 @@ class MinimaxWithID(Minimax[AutoWallState, Action]):
         return best_result
 
 
-# Minimax[tuple[AutoWallState, u8], Action]
+MAX_PLAYER = 0
+
+
+# Minimax[tuple[State, u8], Action]
 class AzulMinimax(MinimaxWithID):
     """Minimax Algorithm for Azul."""
 
     __slots__ = ()
 
-    ##    @classmethod
-    ##    def hash_state(cls, state: AutoWallState) -> int:
-    ##        """Return state hash value."""
-    ##        # For small games you might do: return hash(state)
-    ##        # For larger, use Zobrist or custom.
-    ##        return hash((state.size, tuple(state.pieces.items()), state.turn))
+    @classmethod
+    def hash_state(cls, state: AutoWallState) -> int:  # type: ignore[override]
+        """Return state hash value."""
+        # For small games you might do: return hash(state)
+        # For larger, use Zobrist or custom.
+        ##        return hash((state.size, tuple(state.pieces.items()), state.turn))
+        return hash(
+            tuple(tuple(x) if isinstance(x, Iterable) else x for x in state),
+        )
 
     @staticmethod
-    def value(state: tuple[AutoWallState, u8]) -> int | float:
+    def value(state: State) -> int | float:
         """Return value of given game state."""
         # Real
-        real_state, max_player = state
         if AzulMinimax.terminal(state):
-            winner, _score = real_state.get_win_order()[0]
-            if winner == max_player:
+            winner, _score = state.get_win_order()[0]
+            if winner == MAX_PLAYER:
                 return 10
             return -10
         # Heuristic
         min_ = 0
         max_ = 0
-        for player_id, player_data in real_state.player_data.items():
+        for player_id, player_data in state.player_data.items():
             score = player_data.get_end_of_game_score()
             score += player_data.get_floor_line_scoring()
-            if player_id == max_player:
+            if player_id == MAX_PLAYER:
                 max_ += score
             else:
                 min_ += score
@@ -298,64 +304,51 @@ class AzulMinimax(MinimaxWithID):
         return (max_ - min_) / (abs(max_) + abs(min_) + 1)
 
     @staticmethod
-    def terminal(state: tuple[AutoWallState, u8]) -> bool:
+    def terminal(state: State) -> bool:
         """Return if game state is terminal."""
-        real_state, _max_player = state
-        return real_state.current_phase == Phase.end
+        return state.current_phase == Phase.end
 
     @staticmethod
-    def player(state: tuple[AutoWallState, u8]) -> Player:
+    def player(state: State) -> Player:
         """Return Player enum from current state's turn."""
-        real_state, max_player = state
-        return (
-            Player.MAX if real_state.current_turn == max_player else Player.MIN
-        )
+        return Player.MAX if state.current_turn == MAX_PLAYER else Player.MIN
 
     @staticmethod
-    def actions(state: tuple[AutoWallState, u8]) -> Iterable[Action]:
+    def actions(state: State) -> Iterable[Action]:
         """Return all actions that are able to be performed for the current player in the given state."""
-        real_state, _max_player = state
-        return tuple(real_state.yield_actions())
+        return tuple(state.yield_actions())
         ##        print(f'{len(actions) = }')
 
     @staticmethod
     def result(
-        state: tuple[AutoWallState, u8],
+        state: State,
         action: Action,
-    ) -> tuple[AutoWallState, u8]:
+    ) -> State:
         """Return new state after performing given action on given current state."""
-        real_state, max_player = state
-        return (real_state.preform_action(action), max_player)
+        ##        real_state, MAX_PLAYER = state
+        ##        return (real_state.preform_action(action), MAX_PLAYER)
+        return state.preform_action(action)
 
-    @classmethod
-    def adaptive_depth_minimax(
-        cls,
-        state: tuple[AutoWallState, u8],
-    ) -> MinimaxResult[Action]:
-        """Adaptive depth minimax."""
-        # TODO
-        depth = 1
-        return cls.alphabeta(state, depth)
 
-    @classmethod
-    def alphabeta(
-        cls,
-        state: tuple[AutoWallState, u8],
-        depth: int | None = 5,
-        a: int | float = -infinity,
-        b: int | float = infinity,
-    ) -> MinimaxResult[
-        tuple[SelectableDestinationTiles, ...]
-        | tuple[SelectableSourceTiles, tuple[SelectableDestinationTiles, ...]]
-    ]:
-        """Return minimax alphabeta pruning result best action for given current state."""
-        new_state, player = state
-        if (
-            new_state.current_phase == Phase.wall_tiling
-            and not new_state.variant_play
-        ):
-            new_state = new_state.apply_auto_wall_tiling()
-        return super().alphabeta((new_state, player), depth, a, b)
+##    @classmethod
+##    def alphabeta(
+##        cls,
+##        state: tuple[State, u8],
+##        depth: int | None = 5,
+##        a: int | float = -infinity,
+##        b: int | float = infinity,
+##    ) -> MinimaxResult[
+##        tuple[SelectableDestinationTiles, ...]
+##        | tuple[SelectableSourceTiles, tuple[SelectableDestinationTiles, ...]]
+##    ]:
+##        """Return minimax alphabeta pruning result best action for given current state."""
+##        new_state, player = state
+##        if (
+##            new_state.current_phase == Phase.wall_tiling
+##            and not new_state.variant_play
+##        ):
+##            new_state = new_state.apply_auto_wall_tiling()
+##        return super().alphabeta((new_state, player), depth, a, b)
 
 
 class MinimaxPlayer(RemoteState):
@@ -374,9 +367,13 @@ class MinimaxPlayer(RemoteState):
         ##    self.state, 4, 5
         ##)
         ##value, action = CheckersMinimax.minimax(self.state, 4)
+        if not isinstance(self.state, AutoWallState):
+            self.state = AutoWallState._make(self.state)
         assert isinstance(self.state, AutoWallState)
         ##        value, action = AzulMinimax.alphabeta((self.state, self.playing_as), 2)
         ##        value, action = AzulMinimax.alphabeta((self.state, self.playing_as), 4)
+        global MAX_PLAYER
+        MAX_PLAYER = self.playing_as
         value, action = AzulMinimax.iterative_deepening(
             self.state,
             2,

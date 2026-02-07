@@ -258,7 +258,7 @@ class GameClient(ClientNetworkEventComponent):
 
     async def write_event(
         self,
-        event: Event[bytes | bytearray | memoryview],
+        event: Event[bytes | bytearray],
     ) -> None:
         """Send event to network if running, otherwise does nothing.
 

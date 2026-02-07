@@ -6,6 +6,7 @@ __title__ = "Machine Client"
 __author__ = "CoolCat467"
 __version__ = "0.0.0"
 
+import traceback
 from abc import ABCMeta, abstractmethod
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, TypeAlias, cast
@@ -501,4 +502,7 @@ def run_clients_in_local_servers_sync(
     remote_state_class: type[RemoteState],
 ) -> None:
     """Run clients in local servers."""
-    trio.run(run_clients_in_local_servers, remote_state_class)
+    try:
+        trio.run(run_clients_in_local_servers, remote_state_class)
+    except Exception as exc:
+        traceback.print_exception(exc)

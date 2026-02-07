@@ -866,9 +866,8 @@ class Board(Grid):
 
         assert array.ndim == 2
         assert len(array.shape) == 2
-        w, h = array.shape
-        # Prove to typechecker that array is 2D
-        self.data = array.reshape((w, h))
+        # w, h = array.shape
+        self.data = array
         self.update_image()
         self.visible = True
 
