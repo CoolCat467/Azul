@@ -156,7 +156,7 @@ class ImageComponent(ComponentManager):
     """Allow sprite to use multiple images easily.
 
     Components Supplied:
-        # AnimationComponent
+        AnimationComponent
         OutlineComponent
 
     Requires Component:
@@ -182,7 +182,7 @@ class ImageComponent(ComponentManager):
 
         self.add_components(
             (
-                # AnimationComponent(),
+                AnimationComponent(),
                 OutlineComponent(),
             ),
         )
