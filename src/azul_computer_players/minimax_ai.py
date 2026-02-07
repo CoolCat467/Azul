@@ -12,7 +12,7 @@ __author__ = "CoolCat467"
 __version__ = "0.0.0"
 
 import time
-from collections.abc import Iterable
+from collections.abc import Hashable, Iterable, Mapping
 from enum import IntEnum, auto
 from math import inf as infinity
 from typing import Any, ClassVar, Self, TypeAlias, TypeVar
@@ -263,6 +263,24 @@ class MinimaxWithID(Minimax[State, Action]):
 MAX_PLAYER = 0
 
 
+def convert_hashable(obj: object) -> Hashable:
+    """Convert object to hashable object."""
+    exc: TypeError | None = None
+    try:
+        hash(obj)
+    except TypeError as exc:  # noqa: F841
+        pass
+    else:
+        return obj
+    if isinstance(obj, Mapping):
+        return tuple(map(convert_hashable, obj.items()))
+    if isinstance(obj, Iterable):
+        return tuple(map(convert_hashable, obj))
+    if exc is not None:
+        raise NotImplementedError(type(obj)) from exc
+    raise NotImplementedError(type(obj))
+
+
 # Minimax[tuple[State, u8], Action]
 class AzulMinimax(MinimaxWithID):
     """Minimax Algorithm for Azul."""
@@ -275,9 +293,7 @@ class AzulMinimax(MinimaxWithID):
         # For small games you might do: return hash(state)
         # For larger, use Zobrist or custom.
         ##        return hash((state.size, tuple(state.pieces.items()), state.turn))
-        return hash(
-            tuple(tuple(x) if isinstance(x, Iterable) else x for x in state),
-        )
+        return hash(convert_hashable(state))
 
     @staticmethod
     def value(state: State) -> int | float:
@@ -377,7 +393,7 @@ class MinimaxPlayer(RemoteState):
         value, action = AzulMinimax.iterative_deepening(
             self.state,
             2,
-            6,
+            20,
             int(5 * 1e9),
         )
         if action is None:
