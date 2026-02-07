@@ -16,15 +16,17 @@ from enum import IntEnum, auto
 from math import inf as infinity
 from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, TypeVar
 
-from machine_client import RemoteState, run_clients_in_local_servers_sync
-from minimax import Minimax, MinimaxResult, Player
-
 from azul.state import (
     Phase,
     SelectableDestinationTiles,
     SelectableSourceTiles,
     State,
 )
+from azul_computer_players.machine_client import (
+    RemoteState,
+    run_clients_in_local_servers_sync,
+)
+from azul_computer_players.minimax import Minimax, MinimaxResult, Player
 
 if TYPE_CHECKING:
     from collections.abc import Iterable

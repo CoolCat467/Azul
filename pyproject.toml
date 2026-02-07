@@ -54,6 +54,9 @@ version = {attr = "azul.game.__version__"}
 
 [project.gui-scripts]
 azul_game = "azul.game:cli_run"
+azul_game_server = "azul.server:cli_run"
+azul_game_minimax_ai_client = "azul_computer_players.minimax_ai:run"
+
 
 [project.optional-dependencies]
 tests = [
