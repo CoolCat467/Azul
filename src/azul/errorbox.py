@@ -52,7 +52,7 @@ def __wxpython(title: str, message: str) -> None:
     """Error with wxPython."""
     from wxPython.wx import wxApp, wxICON_EXCLAMATION, wxMessageDialog, wxOK
 
-    class LameApp(wxApp):  # type: ignore[misc]
+    class LameApp(wxApp):  # type: ignore[misc,no-any-unimported]
         __slots__ = ()
 
         def OnInit(self) -> int:  # noqa: N802
@@ -70,7 +70,6 @@ def __tkinter(title: str, message: str) -> None:
     from tkinter import messagebox
 
     tk.Tk().wm_withdraw()
-    # types: attr-defined error: Module has no attribute "messagebox"
     messagebox.showerror(title, message)
 
 

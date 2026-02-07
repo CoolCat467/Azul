@@ -1,4 +1,14 @@
-"""typing.NamedTupleMeta mod."""
+"""typing.NamedTupleMeta modification.
+
+Removes the requirement that NamedTuple can only inherit from
+NamedTuple or Generic
+
+Licensed under the Python Software Foundation License
+(see https://github.com/python/cpython/blob/main/LICENSE)
+
+Original source that this is a modified portion of:
+https://github.com/python/cpython/blob/main/Lib/typing.py
+"""
 
 from __future__ import annotations
 
@@ -17,7 +27,10 @@ class NamedTupleMeta(type):
         ns: dict[str, typing.Any],
     ) -> typing.Any:  # pragma: nocover
         """Create NamedTuple."""
-        bases = tuple(tuple if base is typing._NamedTuple else base for base in bases)  # type: ignore[attr-defined]
+        bases = tuple(
+            tuple if base is typing._NamedTuple else base  # type: ignore[attr-defined]
+            for base in bases
+        )
         for base in bases:
             if tuple not in base.__mro__:
                 continue
@@ -43,7 +56,7 @@ class NamedTupleMeta(type):
             module=ns["__module__"],
         )
         nm_tpl.__bases__ = bases
-        if typing.Generic in bases:  # type: ignore[comparison-overlap]
+        if typing.Generic in bases:
             class_getitem = typing._generic_class_getitem  # type: ignore[attr-defined]
             nm_tpl.__class_getitem__ = classmethod(class_getitem)
         # update from user namespace without overriding special namedtuple attributes
@@ -54,7 +67,7 @@ class NamedTupleMeta(type):
                 )
             if key not in typing._special and key not in nm_tpl._fields:  # type: ignore[attr-defined]
                 setattr(nm_tpl, key, ns[key])
-        if typing.Generic in bases:  # type: ignore[comparison-overlap]
+        if typing.Generic in bases:
             nm_tpl.__init_subclass__()
         return nm_tpl
 

@@ -1,24 +1,25 @@
 {
-  "main_menu": {
-    "title": "Azul",
-    "host_server": "Host Game",
-    "join_server": "Join Game",
-    "close": "Close"
-  },
-  "host_server_menu": {
-    "title": "Host Server",
-    "port_input": "Enter Host Port ({})",
-    "start_server": "Start Server",
+  "connect": {
     "return_title": "Return to Title"
   },
-  "join_server_menu": {
-    "title": "Join Server",
-    "host_input": "Enter Host Address",
-    "port_input": "Enter Host Port ({})",
-    "join_server": "Connect to Server",
-    "return_title": "Return to Title"
+  "error": {
+    "client_disconnected": "Client Disconnected",
+    "not_connected": "Not connected to server.",
+    "pygame_uninitialized": "Warning! Some modules of Pygame have not initialized properly!\nThis can occur when not all required modules of SDL are installed.",
+    "read_event_fail": "Failed to read event from server.",
+    "socket_connect_fail": "Error connecting to server.",
+    "socket_eof": "Server closed connection."
   },
-  "connect_server": {
-    "connecting": "Connecting to Server..."
+  "play": {
+    "return_title_msg": "{message} - Return to Title",
+    "win": "{winner} Won"
+  },
+  "screenshot_save": "Saved screenshot to \"{fullpath}\".",
+  "title": {
+    "game_title": "Azul",
+    "host_game": "Host Networked Game",
+    "join_game": "Join Networked Game",
+    "quit": "Quit",
+    "singleplayer": "Singleplayer Game"
   }
 }

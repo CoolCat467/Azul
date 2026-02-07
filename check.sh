@@ -4,7 +4,6 @@ set -ex
 
 ON_GITHUB_CI=true
 EXIT_STATUS=0
-PROJECT='azul'
 
 # If not running on Github's CI, discard the summaries
 if [ -z "${GITHUB_STEP_SUMMARY+x}" ]; then
@@ -13,17 +12,13 @@ if [ -z "${GITHUB_STEP_SUMMARY+x}" ]; then
 fi
 
 # Autoformatter *first*, to avoid double-reporting errors
-# (we'd like to run further autoformatters but *after* merging;
-# see https://forum.bors.tech/t/pre-test-and-pre-merge-hooks/322)
-# autoflake --recursive --in-place .
-# pyupgrade --py3-plus $(find . -name "*.py")
-echo "::group::Black"
-if ! black --check src/$PROJECT; then
-    echo "* Black found issues" >> "$GITHUB_STEP_SUMMARY"
+echo "::group::Ruff format"
+if ! ruff format --check; then
+    echo "* Ruff formatting found issues" >> "$GITHUB_STEP_SUMMARY"
     EXIT_STATUS=1
-    black --diff src/$PROJECT
+    ruff format --diff
     echo "::endgroup::"
-    echo "::error:: Black found issues"
+    echo "::error:: Ruff formatting found issues"
 else
     echo "::endgroup::"
 fi
@@ -73,15 +68,15 @@ fi
 
 # Check pip compile is consistent
 echo "::group::Pip Compile - Tests"
-uv pip compile --universal --python-version=3.10 test-requirements.in -o test-requirements.txt
+uv lock
 echo "::endgroup::"
 
-if git status --porcelain | grep -q "requirements.txt"; then
-    echo "::error::requirements.txt changed."
-    echo "::group::requirements.txt changed"
-    echo "* requirements.txt changed" >> "$GITHUB_STEP_SUMMARY"
+if git status --porcelain | grep -q "uv.lock"; then
+    echo "::error::uv.lock changed."
+    echo "::group::uv.lock changed"
+    echo "* uv.lock changed" >> "$GITHUB_STEP_SUMMARY"
     git status --porcelain
-    git --no-pager diff --color ./*requirements.txt
+    git --no-pager diff --color ./*uv.lock
     EXIT_STATUS=1
     echo "::endgroup::"
 fi
@@ -97,9 +92,9 @@ if [ $EXIT_STATUS -ne 0 ]; then
 Problems were found by static analysis (listed above).
 To fix formatting and see remaining errors, run
 
-    uv pip install -r test-requirements.txt
-    black src/$PROJECT
-    ruff check src/$PROJECT
+    uv sync --extra tools
+    ruff check src
+    mypy
     ./check.sh
 
 in your local checkout.
