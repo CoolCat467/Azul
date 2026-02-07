@@ -11,12 +11,13 @@ __title__ = "Minimax AI"
 __author__ = "CoolCat467"
 __version__ = "0.0.0"
 
+import time
+from enum import IntEnum, auto
 from math import inf as infinity
-from typing import TYPE_CHECKING, TypeAlias, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, TypeVar
 
 from machine_client import RemoteState, run_clients_in_local_servers_sync
 from minimax import Minimax, MinimaxResult, Player
-from mypy_extensions import u8
 
 from azul.state import (
     Phase,
@@ -29,15 +30,21 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
     from typing import Self
 
+    from mypy_extensions import u8
+
 T = TypeVar("T")
 Action: TypeAlias = (
     tuple[SelectableDestinationTiles, ...]
     | tuple[SelectableSourceTiles, tuple[SelectableDestinationTiles, ...]]
 )
 
-# Player:
-# 0 = False = Person  = MIN = 0, 2
-# 1 = True  = AI (Us) = MAX = 1, 3
+
+class TranspositionFlag(IntEnum):
+    """Flag enum for transposition table."""
+
+    LOWERBOUND = 0
+    EXACT = auto()
+    UPPERBOUND = auto()
 
 
 class AutoWallState(State):
@@ -57,10 +64,211 @@ class AutoWallState(State):
         return new_state
 
 
-class AzulMinimax(Minimax[tuple[AutoWallState, u8], Action]):
-    """Minimax Algorithm for Checkers."""
+class MinimaxWithID(Minimax[AutoWallState, Action]):
+    """Minimax with ID."""
 
     __slots__ = ()
+
+    # Simple Transposition Table:
+    # key -> (stored_depth, value, action, flag)
+    # flag: TranspositionFlag: EXACT, LOWERBOUND, UPPERBOUND
+    TRANSPOSITION_TABLE: ClassVar[
+        dict[int, tuple[int, MinimaxResult[Any], TranspositionFlag]]
+    ] = {}
+
+    @classmethod
+    def _transposition_table_lookup(
+        cls,
+        state_hash: int,
+        depth: int,
+        alpha: float,
+        beta: float,
+    ) -> MinimaxResult[Action] | None:
+        """Lookup in transposition_table.  Return (value, action) or None."""
+        entry = cls.TRANSPOSITION_TABLE.get(state_hash)
+        if entry is None:
+            return None
+
+        stored_depth, result, flag = entry
+        # only use if stored depth is deep enough
+        if stored_depth >= depth and (
+            (flag == TranspositionFlag.EXACT)
+            or (flag == TranspositionFlag.LOWERBOUND and result.value > alpha)
+            or (flag == TranspositionFlag.UPPERBOUND and result.value < beta)
+        ):
+            return result
+        return None
+
+    @classmethod
+    def _transposition_table_store(
+        cls,
+        state_hash: int,
+        depth: int,
+        result: MinimaxResult[Action],
+        alpha: float,
+        beta: float,
+    ) -> None:
+        """Store in transposition_table with proper flag."""
+        if result.value <= alpha:
+            flag = TranspositionFlag.UPPERBOUND
+        elif result.value >= beta:
+            flag = TranspositionFlag.LOWERBOUND
+        else:
+            flag = TranspositionFlag.EXACT
+        cls.TRANSPOSITION_TABLE[state_hash] = (depth, result, flag)
+
+    @classmethod
+    def hash_state(cls, state: State) -> int:
+        """Your state-to-hash function.  Must be consistent."""
+        # For small games you might do: return hash(state)
+        # For larger, use Zobrist or custom.
+        return hash(state)
+
+    @classmethod
+    def alphabeta_transposition_table(
+        cls,
+        state: State,
+        depth: int = 5,
+        a: int | float = -infinity,
+        b: int | float = infinity,
+    ) -> MinimaxResult[Action]:
+        """AlphaBeta with transposition table."""
+        if cls.terminal(state):
+            return MinimaxResult(cls.value(state), None)
+        if depth <= 0:
+            ##            # Choose a random action
+            ##            # No need for cryptographic secure random
+            return MinimaxResult(
+                cls.value(state),
+                next(iter(cls.actions(state))),
+            )
+        next_down = depth - 1
+
+        state_h = cls.hash_state(state)
+        # 1) Try transposition_table lookup
+        transposition_table_hit = cls._transposition_table_lookup(
+            state_h,
+            depth,
+            a,
+            b,
+        )
+        if transposition_table_hit is not None:
+            return transposition_table_hit
+        next_down = None if depth is None else depth - 1
+
+        current_player = cls.player(state)
+        value: int | float
+
+        best_action: Action | None = None
+
+        if current_player == Player.MAX:
+            value = -infinity
+            actions: list[tuple[Action, State]] = [
+                (action, cls.result(state, action))
+                for action in cls.actions(state)
+            ]
+
+            actions.sort(key=lambda act: cls.value(act[1]), reverse=True)
+            for action, next_state in actions:
+                child = cls.alphabeta_transposition_table(
+                    next_state,
+                    next_down,
+                    a,
+                    b,
+                )
+                if child.value > value:
+                    value = child.value
+                    best_action = action
+                a = max(a, value)
+                if a >= b:
+                    break
+
+        elif current_player == Player.MIN:
+            value = infinity
+            actions = [
+                (action, cls.result(state, action))
+                for action in cls.actions(state)
+            ]
+
+            actions.sort(key=lambda act: cls.value(act[1]))
+            for action, next_state in actions:
+                child = cls.alphabeta_transposition_table(
+                    next_state,
+                    next_down,
+                    a,
+                    b,
+                )
+                if child.value < value:
+                    value = child.value
+                    best_action = action
+                b = min(b, value)
+                if b <= a:
+                    break
+        else:
+            raise NotImplementedError(f"{current_player = }")
+
+        # 2) Store in transposition_table
+        result = MinimaxResult(value, best_action)
+        cls._transposition_table_store(state_h, depth, result, a, b)
+        return result
+
+    @classmethod
+    def iterative_deepening(
+        cls,
+        state: State,
+        start_depth: int = 5,
+        max_depth: int = 7,
+        time_limit_ns: int | float | None = None,
+    ) -> MinimaxResult[Action]:
+        """Run alpha-beta with increasing depth up to max_depth.
+
+        If time_limit_ns is None, do all depths. Otherwise stop early.
+        """
+        best_result: MinimaxResult[Action] = MinimaxResult(0, None)
+        start_t = time.perf_counter_ns()
+
+        for depth in range(start_depth, max_depth + 1):
+            # clear or keep transposition_table between depths? often you keep it
+            # cls.TRANSPOSITION_TABLE.clear()
+
+            result = cls.alphabeta_transposition_table(
+                state,
+                depth,
+            )
+            best_result = result
+
+            if abs(result.value) == cls.HIGHEST:
+                print(f"reached terminal state stop {depth=}")
+                break
+
+            # optional time check
+            if (
+                time_limit_ns
+                and (time.perf_counter_ns() - start_t) > time_limit_ns
+            ):
+                print(
+                    f"break from time expired {depth=} ({(time.perf_counter_ns() - start_t) / 1e9} seconds elaped)",
+                )
+                break
+            print(
+                f"{depth=} ({(time.perf_counter_ns() - start_t) / 1e9} seconds elaped)",
+            )
+
+        return best_result
+
+
+# Minimax[tuple[AutoWallState, u8], Action]
+class AzulMinimax(MinimaxWithID):
+    """Minimax Algorithm for Azul."""
+
+    __slots__ = ()
+
+    ##    @classmethod
+    ##    def hash_state(cls, state: AutoWallState) -> int:
+    ##        """Return state hash value."""
+    ##        # For small games you might do: return hash(state)
+    ##        # For larger, use Zobrist or custom.
+    ##        return hash((state.size, tuple(state.pieces.items()), state.turn))
 
     @staticmethod
     def value(state: tuple[AutoWallState, u8]) -> int | float:
@@ -165,8 +373,14 @@ class MinimaxPlayer(RemoteState):
         ##)
         ##value, action = CheckersMinimax.minimax(self.state, 4)
         assert isinstance(self.state, AutoWallState)
-        value, action = AzulMinimax.alphabeta((self.state, self.playing_as), 2)
+        ##        value, action = AzulMinimax.alphabeta((self.state, self.playing_as), 2)
         ##        value, action = AzulMinimax.alphabeta((self.state, self.playing_as), 4)
+        value, action = AzulMinimax.iterative_deepening(
+            self.state,
+            2,
+            6,
+            int(5 * 1e9),
+        )
         if action is None:
             raise ValueError("action is None")
         print(f"{value = }")
