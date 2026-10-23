@@ -1185,7 +1185,7 @@ class State(NamedTuple):
     def get_manual_wall_tiling_locations_for_player(
         self,
         player_id: int,
-    ) -> tuple[int, list[int]] | None | Self:
+    ) -> tuple[int, list[int]] | Self | None:
         """Either return player wall tiling location data or new state.
 
         New state when player cannot wall tile their current row.
